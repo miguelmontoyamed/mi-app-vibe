@@ -64,81 +64,10 @@ const RepairContext = createContext<RepairContextType | undefined>(undefined);
 
 const STORAGE_KEY = 'techrepair.data.v1';
 
-/** Fallback seed data used only until (or when there is no) stored backup. */
-const SEED_REPAIRS: RepairItem[] = [
-  {
-    id: '1',
-    clientName: 'Carlos Mendoza',
-    phone: '+57 300 123 4567',
-    device: 'iPhone 13',
-    issue: 'Cambio de pantalla',
-    budget: 480000,
-    unlockCode: 'PIN: 1234',
-    imei: '353311008766521',
-    advancePayment: 160000,
-    paymentMethod: 'Efectivo',
-    technicianId: '2',
-    technicianName: 'Luis Técnico',
-    status: 'Pendiente',
-    date: '2026-06-05',
-  },
-  {
-    id: '2',
-    clientName: 'María Pérez',
-    phone: '+57 310 987 6543',
-    device: 'Samsung Galaxy S23',
-    issue: 'Pin de carga',
-    budget: 180000,
-    unlockCode: 'Patrón: L',
-    imei: '358690091234567',
-    advancePayment: 80000,
-    paymentMethod: 'Tarjeta',
-    technicianId: '3',
-    technicianName: 'Sofia Técnica',
-    status: 'En Proceso',
-    date: '2026-06-04',
-  },
-  {
-    id: '3',
-    clientName: 'Juan Gómez',
-    phone: '+57 320 456 7890',
-    device: 'Xiaomi Redmi Note 11',
-    issue: 'Cambio de batería',
-    budget: 140000,
-    unlockCode: 'Sin bloqueo',
-    imei: '351620558877123',
-    advancePayment: 140000,
-    paymentMethod: 'Transferencia',
-    technicianId: '2',
-    technicianName: 'Luis Técnico',
-    status: 'Listo',
-    date: '2026-06-03',
-  },
-  {
-    id: '4',
-    clientName: 'Ana Torres',
-    phone: '+57 315 654 3210',
-    device: 'MacBook Air M1',
-    issue: 'Mantenimiento software',
-    budget: 600000,
-    unlockCode: 'Pass: mac2026',
-    imei: 'SN-C02ZN1Y7Q6LH',
-    advancePayment: 200000,
-    paymentMethod: 'Efectivo',
-    technicianId: '1',
-    technicianName: 'Carlos (Administrador Principal)',
-    status: 'Entregado',
-    date: '2026-06-01',
-  },
-];
+/** Fallback: sin datos hasta que el dueño registre sus primeros trabajos. */
+const SEED_REPAIRS: RepairItem[] = [];
 
-const SEED_INVENTORY: InventoryPart[] = [
-  { id: '1', name: 'Pantalla iPhone 13 OLED', category: 'Pantallas', stock: 5, price: 340000 },
-  { id: '2', name: 'Batería Samsung S23', category: 'Baterías', stock: 3, price: 120000 },
-  { id: '3', name: 'Pin de Carga Tipo-C Universal', category: 'Pines', stock: 15, price: 34000 },
-  { id: '4', name: 'Pantalla Xiaomi Note 11', category: 'Pantallas', stock: 2, price: 100000 },
-  { id: '5', name: 'Soldadura Estaño / Flux', category: 'Herramientas', stock: 10, price: 48000 },
-];
+const SEED_INVENTORY: InventoryPart[] = [];
 
 export function RepairProvider({ children }: { children: React.ReactNode }) {
   const [repairs, setRepairs] = useState<RepairItem[]>(SEED_REPAIRS);
