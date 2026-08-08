@@ -64,10 +64,10 @@ Se detectó **un bug funcional real**: la sesión **no sobrevivía a una recarga
 
 | # | Hallazgo | Estado |
 |---|----------|--------|
-| 1 | Sesión no sobrevivía a recarga/navegación directa | **FIX aplicado** — verificado local; requiere redeploy |
-| 2 | Deploy de Vercel posiblemente desactualizado | Pendiente de verificación (`vercel ls` + redeploy) |
+| 1 | Sesión no sobrevivía a recarga/navegación directa | **FIX desplegado y verificado en producción** (`prod-reload-probe.json`: tras reload queda en `/` con dashboard; commits `e2de298` + `36d640b`) |
+| 2 | Deploy de Vercel posiblemente desactualizado | **RESUELTO** — redeploy automático vía GitHub → Vercel confirmado con el fix activo |
 | 3 | Flujo core 7/7 | Verificado OK |
 | 4 | PIN no persistido | Verificado OK (seguridad) |
 | 5 | Licencia 90 días | Verificado OK |
 
-**Próximo paso sugerido:** `git` commit del fix (auth-context.tsx + _layout.tsx) y `vercel --prod` para desplegar; luego re-ejecutar la E2E de recarga contra producción.
+**Post-auditoría (2026-08-08):** migración a **auth real de Supabase** desplegada (commit `07bfc34`): registro con email + verificación OTP de 6 dígitos y Google OAuth en producción, con `EXPO_PUBLIC_SUPABASE_URL`/`ANON_KEY` configuradas en Vercel. Storage del navegador limpio; base de datos Supabase vacía y lista para registros reales.
