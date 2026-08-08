@@ -1,4 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
+import * as Linking from 'expo-linking';
+import { Platform } from 'react-native';
 
 /**
  * Supabase client. Config is read from Expo public env vars:
@@ -11,11 +13,26 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
 
+/**
+ * Redirect URL for OAuth flows.
+ * - Web: uses the current origin (works with Vercel preview/production)
+ * - Native: uses the Expo auth session proxy (https://auth.expo.io/@your-project)
+ *   or a custom scheme configured in app.json (e.g., "myapp://")
+ */
+const getRedirectUrl = () => {
+  if (Platform.OS === 'web') {
+    return `${window.location.origin}/auth/callback`;
+  }
+  // Use Expo's auth proxy for native — requires adding the URL to Supabase dashboard
+  return Linking.createURL('/auth/callback', { scheme: 'techrepair' });
+};
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: false,
+    detectSessionInUrl: true,
+    flowType: 'pkce',
   },
 });
 
@@ -23,3 +40,5 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 export const isSupabaseConfigured = Boolean(
   supabaseUrl.startsWith('http') && supabaseAnonKey.startsWith('eyJ')
 );
+
+export { getRedirectUrl };

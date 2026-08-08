@@ -9,6 +9,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Brand, Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
+import { isGoogleConfigured, useGoogleSignIn } from '@/lib/google-auth';
 
 const notify = (title: string, message: string) => {
   if (Platform.OS === 'web') {
@@ -21,30 +22,54 @@ const notify = (title: string, message: string) => {
 export default function LoginScreen() {
   const router = useRouter();
   const { login, signInWithGoogle } = useAuth();
+  const {
+    prompt: promptGoogle,
+    inProgress: googleInProgress,
+    error: googleError,
+  } = useGoogleSignIn();
 
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (!identifier.trim() || !password.trim()) {
       notify('Campos incompletos', 'Ingresa tu correo o teléfono y tu contraseña.');
       return;
     }
-    const user = login(identifier, password);
-    if (user) {
-      router.replace('/');
-    } else {
-      notify('Error de acceso', 'Correo/Teléfono o contraseña incorrectos.');
+    setSubmitting(true);
+    try {
+      const user = await login(identifier, password);
+      if (user) {
+        router.replace('/');
+      } else {
+        notify('Error de acceso', 'Correo/Teléfono o contraseña incorrectos.');
+      }
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  const handleGoogle = () => {
-    // Simulated Google account creation. Swap for expo-auth-session/Google OAuth
-    // once a backend + credentials are configured.
-    notify('Google (demo)', 'Inicia sesión con tu cuenta de Google.');
-    const user = signInWithGoogle('dueño.demo@gmail.com');
+  const handleGoogle = async () => {
+    if (!isGoogleConfigured) {
+      notify(
+        'Google no configurado',
+        'Falta el Client ID de Google. Agrégalo como EXPO_PUBLIC_GOOGLE_CLIENT_ID y vuelve a desplegar.'
+      );
+      return;
+    }
+    const auth = await promptGoogle();
+    if (!auth) {
+      return; // cancelado o error: el usuario no cambió de pantalla
+    }
+    const user = await signInWithGoogle(auth);
     if (user) {
       router.replace('/');
+    } else {
+      notify(
+        'Error de acceso',
+        'No se pudo iniciar sesión con Google. Intenta de nuevo o usa correo y contraseña.'
+      );
     }
   };
 
@@ -74,8 +99,23 @@ export default function LoginScreen() {
           onChangeText={setPassword}
         />
 
-        <Button label="Iniciar sesión" onPress={handleLogin} style={styles.primary} />
-        <Button label="Continuar con Google" variant="secondary" onPress={handleGoogle} />
+        <Button
+          label={submitting ? 'Iniciando sesión…' : 'Iniciar sesión'}
+          onPress={handleLogin}
+          style={styles.primary}
+          disabled={submitting}
+        />
+        <Button
+          label={googleInProgress ? 'Conectando con Google…' : 'Continuar con Google'}
+          variant="secondary"
+          onPress={handleGoogle}
+          disabled={googleInProgress}
+        />
+        {googleError ? (
+          <ThemedText type="small" style={styles.googleError}>
+            {googleError}
+          </ThemedText>
+        ) : null}
 
         <View style={styles.divider}>
           <ThemedView style={styles.line} />
@@ -137,6 +177,10 @@ const styles = StyleSheet.create({
   },
   helper: {
     fontSize: 12,
+    textAlign: 'center',
+  },
+  googleError: {
+    color: Brand.danger,
     textAlign: 'center',
   },
 });

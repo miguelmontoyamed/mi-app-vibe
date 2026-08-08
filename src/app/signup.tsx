@@ -9,6 +9,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Brand, Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
+import { isGoogleConfigured, useGoogleSignIn } from '@/lib/google-auth';
 
 const notify = (title: string, message: string) => {
   if (Platform.OS === 'web') {
@@ -23,14 +24,29 @@ const PHONE_REGEX = /^\+?\d{7,15}$/;
 
 export default function SignUpScreen() {
   const router = useRouter();
-  const { registerOwner, signInWithGoogle } = useAuth();
+  const {
+    registerOwner,
+    signInWithGoogle,
+    verifyRegistration,
+    resendRegistration,
+  } = useAuth();
+  const {
+    prompt: promptGoogle,
+    inProgress: googleInProgress,
+    error: googleError,
+  } = useGoogleSignIn();
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [phone, setPhone] = useState('');
 
-  const handleSubmit = () => {
+  // Etapa de verificación del correo (OTP de 6 dígitos enviado por Supabase).
+  const [pendingVerification, setPendingVerification] = useState<string | null>(null); // email a verificar
+  const [code, setCode] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
     if (!name.trim() || !email.trim() || !password.trim()) {
       notify('Campos incompletos', 'Completa todos los campos obligatorios (*).');
       return;
@@ -48,11 +64,28 @@ export default function SignUpScreen() {
       return;
     }
 
-    const { user, reason } = registerOwner(name, email, password, phone);
-    if (user) {
-      notify('¡Cuenta creada!', `Bienvenido, ${user.name}. Tu taller está listo.`);
-      router.replace('/');
-    } else {
+    setSubmitting(true);
+    try {
+      const { user, reason, pendingVerification: pending } = await registerOwner(
+        name,
+        email,
+        password,
+        phone
+      );
+      if (user) {
+        notify('¡Cuenta creada!', `Bienvenido, ${user.name}. Tu taller está listo.`);
+        router.replace('/');
+        return;
+      }
+      if (pending) {
+        // El correo de Supabase ya incluye el código de 6 dígitos.
+        setPendingVerification(email.trim().toLowerCase());
+        notify(
+          'Verifica tu correo',
+          `Enviamos un código de 6 dígitos a ${email.trim().toLowerCase()}. Revisa tu bandeja (y el spam).`
+        );
+        return;
+      }
       const msg =
         reason === 'email'
           ? 'Ya existe una cuenta con ese correo. Inicia sesión.'
@@ -60,16 +93,111 @@ export default function SignUpScreen() {
             ? 'Ya existe una cuenta con ese teléfono. Inicia sesión.'
             : 'Dispositivo bloqueado por intentos repetidos.';
       notify('No se pudo crear la cuenta', msg);
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  const handleGoogle = () => {
-    notify('Google (demo)', 'Se creará una cuenta demo de taller con Google.');
-    const user = signInWithGoogle('dueño.taller@gmail.com');
+  const handleVerifyCode = async () => {
+    if (!pendingVerification) return;
+    if (code.trim().length !== 6) {
+      notify('Código incompleto', 'Ingresa el código de 6 dígitos que enviamos por correo.');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const ok = await verifyRegistration(pendingVerification, code);
+      if (ok) {
+        notify('Correo verificado', 'Tu cuenta está lista. ¡Bienvenido a TechRepair Master!');
+        router.replace('/');
+      } else {
+        notify(
+          'Código incorrecto',
+          'El código no coincide o ya expiró. Verifica e intenta de nuevo, o reenvía el código.'
+        );
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleResend = async () => {
+    if (!pendingVerification) return;
+    const ok = await resendRegistration(pendingVerification);
+    notify(
+      ok ? 'Código reenviado' : 'No se pudo reenviar',
+      ok
+        ? 'Revisa tu correo (y el spam) con el nuevo código.'
+        : 'Hubo un problema al reenviar el código. Intenta en un momento.'
+    );
+  };
+
+  const handleGoogle = async () => {
+    if (!isGoogleConfigured) {
+      notify(
+        'Google no configurado',
+        'Falta el Client ID de Google. Agrégalo como EXPO_PUBLIC_GOOGLE_CLIENT_ID y vuelve a desplegar.'
+      );
+      return;
+    }
+    const auth = await promptGoogle();
+    if (!auth) {
+      return; // cancelado o error: el usuario no cambió de pantalla
+    }
+    const user = await signInWithGoogle(auth);
     if (user) {
       router.replace('/');
     }
   };
+
+  // Etapa OTP: verificación del correo con el código de 6 dígitos.
+  if (pendingVerification) {
+    return (
+      <Screen contentContainerStyle={styles.screen}>
+        <ThemedView style={styles.card}>
+          <ThemedText type="subtitle" style={styles.brand}>
+            Verifica tu correo
+          </ThemedText>
+          <ThemedText type="small" themeColor="textSecondary" style={styles.subtitle}>
+            Enviamos un código de 6 dígitos a <ThemedText type="linkPrimary">{pendingVerification}</ThemedText>.
+            Ingresa el código para activar tu cuenta.
+          </ThemedText>
+
+          <FormInput
+            label="Código de verificación"
+            placeholder="••••••"
+            keyboardType="number-pad"
+            maxLength={6}
+            value={code}
+            onChangeText={setCode}
+            autoFocus
+          />
+
+          <Button
+            label={submitting ? 'Verificando…' : 'Verificar y activar cuenta'}
+            onPress={handleVerifyCode}
+            style={styles.primary}
+            disabled={submitting}
+          />
+          <Button
+            label="Reenviar código"
+            variant="secondary"
+            onPress={handleResend}
+            disabled={submitting}
+          />
+
+          <View style={styles.loginLink}>
+            <ThemedText type="small" themeColor="textSecondary">
+              ¿Problemas con el correo?
+            </ThemedText>
+            <Link href="/login">
+              <ThemedText type="linkPrimary">Ir a iniciar sesión</ThemedText>
+            </Link>
+          </View>
+        </ThemedView>
+      </Screen>
+    );
+  }
 
   return (
     <Screen contentContainerStyle={styles.screen}>
@@ -78,7 +206,8 @@ export default function SignUpScreen() {
           Crea tu taller
         </ThemedText>
         <ThemedText type="small" themeColor="textSecondary" style={styles.subtitle}>
-          Registra tu taller para administrar equipos y agregar técnicos.
+          Registra tu taller para administrar equipos y agregar técnicos. Te pediremos
+          el código de verificación de tu correo.
         </ThemedText>
 
         <FormInput
@@ -117,7 +246,12 @@ export default function SignUpScreen() {
           maxLength={20}
         />
 
-        <Button label="Crear cuenta" onPress={handleSubmit} style={styles.primary} />
+        <Button
+          label={submitting ? 'Creando cuenta…' : 'Crear cuenta'}
+          onPress={handleSubmit}
+          style={styles.primary}
+          disabled={submitting}
+        />
 
         <View style={styles.divider}>
           <ThemedView style={styles.line} />
@@ -127,7 +261,17 @@ export default function SignUpScreen() {
           <ThemedView style={styles.line} />
         </View>
 
-        <Button label="Registrarse con Google" variant="secondary" onPress={handleGoogle} />
+        <Button
+          label={googleInProgress ? 'Conectando con Google…' : 'Registrarse con Google'}
+          variant="secondary"
+          onPress={handleGoogle}
+          disabled={googleInProgress}
+        />
+        {googleError ? (
+          <ThemedText type="small" style={styles.googleError}>
+            {googleError}
+          </ThemedText>
+        ) : null}
 
         <View style={styles.loginLink}>
           <ThemedText type="small" themeColor="textSecondary">
@@ -185,5 +329,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: Spacing.two,
+  },
+  googleError: {
+    color: Brand.danger,
+    textAlign: 'center',
   },
 });

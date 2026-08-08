@@ -2,6 +2,19 @@ import * as Crypto from 'expo-crypto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
+import type { GoogleAuthResult } from '@/lib/google-auth';
+import { isSupabaseConfigured } from '@/lib/supabase';
+import {
+  supabaseRestoreSession,
+  supabaseResendRegistration,
+  supabaseSignInWithGoogleIdToken,
+  supabaseSignInWithPassword,
+  supabaseSignOut,
+  supabaseSignUp,
+  supabaseVerifyRegistration,
+} from '@/lib/supabase-auth';
+import type { SupabaseUserProfile } from '@/lib/supabase-auth';
+
 export type UserRole = 'admin' | 'technician';
 
 export interface User {
@@ -15,6 +28,8 @@ export interface User {
   commissionRate?: number;
   deviceFingerprint?: string; // Simulate device block simulation
   isGoogle?: boolean; // Simulated Google account (no password needed)
+  avatarUrl?: string; // Google profile picture
+  googleId?: string; // Google subject id
 }
 
 export interface LicenseInfo {
@@ -33,23 +48,37 @@ export interface InviteLink {
 interface AuthContextType {
   currentUser: User | null;
   isAuthenticated: boolean;
-  /** True cuando AsyncStorage terminó de hidratar usuarios/sesión. El router
-   *  debe esperarlo antes de decidir entre login y la zona protegida. */
+  /** True cuando AsyncStorage terminó de hidratar usuarios/sesión y Supabase
+   *  verificó si existe una sesión persistida. El router debe esperarlo antes
+   *  de decidir entre login y la zona protegida. */
   hydrated: boolean;
   users: User[];
   license: LicenseInfo;
   inviteLink: InviteLink | null;
   blockedDevices: string[];
   switchUser: (userId: string) => void;
-  login: (identifier: string, password: string) => User | null;
-  signInWithGoogle: (email: string) => User | null;
-  logout: () => void;
+  /** Login real (Supabase) cuando está configurado; cae al pool demo local si
+   *  no (p. ej. cuentas seed) o cuando el identificador es un teléfono. */
+  login: (identifier: string, password: string) => Promise<User | null>;
+  /** Google: puentea el id_token a Supabase (crea/víncula la sesión). Sin
+   *  Supabase configurado, simula el usuario Google localmente (demo). */
+  signInWithGoogle: (auth: GoogleAuthResult) => Promise<User | null>;
+  logout: () => Promise<void>;
   registerOwner: (
     name: string,
     email: string,
     password: string,
     phone: string
-  ) => { user: User | null; reason?: 'email' | 'phone' | 'device' };
+  ) => Promise<{
+    user: User | null;
+    reason?: 'email' | 'phone' | 'device';
+    /** True cuando hay que validar el correo con el código OTP (6 dígitos). */
+    pendingVerification?: boolean;
+  }>;
+  /** Valida el código OTP del correo y abre la sesión real. */
+  verifyRegistration: (email: string, code: string) => Promise<boolean>;
+  /** Reenvía el código OTP del registro al correo. */
+  resendRegistration: (email: string) => Promise<boolean>;
   /** Crea un técnico (Dueño). Devuelve { ok } o el motivo del rechazo. */
   createTechnician: (
     name: string,
@@ -123,6 +152,21 @@ const SEED_USERS: User[] = [
   },
 ];
 
+/** Convierte el perfil de Supabase en la forma local User de la app. */
+function toLocalUser(profile: SupabaseUserProfile): User {
+  return {
+    id: profile.id,
+    name: profile.name.trim() || profile.email.split('@')[0],
+    password: '', // Supabase guarda el hash; la app no lo necesita.
+    role: 'admin', // El dueño del taller crea técnicos desde el panel (demo).
+    email: profile.email,
+    phone: profile.phone,
+    isGoogle: profile.isGoogle,
+    avatarUrl: profile.avatarUrl,
+    googleId: profile.googleId,
+  };
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [users, setUsers] = useState<User[]>(SEED_USERS);
 
@@ -135,32 +179,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const [hydrated, setHydrated] = useState(false);
 
-  // Hydrate users from AsyncStorage (once) so technicians created by the owner
-  // survive reloads. Mirrors the repair-context hydration pattern.
+  // Hydrate: pool local + sesión persistida de Supabase (una sola vez). La
+  // sesión de Supabase es la fuente de verdad para `currentUser`.
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const raw = await AsyncStorage.getItem(USERS_STORAGE_KEY);
         let parsed: unknown = null;
+        const [raw, profile] = await Promise.all([
+          AsyncStorage.getItem(USERS_STORAGE_KEY).catch(() => null),
+          supabaseRestoreSession(),
+        ]);
         if (raw && !cancelled) {
           parsed = JSON.parse(raw);
           if (Array.isArray(parsed)) {
             setUsers(parsed);
           }
         }
-        // Restore the active session (user id) once the users pool is known.
-        const sessionRaw = await AsyncStorage.getItem(SESSION_STORAGE_KEY);
-        if (!cancelled && sessionRaw) {
-          try {
-            const session = JSON.parse(sessionRaw) as { userId?: string } | null;
-            const pool: User[] = Array.isArray(parsed) ? parsed : SEED_USERS;
-            const resume = pool.find((u) => u.id === session?.userId);
-            if (resume) {
-              setCurrentUser(resume);
+        // Al registrar un usuario real la sesión de Supabase se crea al
+        // verificar el OTP; al recargar se restaura desde ahí.
+        if (!cancelled && profile) {
+          setCurrentUser(toLocalUser(profile));
+        } else if (!cancelled && !profile) {
+          // Session local demo (no hay Supabase configurado o sin sesión).
+          const sessionRaw = await AsyncStorage.getItem(SESSION_STORAGE_KEY);
+          if (sessionRaw) {
+            try {
+              const session = JSON.parse(sessionRaw) as { userId?: string } | null;
+              const pool: User[] = Array.isArray(parsed) ? parsed : SEED_USERS;
+              const resume = pool.find((u) => u.id === session?.userId);
+              if (resume) {
+                setCurrentUser(resume);
+              }
+            } catch (error) {
+              console.error('Error restoring TechRepair session:', error);
             }
-          } catch (error) {
-            console.error('Error restoring TechRepair session:', error);
           }
         }
       } catch (error) {
@@ -213,8 +266,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  /** Signs in with email OR phone + password. Returns the user or null. */
-  const login = (identifier: string, password: string): User | null => {
+  /** Resuelve un identificador contra el pool demo local (correo/teléfono). */
+  const localLogin = (identifier: string, password: string): User | null => {
     const needle = identifier.trim().toLowerCase();
     const found =
       users.find(
@@ -227,33 +280,88 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!found.isGoogle && found.password !== password) {
       return null;
     }
-    setCurrentUser(found);
     return found;
   };
 
-  /** Simulated Google account: finds an existing Google user or creates one. */
-  const signInWithGoogle = (email: string): User | null => {
-    const normalized = email.trim().toLowerCase();
+  const login = async (identifier: string, password: string): Promise<User | null> => {
+    const needle = identifier.trim().toLowerCase();
+    // Reales con Supabase (requiere verificación previa del correo). Si el
+    // identificador es un teléfono no hay login con contraseña en Supabase
+    // aún (requiere Twilio) -> demo local.
+    if (isSupabaseConfigured && needle.includes('@')) {
+      const result = await supabaseSignInWithPassword(needle, password);
+      if (result.ok) {
+        const user = toLocalUser(result.user);
+        setCurrentUser(user);
+        return user;
+      }
+      // Si las credenciales no existen en Supabase (p. demo seeds) se cae al
+      // pool local para no romper la experiencia demo.
+    }
+    const local = localLogin(needle, password);
+    if (local) {
+      setCurrentUser(local);
+      return local;
+    }
+    return null;
+  };
+
+  /**
+   * Google real: usa el id_token que google-auth.ts obtuvo del endpoint OAuth
+   * y lo puentea a Supabase (`signInWithIdToken`), que crea o vincula la
+   * sesión. Sin Supabase configurado, cae a la simulación local (demo).
+   */
+  const signInWithGoogle = async (auth: GoogleAuthResult): Promise<User | null> => {
+    const { profile, idToken } = auth;
+    if (isSupabaseConfigured) {
+      try {
+        const result = await supabaseSignInWithGoogleIdToken(idToken);
+        if (result.ok) {
+          const user = toLocalUser(result.user);
+          setCurrentUser(user);
+          return user;
+        }
+      } catch {
+        // Fallback a local si el puente falla (red, token expirado, etc.)
+      }
+    }
+
+    // === Simulación local (demo sin backend que vincular) ===
+    const email = profile.email.trim().toLowerCase();
+    if (!email) {
+      return null;
+    }
     let existing =
-      users.find((u) => u.isGoogle && u.email.toLowerCase() === normalized) ?? null;
+      users.find((u) => u.isGoogle && u.googleId === profile.googleId) ??
+      users.find((u) => u.isGoogle && u.email.toLowerCase() === email) ??
+      null;
 
     if (!existing) {
       const newGoogle: User = {
         id: 'g-' + Date.now().toString(),
-        name: normalized.split('@')[0].replace(/[._-]+/g, ' '),
+        name: profile.name.trim() || email.split('@')[0].replace(/[._-]+/g, ' '),
         password: '',
         role: 'admin',
-        email: normalized,
+        email,
         isGoogle: true,
+        avatarUrl: profile.picture,
+        googleId: profile.googleId,
       };
       setUsers((prev) => [...prev, newGoogle]);
       existing = newGoogle;
+    } else if (profile.picture && !existing.avatarUrl) {
+      const enriched = { ...existing, avatarUrl: profile.picture };
+      setUsers((prev) => prev.map((u) => (u.id === existing?.id ? enriched : u)));
+      existing = enriched;
     }
     setCurrentUser(existing);
     return existing;
   };
 
-  const logout = () => {
+  const logout = async () => {
+    if (isSupabaseConfigured) {
+      await supabaseSignOut();
+    }
     setCurrentUser(null);
   };
 
@@ -376,15 +484,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   /**
-   * Owner sign-up (creates a workshop account). Rejects if the email OR phone
-   * is already registered. Returns { success } shape for the UI.
+   * Owner sign-up. Con Supabase: crea el usuario real y requiere verificar el
+   * correo con el código OTP (6 dígitos) antes de abrir la sesión. Sin
+   * Supabase, simula la cuenta localmente (demo).
    */
-  const registerOwner = (
+  const registerOwner = async (
     name: string,
     email: string,
     password: string,
     phone: string
-  ): { user: User | null; reason?: 'email' | 'phone' | 'device' } => {
+  ): Promise<{
+    user: User | null;
+    reason?: 'email' | 'phone' | 'device';
+    pendingVerification?: boolean;
+  }> => {
+    if (isSupabaseConfigured) {
+      const result = await supabaseSignUp(name, email, password, phone);
+      if (!result.ok) {
+        return {
+          user: null,
+          reason: result.reason === 'email' ? 'email' : 'device',
+        };
+      }
+      if (result.pendingVerification) {
+        return { user: null, pendingVerification: true };
+      }
+      if (result.user) {
+        const user = toLocalUser(result.user);
+        setCurrentUser(user);
+        return { user };
+      }
+      return { user: null };
+    }
+
+    // ── Simulación local (demo, sin backend) ──
     const simFingerprint = 'DEV-FNG-HW-' + Math.floor(Math.random() * 9000 + 1000);
     if (blockedDevices.includes(simFingerprint)) {
       return { user: null, reason: 'device' };
@@ -423,6 +556,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { user: newUser };
   };
 
+  /** Valida el código OTP (6 dígitos) enviado al correo y abre la sesión. */
+  const verifyRegistration = async (email: string, code: string): Promise<boolean> => {
+    if (!isSupabaseConfigured) return false;
+    const verification = await supabaseVerifyRegistration(email, code);
+    if (!verification.ok) return false;
+    // La verificación creó la sesión: recarga el perfil real.
+    const profile = await supabaseRestoreSession();
+    if (!profile) {
+      return false;
+    }
+    const user = toLocalUser(profile);
+    setCurrentUser(user);
+    setLicense({
+      ...DEFAULT_LICENSE,
+      expiresAt: new Date(Date.now() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .split('T')[0],
+      daysRemaining: TRIAL_DURATION_DAYS,
+    });
+    return true;
+  };
+
+  const resendRegistration = async (email: string): Promise<boolean> => {
+    if (!isSupabaseConfigured) return false;
+    const resend = await supabaseResendRegistration(email);
+    return resend.ok;
+  };
+
   const generateInviteLink = (): string => {
     // Cryptographically random token (not Math.random, which is predictable).
     const token = Crypto.randomUUID().toUpperCase();
@@ -452,6 +613,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signInWithGoogle,
         logout,
         registerOwner,
+        verifyRegistration,
+        resendRegistration,
         createTechnician,
         deleteTechnician,
         verifyLicense,

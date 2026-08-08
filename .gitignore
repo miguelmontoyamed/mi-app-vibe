@@ -50,3 +50,7 @@ example
 /android
 
 .vercel
+.env*
+
+# supabase local CLI state (never commit)
+supabase/.temp/
