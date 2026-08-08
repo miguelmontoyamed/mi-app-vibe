@@ -33,6 +33,9 @@ export interface InviteLink {
 interface AuthContextType {
   currentUser: User | null;
   isAuthenticated: boolean;
+  /** True cuando AsyncStorage terminó de hidratar usuarios/sesión. El router
+   *  debe esperarlo antes de decidir entre login y la zona protegida. */
+  hydrated: boolean;
   users: User[];
   license: LicenseInfo;
   inviteLink: InviteLink | null;
@@ -439,6 +442,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       value={{
         currentUser,
         isAuthenticated: currentUser !== null,
+        hydrated,
         users,
         license,
         inviteLink,
