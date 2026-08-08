@@ -128,10 +128,6 @@ export default function LoginScreen() {
         <Link href="/signup" asChild>
           <Button label="Crear cuenta" variant="success" />
         </Link>
-
-        <ThemedText type="small" themeColor="textSecondary" style={styles.helper}>
-          Demo: carlos@techrepair.com / admin123
-        </ThemedText>
       </ThemedView>
     </Screen>
   );
@@ -174,10 +170,6 @@ const styles = StyleSheet.create({
     flex: 1,
     height: StyleSheet.hairlineWidth,
     backgroundColor: 'rgba(0,0,0,0.2)',
-  },
-  helper: {
-    fontSize: 12,
-    textAlign: 'center',
   },
   googleError: {
     color: Brand.danger,

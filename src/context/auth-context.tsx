@@ -119,38 +119,8 @@ const DEFAULT_LICENSE: LicenseInfo = {
 // a production build must validate license keys against a server.
 const PRO_LICENSE_REGEX = /^TR-PRO-[A-Z0-9-]{12,}$/;
 
-/** Usuarios seed usados hasta que exista un respaldo guardado en AsyncStorage. */
-const SEED_USERS: User[] = [
-  {
-    id: '1',
-    name: 'Carlos (Administrador Principal)',
-    role: 'admin',
-    password: 'admin123',
-    email: 'carlos@techrepair.com',
-    phone: '+573001112222',
-    deviceFingerprint: 'DEV-FNG-HW-889X',
-  },
-  {
-    id: '2',
-    name: 'Luis Técnico (Hardware)',
-    role: 'technician',
-    password: 'tecnico123',
-    email: 'luis@techrepair.com',
-    phone: '+573001112223',
-    commissionRate: 0.15,
-    deviceFingerprint: 'DEV-FNG-HW-112Y',
-  },
-  {
-    id: '3',
-    name: 'Sofia Técnica (Software)',
-    role: 'technician',
-    password: 'tecnico123',
-    email: 'sofia@techrepair.com',
-    phone: '+573001112224',
-    commissionRate: 0.2,
-    deviceFingerprint: 'DEV-FNG-HW-334Z',
-  },
-];
+/** Pool local sin usuarios: la única forma de entrar es registrarse con Supabase. */
+const SEED_USERS: User[] = [];
 
 /** Convierte el perfil de Supabase en la forma local User de la app. */
 function toLocalUser(profile: SupabaseUserProfile): User {
