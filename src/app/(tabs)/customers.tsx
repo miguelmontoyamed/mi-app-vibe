@@ -1,0 +1,236 @@
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { useMemo, useState } from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
+
+import { FormInput } from '@/components/ui/form-input';
+import { Screen } from '@/components/ui/screen';
+import { StatusBadge } from '@/components/ui/status-badge';
+import { ThemedText } from '@/components/themed-text';
+import { ThemedView } from '@/components/themed-view';
+import { Brand, Spacing } from '@/constants/theme';
+import { useRepair, type RepairItem } from '@/context/repair-context';
+import { useTheme } from '@/hooks/use-theme';
+import { formatCOP } from '@/utils/format';
+
+type CustomerGroup = {
+  key: string;
+  name: string;
+  phone: string;
+  repairs: RepairItem[];
+};
+
+export default function CustomersScreen() {
+  const theme = useTheme();
+  const router = useRouter();
+  const { repairs } = useRepair();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
+
+  // Group repairs by (phone | name) so a returning client shows their full history.
+  const customers = useMemo<CustomerGroup[]>(() => {
+    const map = new Map<string, CustomerGroup>();
+    for (const r of repairs) {
+      const key = `${(r.phone ?? '').trim().toLowerCase()}|${r.clientName.trim().toLowerCase()}` || r.id;
+      const existing = map.get(key);
+      if (existing) {
+        existing.repairs.push(r);
+      } else {
+        map.set(key, {
+          key,
+          name: r.clientName,
+          phone: r.phone ?? '',
+          repairs: [r],
+        });
+      }
+    }
+    // Most recently active first.
+    return Array.from(map.values()).sort(
+      (a, b) => b.repairs.length - a.repairs.length
+    );
+  }, [repairs]);
+
+  const filtered = customers.filter(
+    (c) =>
+      c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      c.phone.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const totalRepair = (list: RepairItem[]) =>
+    list.reduce((acc, r) => acc + (r.budget || 0), 0);
+
+  return (
+    <Screen>
+      <View style={styles.header}>
+        <ThemedText type="title" style={styles.title}>Clientes</ThemedText>
+        <ThemedText themeColor="textSecondary">
+          Historial completo de reparaciones por cliente
+        </ThemedText>
+      </View>
+
+      <FormInput
+        label="Buscar cliente"
+        placeholder="Buscar por nombre o teléfono..."
+        value={searchQuery}
+        onChangeText={setSearchQuery}
+        style={styles.searchInput}
+      />
+
+      <View style={styles.listContainer}>
+        {filtered.length === 0 ? (
+          <ThemedView type="backgroundElement" style={styles.emptyContainer}>
+            <ThemedText themeColor="textSecondary" style={styles.centerText}>
+              No se encontraron clientes.
+            </ThemedText>
+          </ThemedView>
+        ) : (
+          filtered.map((customer) => {
+            const isOpen = expandedKey === customer.key;
+            const activeRepairs = customer.repairs.filter(
+              (r) => r.status === 'Pendiente' || r.status === 'En Proceso' || r.status === 'Listo'
+            ).length;
+            return (
+              <ThemedView key={customer.key} type="backgroundElement" style={styles.card}>
+                <Pressable
+                  onPress={() => setExpandedKey(isOpen ? null : customer.key)}
+                  style={styles.cardHeader}>
+                  <View style={styles.customerInfo}>
+                    <ThemedText type="smallBold">{customer.name}</ThemedText>
+                    <ThemedText type="small" themeColor="textSecondary">
+                      📞 {customer.phone}
+                    </ThemedText>
+                  </View>
+                  <View style={styles.customerMeta}>
+                    <ThemedText type="small" themeColor="textSecondary">
+                      {customer.repairs.length} reparación{customer.repairs.length === 1 ? '' : 'es'}
+                    </ThemedText>
+                    <ThemedText type="small" themeColor="textSecondary">
+                      {activeRepairs > 0 ? `🟠 ${activeRepairs} activa(s)` : '✅ Sin activas'}
+                    </ThemedText>
+                    <Ionicons
+                      name={isOpen ? 'chevron-up' : 'chevron-down'}
+                      size={16}
+                      color={theme.textSecondary}
+                    />
+                  </View>
+                </Pressable>
+
+                {isOpen && (
+                  <View style={styles.history}>
+                    {customer.repairs.map((r) => (
+                      <Pressable
+                        key={r.id}
+                        onPress={() =>
+                          router.push({ pathname: '/receipt/[id]', params: { id: r.id } })
+                        }
+                        style={({ pressed }) => [styles.historyRow, pressed && styles.pressed]}>
+                        <View style={styles.historyMain}>
+                          <ThemedText type="smallBold" style={styles.deviceText}>
+                            📱 {r.device}
+                          </ThemedText>
+                          <ThemedText type="small" themeColor="textSecondary">
+                            {r.date} · {r.issue}
+                          </ThemedText>
+                          <ThemedText
+                            type="smallBold"
+                            style={[
+                              styles.budgetText,
+                              (r.advancePayment ?? 0) < r.budget && { color: Brand.danger },
+                            ]}>
+                            {formatCOP(r.budget)}
+                            {(r.advancePayment ?? 0) < r.budget
+                              ? ` · Falta ${formatCOP(Math.max(0, r.budget - (r.advancePayment ?? 0)))}`
+                              : ' · Pagado'}
+                          </ThemedText>
+                        </View>
+                        <StatusBadge status={r.status} />
+                      </Pressable>
+                    ))}
+                    <ThemedText type="smallBold" style={styles.totalRow}>
+                      Total histórico: {formatCOP(totalRepair(customer.repairs))}
+                    </ThemedText>
+                  </View>
+                )}
+              </ThemedView>
+            );
+          })
+        )}
+      </View>
+    </Screen>
+  );
+}
+
+const styles = StyleSheet.create({
+  header: {
+    gap: Spacing.one,
+    paddingVertical: Spacing.two,
+    paddingHorizontal: Spacing.two,
+  },
+  title: {
+    fontSize: 34,
+    lineHeight: 40,
+  },
+  searchInput: {
+    paddingVertical: Spacing.two,
+  },
+  listContainer: {
+    gap: Spacing.three,
+  },
+  emptyContainer: {
+    padding: Spacing.six,
+    borderRadius: Spacing.three,
+    alignItems: 'center',
+  },
+  centerText: {
+    textAlign: 'center',
+  },
+  card: {
+    padding: Spacing.three,
+    borderRadius: Spacing.three,
+    gap: Spacing.two,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  customerInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  customerMeta: {
+    alignItems: 'flex-end',
+    gap: 2,
+  },
+  history: {
+    gap: Spacing.two,
+    paddingTop: Spacing.two,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#4b5563',
+  },
+  historyRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  historyMain: {
+    flex: 1,
+    gap: 2,
+  },
+  deviceText: {
+    fontSize: 14,
+  },
+  budgetText: {
+    fontSize: 13,
+  },
+  pressed: {
+    opacity: 0.7,
+  },
+  totalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: Spacing.one,
+  },
+});
