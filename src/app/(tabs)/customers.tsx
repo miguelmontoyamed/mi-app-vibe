@@ -1,14 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import { FormInput } from '@/components/ui/form-input';
 import { Screen } from '@/components/ui/screen';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Brand, Spacing } from '@/constants/theme';
+import { Brand, BREAKPOINTS, Spacing } from '@/constants/theme';
 import { useRepair, type RepairItem } from '@/context/repair-context';
 import { useTheme } from '@/hooks/use-theme';
 import { formatCOP } from '@/utils/format';
@@ -24,6 +24,8 @@ export default function CustomersScreen() {
   const theme = useTheme();
   const router = useRouter();
   const { repairs } = useRepair();
+  const { width } = useWindowDimensions();
+  const isTablet = width >= BREAKPOINTS.mobile;
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
@@ -76,7 +78,7 @@ export default function CustomersScreen() {
         style={styles.searchInput}
       />
 
-      <View style={styles.listContainer}>
+      <View style={[styles.listContainer, isTablet && styles.listContainerTablet]}>
         {filtered.length === 0 ? (
           <ThemedView type="backgroundElement" style={styles.emptyContainer}>
             <ThemedText themeColor="textSecondary" style={styles.centerText}>
@@ -90,7 +92,10 @@ export default function CustomersScreen() {
               (r) => r.status === 'Pendiente' || r.status === 'En Proceso' || r.status === 'Listo'
             ).length;
             return (
-              <ThemedView key={customer.key} type="backgroundElement" style={styles.card}>
+              <ThemedView
+                key={customer.key}
+                type="backgroundElement"
+                style={[styles.card, { flexBasis: isTablet ? '48%' : '100%' }]}>
                 <Pressable
                   onPress={() => setExpandedKey(isOpen ? null : customer.key)}
                   style={styles.cardHeader}>
@@ -176,10 +181,15 @@ const styles = StyleSheet.create({
   listContainer: {
     gap: Spacing.three,
   },
+  listContainerTablet: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
   emptyContainer: {
     padding: Spacing.six,
     borderRadius: Spacing.three,
     alignItems: 'center',
+    width: '100%',
   },
   centerText: {
     textAlign: 'center',

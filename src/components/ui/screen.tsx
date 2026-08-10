@@ -3,6 +3,7 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
+  useWindowDimensions,
   View,
   type StyleProp,
   type ViewStyle,
@@ -11,9 +12,21 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Navbar } from '@/components/navbar';
 import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import {
+  BottomTabInset,
+  BREAKPOINTS,
+  MaxContentWidth,
+  Spacing,
+  TabletContentWidth,
+} from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { useTheme } from '@/hooks/use-theme';
+
+/**
+ * Mobile content width. Not exported by the theme yet — keep the previous
+ * mobile behavior (800) until the token lands there.
+ */
+const MobileContentWidth = 800;
 
 type ScreenProps = {
   children: ReactNode;
@@ -31,9 +44,30 @@ export function Screen({ children, contentContainerStyle, title }: ScreenProps) 
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   const { isAuthenticated } = useAuth();
+  const { width } = useWindowDimensions();
+
+  const maxWidth =
+    width < BREAKPOINTS.mobile
+      ? MobileContentWidth
+      : width < BREAKPOINTS.tablet
+        ? TabletContentWidth
+        : MaxContentWidth;
+
+  // RN insets are 0 on web; let CSS env(safe-area-inset-top) handle the
+  // browser chrome (URL bar / PWA) instead. DimensionValue doesn't accept CSS
+  // custom properties, so widen the value once here.
+  const webSafeAreaTop = Platform.select({
+    web: { paddingTop: 'var(--sat)' } as unknown as ViewStyle,
+    default: undefined,
+  });
 
   return (
-    <View style={[styles.root, { backgroundColor: theme.background }]}>
+    <View
+      style={[
+        styles.root,
+        { backgroundColor: theme.background },
+        webSafeAreaTop,
+      ]}>
       {isAuthenticated && <Navbar title={title} />}
       <ScrollView
         style={styles.scrollView}
@@ -45,7 +79,7 @@ export function Screen({ children, contentContainerStyle, title }: ScreenProps) 
           },
           contentContainerStyle,
         ]}>
-        <View style={styles.container}>
+        <View style={[styles.container, { maxWidth }]}>
           {children}
           {Platform.OS === 'web' && <WebBadge />}
         </View>

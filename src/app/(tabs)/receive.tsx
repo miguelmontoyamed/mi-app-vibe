@@ -288,6 +288,8 @@ const styles = StyleSheet.create({
     fontSize: 34,
     lineHeight: 40,
   },
+  // Verified responsive: maxWidth 600 centers the form inside Screen's
+  // MaxContentWidth (1200) container; header and chipsRow wrap correctly.
   formContainer: {
     width: '100%',
     maxWidth: 600,

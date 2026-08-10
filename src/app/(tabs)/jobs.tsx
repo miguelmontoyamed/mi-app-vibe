@@ -6,6 +6,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  useWindowDimensions,
   View,
 } from 'react-native';
 
@@ -15,7 +16,7 @@ import { Screen } from '@/components/ui/screen';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Brand, KpiAccent, Spacing } from '@/constants/theme';
+import { Brand, BREAKPOINTS, KpiAccent, Spacing } from '@/constants/theme';
 import { RepairStatus, useRepair } from '@/context/repair-context';
 import { useTheme } from '@/hooks/use-theme';
 import { formatCOP, parseCOPInput } from '@/utils/format';
@@ -31,6 +32,8 @@ const STATUS_FILTERS: (RepairStatus | 'Todos')[] = [
 
 export default function JobsScreen() {
   const theme = useTheme();
+  const { width } = useWindowDimensions();
+  const isTablet = width >= BREAKPOINTS.mobile;
   const router = useRouter();
   const { repairs, updateRepairStatus, recordRepairPayment } = useRepair();
 
@@ -144,7 +147,7 @@ export default function JobsScreen() {
       </ScrollView>
 
       {/* Repairs List */}
-      <View style={styles.listContainer}>
+      <View style={[styles.listContainer, isTablet && styles.listContainerTablet]}>
         {filteredRepairs.length === 0 ? (
           <ThemedView type="backgroundElement" style={styles.emptyContainer}>
             <ThemedText themeColor="textSecondary" style={styles.centerText}>
@@ -156,7 +159,7 @@ export default function JobsScreen() {
             <ThemedView
               key={item.id}
               type="backgroundElement"
-              style={styles.repairCard}>
+              style={[styles.repairCard, { flexBasis: isTablet ? '48%' : '100%' }]}>
               <View style={styles.repairCardTop}>
                 <View style={styles.clientInfo}>
                   <ThemedText type="smallBold">{item.clientName}</ThemedText>
@@ -348,10 +351,16 @@ const styles = StyleSheet.create({
   listContainer: {
     gap: Spacing.three,
   },
+  listContainerTablet: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
   emptyContainer: {
     padding: Spacing.six,
     borderRadius: Spacing.three,
     alignItems: 'center',
+    flexBasis: '100%',
   },
   centerText: {
     textAlign: 'center',

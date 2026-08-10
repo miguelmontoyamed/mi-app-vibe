@@ -50,7 +50,7 @@ export const Fonts = Platform.select({
     mono: 'monospace',
   },
   web: {
-    sans: 'var(--font-display)',
+    sans: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
     serif: 'var(--font-serif)',
     rounded: 'var(--font-rounded)',
     mono: 'var(--font-mono)',
@@ -67,9 +67,12 @@ export const Spacing = {
   six: 64,
 } as const;
 
+export const BREAKPOINTS = { mobile: 768, tablet: 1024 } as const;
+
 /** Altura de la barra de navegación inferior móvil, reservada como clearance al final del contenido scrolleable. */
 export const BottomTabInset = 50;
-export const MaxContentWidth = 800;
+export const MaxContentWidth = 1200;
+export const TabletContentWidth = 900;
 
 /** Brand / semantic palette (theme-independent). */
 export const Brand = {

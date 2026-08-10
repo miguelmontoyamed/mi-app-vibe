@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { Alert, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Alert, Platform, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import { Button } from '@/components/ui/button';
 import { FormInput } from '@/components/ui/form-input';
 import { Screen } from '@/components/ui/screen';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Brand, Spacing } from '@/constants/theme';
+import { Brand, BREAKPOINTS, Spacing } from '@/constants/theme';
 import { useRepair } from '@/context/repair-context';
 import { formatCOP } from '@/utils/format';
 
@@ -30,6 +30,8 @@ function notify(message: string) {
 
 export default function InventoryScreen() {
   const { inventory, addInventoryPart, updateInventoryStock } = useRepair();
+  const { width } = useWindowDimensions();
+  const isTablet = width >= BREAKPOINTS.mobile;
 
   const [searchQuery, setSearchQuery] = useState('');
   const [name, setName] = useState('');
@@ -90,109 +92,116 @@ export default function InventoryScreen() {
         <ThemedText themeColor="textSecondary">Control de piezas, stock y precios</ThemedText>
       </View>
 
-      {/* Add Part Form */}
-      <ThemedView type="backgroundElement" style={styles.formCard}>
-        <ThemedText type="subtitle" style={styles.formTitle}>
-          Registrar Nueva Pieza
-        </ThemedText>
-        <View style={styles.formRow}>
-          <View style={styles.formRowGrow}>
-            <FormInput
-              label="Nombre"
-              required
-              placeholder="Ej. Pantalla OLED"
-              value={name}
-              onChangeText={setName}
-              maxLength={MAX_LENGTHS.name}
-            />
+      {/* Tablet+: form left (40%), search + list right (60%). Mobile: stacked. */}
+      <View style={[styles.mainRow, isTablet && styles.mainRowTablet]}>
+        {/* Add Part Form */}
+        <ThemedView
+          type="backgroundElement"
+          style={[styles.formCard, isTablet && styles.formCardTablet]}>
+          <ThemedText type="subtitle" style={styles.formTitle}>
+            Registrar Nueva Pieza
+          </ThemedText>
+          <View style={styles.formRow}>
+            <View style={styles.formRowGrow}>
+              <FormInput
+                label="Nombre"
+                required
+                placeholder="Ej. Pantalla OLED"
+                value={name}
+                onChangeText={setName}
+                maxLength={MAX_LENGTHS.name}
+              />
+            </View>
+            <View style={styles.formRowShrink}>
+              <FormInput
+                label="Categoría"
+                required
+                placeholder="Ej. Pantallas"
+                value={category}
+                onChangeText={setCategory}
+                maxLength={MAX_LENGTHS.category}
+              />
+            </View>
           </View>
-          <View style={styles.formRowShrink}>
-            <FormInput
-              label="Categoría"
-              required
-              placeholder="Ej. Pantallas"
-              value={category}
-              onChangeText={setCategory}
-              maxLength={MAX_LENGTHS.category}
-            />
+          <View style={styles.formRow}>
+            <View style={styles.formRowShrink}>
+              <FormInput
+                label="Stock"
+                required
+                placeholder="Ej. 5"
+                keyboardType="numeric"
+                value={stock}
+                onChangeText={setStock}
+                maxLength={MAX_LENGTHS.stock}
+              />
+            </View>
+            <View style={styles.formRowShrink}>
+              <FormInput
+                label="Precio (COP)"
+                required
+                placeholder="Ej. 340000"
+                keyboardType="numeric"
+                value={price}
+                onChangeText={setPrice}
+                maxLength={MAX_LENGTHS.price}
+              />
+            </View>
+            <Button label="+ Agregar" onPress={handleAddPart} style={styles.addButton} />
+          </View>
+        </ThemedView>
+
+        <View style={[styles.listColumn, isTablet && styles.listColumnTablet]}>
+          {/* Search Bar */}
+          <FormInput
+            label="Buscar repuesto"
+            placeholder="Buscar por nombre o categoría..."
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            style={styles.searchInput}
+          />
+
+          {/* Inventory List */}
+          <View style={styles.listContainer}>
+            {filteredInventory.length === 0 ? (
+              <ThemedView type="backgroundElement" style={styles.emptyContainer}>
+                <ThemedText themeColor="textSecondary" style={styles.centerText}>
+                  No se encontraron repuestos en el inventario.
+                </ThemedText>
+              </ThemedView>
+            ) : (
+              filteredInventory.map((item) => (
+                <ThemedView key={item.id} type="backgroundElement" style={styles.partCard}>
+                  <View style={styles.partInfo}>
+                    <ThemedText type="smallBold">{item.name}</ThemedText>
+                    <ThemedText type="small" themeColor="textSecondary">
+                      Categoría: {item.category} | Precio: {formatCOP(item.price)}
+                    </ThemedText>
+                  </View>
+
+                  <View style={styles.stockControl}>
+                    <ThemedText
+                      type="smallBold"
+                      style={[styles.stockText, item.stock <= 2 && { color: Brand.danger }]}>
+                      Stock: {item.stock}
+                    </ThemedText>
+                    <View style={styles.stockButtons}>
+                      <Pressable
+                        style={({ pressed }) => [styles.stockBtn, pressed && styles.pressed]}
+                        onPress={() => updateInventoryStock(item.id, -1)}>
+                        <ThemedText style={styles.stockBtnText}>−</ThemedText>
+                      </Pressable>
+                      <Pressable
+                        style={({ pressed }) => [styles.stockBtn, pressed && styles.pressed]}
+                        onPress={() => updateInventoryStock(item.id, 1)}>
+                        <ThemedText style={styles.stockBtnText}>+</ThemedText>
+                      </Pressable>
+                    </View>
+                  </View>
+                </ThemedView>
+              ))
+            )}
           </View>
         </View>
-        <View style={styles.formRow}>
-          <View style={styles.formRowShrink}>
-            <FormInput
-              label="Stock"
-              required
-              placeholder="Ej. 5"
-              keyboardType="numeric"
-              value={stock}
-              onChangeText={setStock}
-              maxLength={MAX_LENGTHS.stock}
-            />
-          </View>
-          <View style={styles.formRowShrink}>
-            <FormInput
-              label="Precio (COP)"
-              required
-              placeholder="Ej. 340000"
-              keyboardType="numeric"
-              value={price}
-              onChangeText={setPrice}
-              maxLength={MAX_LENGTHS.price}
-            />
-          </View>
-          <Button label="+ Agregar" onPress={handleAddPart} style={styles.addButton} />
-        </View>
-      </ThemedView>
-
-      {/* Search Bar */}
-      <FormInput
-        label="Buscar repuesto"
-        placeholder="Buscar por nombre o categoría..."
-        value={searchQuery}
-        onChangeText={setSearchQuery}
-        style={styles.searchInput}
-      />
-
-      {/* Inventory List */}
-      <View style={styles.listContainer}>
-        {filteredInventory.length === 0 ? (
-          <ThemedView type="backgroundElement" style={styles.emptyContainer}>
-            <ThemedText themeColor="textSecondary" style={styles.centerText}>
-              No se encontraron repuestos en el inventario.
-            </ThemedText>
-          </ThemedView>
-        ) : (
-          filteredInventory.map((item) => (
-            <ThemedView key={item.id} type="backgroundElement" style={styles.partCard}>
-              <View style={styles.partInfo}>
-                <ThemedText type="smallBold">{item.name}</ThemedText>
-                <ThemedText type="small" themeColor="textSecondary">
-                  Categoría: {item.category} | Precio: {formatCOP(item.price)}
-                </ThemedText>
-              </View>
-
-              <View style={styles.stockControl}>
-                <ThemedText
-                  type="smallBold"
-                  style={[styles.stockText, item.stock <= 2 && { color: Brand.danger }]}>
-                  Stock: {item.stock}
-                </ThemedText>
-                <View style={styles.stockButtons}>
-                  <Pressable
-                    style={({ pressed }) => [styles.stockBtn, pressed && styles.pressed]}
-                    onPress={() => updateInventoryStock(item.id, -1)}>
-                    <ThemedText style={styles.stockBtnText}>−</ThemedText>
-                  </Pressable>
-                  <Pressable
-                    style={({ pressed }) => [styles.stockBtn, pressed && styles.pressed]}
-                    onPress={() => updateInventoryStock(item.id, 1)}>
-                    <ThemedText style={styles.stockBtnText}>+</ThemedText>
-                  </Pressable>
-                </View>
-              </View>
-            </ThemedView>
-          ))
-        )}
       </View>
     </Screen>
   );
@@ -208,10 +217,26 @@ const styles = StyleSheet.create({
     fontSize: 34,
     lineHeight: 40,
   },
+  mainRow: {
+    gap: Spacing.four,
+  },
+  mainRowTablet: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
   formCard: {
     padding: Spacing.four,
     borderRadius: Spacing.four,
     gap: Spacing.three,
+  },
+  formCardTablet: {
+    width: '40%',
+  },
+  listColumn: {
+    gap: Spacing.four,
+  },
+  listColumnTablet: {
+    flex: 1,
   },
   formTitle: {
     fontSize: 22,

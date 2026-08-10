@@ -1,13 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Link } from 'expo-router';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { Button } from '@/components/ui/button';
 import { Screen } from '@/components/ui/screen';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { KpiAccent, Spacing, statusStyle } from '@/constants/theme';
+import { BREAKPOINTS, KpiAccent, Spacing, statusStyle } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { useRepair, type RepairStatus } from '@/context/repair-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -28,6 +28,10 @@ export default function DashboardScreen() {
   const scheme = useColorScheme();
   const dark = scheme === 'dark';
   const theme = useTheme();
+  const { width } = useWindowDimensions();
+  const isTablet = width >= BREAKPOINTS.mobile;
+  const cardBasis =
+    width >= BREAKPOINTS.tablet ? '31%' : width >= BREAKPOINTS.mobile ? '48%' : '100%';
   const { repairs } = useRepair();
   const { currentUser, license } = useAuth();
 
@@ -81,7 +85,10 @@ export default function DashboardScreen() {
           return (
             <ThemedView
               key={card.status}
-              style={[styles.card, { backgroundColor: s.bg, borderColor: card.accent }]}>
+              style={[
+                styles.card,
+                { backgroundColor: s.bg, borderColor: card.accent, flexBasis: cardBasis },
+              ]}>
               <View style={[styles.cardIcon, { backgroundColor: `${card.accent}1f` }]}>
                 <Ionicons name={card.icon} size={22} color={card.accent} />
               </View>
@@ -119,9 +126,12 @@ export default function DashboardScreen() {
         </Link>
       </View>
 
-      <View style={styles.listContainer}>
+      <View style={[styles.listContainer, isTablet && styles.listContainerTablet]}>
         {recentRepairs.map((item) => (
-          <ThemedView key={item.id} type="backgroundElement" style={styles.repairCard}>
+          <ThemedView
+            key={item.id}
+            type="backgroundElement"
+            style={[styles.repairCard, { flexBasis: isTablet ? '48%' : '100%' }]}>
             <View style={styles.repairCardTop}>
               <ThemedText type="smallBold">{item.clientName}</ThemedText>
               <StatusBadge status={item.status} />
@@ -150,12 +160,12 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   cardsGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: Spacing.three,
     justifyContent: 'space-between',
     width: '100%',
   },
   card: {
-    flex: 1,
     padding: Spacing.three,
     borderRadius: Spacing.three,
     borderWidth: 1.5,
@@ -231,6 +241,10 @@ const styles = StyleSheet.create({
   listContainer: {
     gap: Spacing.three,
     width: '100%',
+  },
+  listContainerTablet: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
   },
   repairCard: {
     padding: Spacing.four,
