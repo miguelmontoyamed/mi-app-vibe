@@ -5,6 +5,7 @@ import { useColorScheme } from 'react-native';
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { AuthProvider, useAuth } from '@/context/auth-context';
 import { RepairProvider } from '@/context/repair-context';
+import { WorkshopProvider } from '@/context/workshop-context';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -26,6 +27,7 @@ function RootNavigator() {
       <Stack.Protected guard={isAuthenticated}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="receipt/[id]" options={{ headerShown: false }} />
+        <Stack.Screen name="taller" options={{ headerShown: false }} />
       </Stack.Protected>
       <Stack.Screen name="login" options={{ headerShown: false }} />
       <Stack.Screen name="signup" options={{ headerShown: false }} />
@@ -39,8 +41,10 @@ export default function TabLayout() {
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <AuthProvider>
         <RepairProvider>
-          <RootNavigator />
-          <AnimatedSplashOverlay />
+          <WorkshopProvider>
+            <RootNavigator />
+            <AnimatedSplashOverlay />
+          </WorkshopProvider>
         </RepairProvider>
       </AuthProvider>
     </ThemeProvider>

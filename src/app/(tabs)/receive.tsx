@@ -289,6 +289,9 @@ const styles = StyleSheet.create({
     lineHeight: 40,
   },
   formContainer: {
+    width: '100%',
+    maxWidth: 600,
+    alignSelf: 'center',
     padding: Spacing.four,
     borderRadius: Spacing.four,
     gap: Spacing.three,

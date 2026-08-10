@@ -16,7 +16,6 @@
 create table if not exists public.workshops (
   id uuid primary key default gen_random_uuid(),
   name text not null default 'Mi Taller',
-  phone text,
   created_at timestamptz not null default now()
 );
 
@@ -27,7 +26,6 @@ create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   workshop_id uuid not null references public.workshops(id) on delete cascade,
   full_name text not null,
-  phone text,
   role text not null default 'technician' check (role in ('admin','technician')),
   created_at timestamptz not null default now()
 );
@@ -44,17 +42,15 @@ declare
   w_id uuid;
   is_first boolean;
 begin
-  insert into public.workshops (name, phone)
-  values (coalesce(new.raw_user_meta_data->>'workshop_name', 'Mi Taller'),
-          new.raw_user_meta_data->>'phone')
+  insert into public.workshops (name)
+  values (coalesce(new.raw_user_meta_data->>'workshop_name', 'Mi Taller'))
   returning id into w_id;
 
-  insert into public.profiles (id, workshop_id, full_name, phone, role)
+  insert into public.profiles (id, workshop_id, full_name, role)
   values (
     new.id,
     w_id,
     coalesce(new.raw_user_meta_data->>'full_name', new.email),
-    new.raw_user_meta_data->>'phone',
     'admin'  -- la primera cuenta (la que crea taller) es el dueño admin
   );
 

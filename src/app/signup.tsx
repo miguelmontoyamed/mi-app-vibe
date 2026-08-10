@@ -20,16 +20,10 @@ const notify = (title: string, message: string) => {
 };
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-const PHONE_REGEX = /^\+?\d{7,15}$/;
 
 export default function SignUpScreen() {
   const router = useRouter();
-  const {
-    registerOwner,
-    signInWithGoogle,
-    verifyRegistration,
-    resendRegistration,
-  } = useAuth();
+  const { registerOwner, signInWithGoogle, resendRegistration } = useAuth();
   const {
     prompt: promptGoogle,
     inProgress: googleInProgress,
@@ -39,11 +33,9 @@ export default function SignUpScreen() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [phone, setPhone] = useState('');
 
-  // Etapa de verificación del correo (OTP de 6 dígitos enviado por Supabase).
-  const [pendingVerification, setPendingVerification] = useState<string | null>(null); // email a verificar
-  const [code, setCode] = useState('');
+  // Etapa de confirmación del correo (enlace enviado por Supabase).
+  const [pendingVerification, setPendingVerification] = useState<string | null>(null); // email a confirmar
   const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async () => {
@@ -53,10 +45,6 @@ export default function SignUpScreen() {
     }
     if (!EMAIL_REGEX.test(email.trim())) {
       notify('Correo inválido', 'Ingresa un correo electrónico válido.');
-      return;
-    }
-    if (!PHONE_REGEX.test(phone.trim())) {
-      notify('Teléfono inválido', 'Ingresa un número de teléfono válido (7 a 15 dígitos, con + opcional).');
       return;
     }
     if (password.length < 6) {
@@ -69,8 +57,7 @@ export default function SignUpScreen() {
       const { user, reason, pendingVerification: pending } = await registerOwner(
         name,
         email,
-        password,
-        phone
+        password
       );
       if (user) {
         notify('¡Cuenta creada!', `Bienvenido, ${user.name}. Tu taller está listo.`);
@@ -78,44 +65,19 @@ export default function SignUpScreen() {
         return;
       }
       if (pending) {
-        // El correo de Supabase ya incluye el código de 6 dígitos.
+        // El correo de Supabase incluye el enlace de confirmación.
         setPendingVerification(email.trim().toLowerCase());
         notify(
           'Verifica tu correo',
-          `Enviamos un código de 6 dígitos a ${email.trim().toLowerCase()}. Revisa tu bandeja (y el spam).`
+          `Enviamos un enlace de confirmación a ${email.trim().toLowerCase()}. Revisa tu bandeja (y el spam).`
         );
         return;
       }
       const msg =
         reason === 'email'
           ? 'Ya existe una cuenta con ese correo. Inicia sesión.'
-          : reason === 'phone'
-            ? 'Ya existe una cuenta con ese teléfono. Inicia sesión.'
-            : 'Dispositivo bloqueado por intentos repetidos.';
+          : 'Dispositivo bloqueado por intentos repetidos.';
       notify('No se pudo crear la cuenta', msg);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleVerifyCode = async () => {
-    if (!pendingVerification) return;
-    if (code.trim().length !== 6) {
-      notify('Código incompleto', 'Ingresa el código de 6 dígitos que enviamos por correo.');
-      return;
-    }
-    setSubmitting(true);
-    try {
-      const ok = await verifyRegistration(pendingVerification, code);
-      if (ok) {
-        notify('Correo verificado', 'Tu cuenta está lista. ¡Bienvenido a TechRepair Master!');
-        router.replace('/');
-      } else {
-        notify(
-          'Código incorrecto',
-          'El código no coincide o ya expiró. Verifica e intenta de nuevo, o reenvía el código.'
-        );
-      }
     } finally {
       setSubmitting(false);
     }
@@ -123,13 +85,18 @@ export default function SignUpScreen() {
 
   const handleResend = async () => {
     if (!pendingVerification) return;
-    const ok = await resendRegistration(pendingVerification);
-    notify(
-      ok ? 'Código reenviado' : 'No se pudo reenviar',
-      ok
-        ? 'Revisa tu correo (y el spam) con el nuevo código.'
-        : 'Hubo un problema al reenviar el código. Intenta en un momento.'
-    );
+    setSubmitting(true);
+    try {
+      const ok = await resendRegistration(pendingVerification);
+      notify(
+        ok ? 'Correo reenviado' : 'No se pudo reenviar',
+        ok
+          ? 'Revisa tu correo (y el spam) con el nuevo enlace de confirmación.'
+          : 'Hubo un problema al reenviar el correo. Intenta en un momento.'
+      );
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleGoogle = async () => {
@@ -150,7 +117,7 @@ export default function SignUpScreen() {
     }
   };
 
-  // Etapa OTP: verificación del correo con el código de 6 dígitos.
+  // Etapa de confirmación: el usuario debe abrir el enlace del correo.
   if (pendingVerification) {
     return (
       <Screen contentContainerStyle={styles.screen}>
@@ -159,39 +126,23 @@ export default function SignUpScreen() {
             Verifica tu correo
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary" style={styles.subtitle}>
-            Enviamos un código de 6 dígitos a <ThemedText type="linkPrimary">{pendingVerification}</ThemedText>.
-            Ingresa el código para activar tu cuenta.
+            Enviamos un enlace de confirmación a <ThemedText type="linkPrimary">{pendingVerification}</ThemedText>.
+            Revisa tu bandeja de entrada (y el spam) y haz clic en el enlace para activar tu cuenta.
           </ThemedText>
 
-          <FormInput
-            label="Código de verificación"
-            placeholder="••••••"
-            keyboardType="number-pad"
-            maxLength={6}
-            value={code}
-            onChangeText={setCode}
-            autoFocus
-          />
-
           <Button
-            label={submitting ? 'Verificando…' : 'Verificar y activar cuenta'}
-            onPress={handleVerifyCode}
-            style={styles.primary}
-            disabled={submitting}
-          />
-          <Button
-            label="Reenviar código"
-            variant="secondary"
+            label={submitting ? 'Reenviando…' : 'Reenviar correo de confirmación'}
             onPress={handleResend}
+            style={styles.primary}
             disabled={submitting}
           />
 
           <View style={styles.loginLink}>
             <ThemedText type="small" themeColor="textSecondary">
-              ¿Problemas con el correo?
+              ¿Ya confirmaste tu correo?
             </ThemedText>
             <Link href="/login">
-              <ThemedText type="linkPrimary">Ir a iniciar sesión</ThemedText>
+              <ThemedText type="linkPrimary">Iniciar sesión</ThemedText>
             </Link>
           </View>
         </ThemedView>
@@ -207,7 +158,7 @@ export default function SignUpScreen() {
         </ThemedText>
         <ThemedText type="small" themeColor="textSecondary" style={styles.subtitle}>
           Registra tu taller para administrar equipos y agregar técnicos. Te pediremos
-          el código de verificación de tu correo.
+          confirmar tu correo con el enlace que te enviamos.
         </ThemedText>
 
         <FormInput
@@ -235,15 +186,6 @@ export default function SignUpScreen() {
           secureTextEntry
           value={password}
           onChangeText={setPassword}
-        />
-        <FormInput
-          label="Teléfono"
-          required
-          placeholder="+57 300 123 4567"
-          keyboardType="phone-pad"
-          value={phone}
-          onChangeText={setPhone}
-          maxLength={20}
         />
 
         <Button

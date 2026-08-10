@@ -2,23 +2,21 @@ import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 
 /**
- * Capa de autenticación real sobre Supabase Auth (email + password, Google,
- * verificación por código OTP). El trabajo de sesión/refresh lo hace
- * `supabase.auth` (persistSession + autoRefreshToken ya configurados en
- * `supabase.ts`).
+ * Capa de autenticación real sobre Supabase Auth (email + password y Google).
+ * El trabajo de sesión/refresh lo hace `supabase.auth` (persistSession +
+ * autoRefreshToken ya configurados en `supabase.ts`).
  *
  * Contrato con la Base de Datos: al INSERTAR un usuario en `auth.users`, el
  * trigger `handle_new_user` crea su `workshops` y su fila en `profiles`
- * (RLS) usando `raw_user_meta_data->>'workshop_name'`, `->>'full_name'` y
- * `->>'phone'` (ver supabase/schema.sql). Por eso SIEMPRE pasamos esos tres
- * campos en `options.data` al registrarnos.
+ * (RLS) usando `raw_user_meta_data->>'workshop_name'` y `->>'full_name'`
+ * (ver supabase/schema.sql). Por eso SIEMPRE pasamos esos dos campos en
+ * `options.data` al registrarnos.
  *
  * Config aplicada en el proyecto (supabase.com/dashboard/project/.../auth):
  *   - site_url: https://mi-app-vibe-ten.vercel.app
  *   - uri_allow_list: localhost:8081 + Vercel
- *   - mailer_otp_length: 6  (el código de verificación es de 6 dígitos)
  *   - email autoconfirm: DESACTIVADO -> el usuario debe confirmar su correo
- *     con el código que recibe por email ANTES de poder iniciar sesión.
+ *     con el enlace que recibe por email ANTES de poder iniciar sesión.
  *   - Google provider: habilitado (client_id/secret configurados por API).
  */
 
@@ -27,7 +25,12 @@ export interface SupabaseUserProfile {
   id: string;
   email: string;
   name: string;
-  phone?: string;
+  role: string;
+  commission_rate?: number;
+  is_active?: boolean;
+  specialty?: string;
+  joined_at?: string;
+  notes?: string;
   isGoogle: boolean;
   avatarUrl?: string;
   googleId?: string;
@@ -55,19 +58,18 @@ function toProfile(authUser: SupabaseUser): SupabaseUserProfile {
     id: authUser.id,
     email: authUser.email ?? '',
     name: (metadata.name as string) || (metadata.full_name as string) || '',
-    phone: metadata.phone as string | undefined,
+    role: (metadata.role as string) || 'technician',
     isGoogle: authUser.app_metadata?.provider === 'google',
     avatarUrl: (metadata.avatar_url as string | undefined) ?? (metadata.picture as string | undefined),
     googleId: googleIdentity?.id ?? (metadata.sub as string | undefined),
   };
 }
 
-/** Envía el correo de confirmación con código OTP de 6 dígitos. */
+/** Envía el correo de confirmación del registro (enlace de verificación). */
 export async function supabaseSignUp(
   name: string,
   email: string,
-  password: string,
-  phone: string
+  password: string
 ): Promise<SignUpResult> {
   try {
     const { data, error } = await supabase.auth.signUp({
@@ -76,7 +78,6 @@ export async function supabaseSignUp(
       options: {
         data: {
           full_name: name.trim(),
-          phone: phone.replace(/\s/g, ''),
           workshop_name: name.trim() || 'Mi Taller',
         },
       },
@@ -93,7 +94,7 @@ export async function supabaseSignUp(
       };
     }
     // Con mailer_autoconfirm=false el registro queda pendiente de verificación;
-    // session llega null hasta que el usuario valide el código del correo.
+    // session llega null hasta que el usuario confirme el correo con el enlace.
     const needsVerification =
       !data.session || data.user?.email_confirmed_at == null;
     if (needsVerification) {
@@ -112,30 +113,7 @@ export async function supabaseSignUp(
   }
 }
 
-/** Valida el código OTP del correo de registro (tipo 'signup'). */
-export async function supabaseVerifyRegistration(
-  email: string,
-  token: string
-): Promise<{ ok: boolean; message?: string }> {
-  try {
-    const { error } = await supabase.auth.verifyOtp({
-      type: 'signup',
-      email: email.trim().toLowerCase(),
-      token: token.trim(),
-    });
-    if (error) {
-      return { ok: false, message: error.message };
-    }
-    return { ok: true };
-  } catch (cause) {
-    return {
-      ok: false,
-      message: cause instanceof Error ? cause.message : 'No se pudo verificar el código.',
-    };
-  }
-}
-
-/** Reenvía el código OTP de registro al correo. */
+/** Reenvía el correo de confirmación del registro. */
 export async function supabaseResendRegistration(
   email: string
 ): Promise<{ ok: boolean; message?: string }> {
@@ -167,9 +145,19 @@ export async function supabaseSignInWithPassword(
       password,
     });
     if (error) {
+      const isUnconfirmed =
+        error.code === 'email_not_confirmed' ||
+        /email not confirmed/i.test(error.message);
+      const isInvalidCredentials =
+        error.code === 'invalid_credentials' ||
+        /invalid login credentials/i.test(error.message);
       return {
         ok: false,
-        reason: 'invalid' in error ? 'invalid' : 'unknown',
+        reason: isUnconfirmed
+          ? 'unconfirmed'
+          : isInvalidCredentials
+            ? 'invalid'
+            : 'unknown',
         message: error.message,
       };
     }

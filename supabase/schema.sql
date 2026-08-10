@@ -16,7 +16,6 @@
 create table if not exists public.workshops (
   id uuid primary key default gen_random_uuid(),
   name text not null default 'Mi Taller',
-  phone text,
   created_at timestamptz not null default now()
 );
 
@@ -27,8 +26,13 @@ create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   workshop_id uuid not null references public.workshops(id) on delete cascade,
   full_name text not null,
-  phone text,
   role text not null default 'technician' check (role in ('admin','technician')),
+  -- Campos específicos para técnicos
+  commission_rate numeric default 0 check (commission_rate >= 0 and commission_rate <= 1),
+  is_active boolean default true,
+  specialty text,
+  joined_at timestamptz default now(),
+  notes text,
   created_at timestamptz not null default now()
 );
 
@@ -44,18 +48,20 @@ declare
   w_id uuid;
   is_first boolean;
 begin
-  insert into public.workshops (name, phone)
-  values (coalesce(new.raw_user_meta_data->>'workshop_name', 'Mi Taller'),
-          new.raw_user_meta_data->>'phone')
+  insert into public.workshops (name)
+  values (coalesce(new.raw_user_meta_data->>'workshop_name', 'Mi Taller'))
   returning id into w_id;
 
-  insert into public.profiles (id, workshop_id, full_name, phone, role)
+  insert into public.profiles (id, workshop_id, full_name, role, commission_rate, is_active, specialty, joined_at)
   values (
     new.id,
     w_id,
     coalesce(new.raw_user_meta_data->>'full_name', new.email),
-    new.raw_user_meta_data->>'phone',
-    'admin'  -- la primera cuenta (la que crea taller) es el dueño admin
+    'admin',  -- la primera cuenta (la que crea taller) es el dueño admin
+    0,        -- commission_rate para admin
+    true,     -- is_active para admin
+    null,     -- specialty para admin
+    now()     -- joined_at para admin
   );
 
   return new;
@@ -140,6 +146,20 @@ create policy "profiles_workshop_read" on public.profiles
   for select using (workshop_id = current_workshop_id());
 create policy "profiles_own_update" on public.profiles
   for update using (id = auth.uid());
+-- Solo admins pueden crear/actualizar técnicos (excepto su propio perfil)
+create policy "profiles_admin_manage_technicians" on public.profiles
+  for all using (
+    workshop_id = current_workshop_id() 
+    and (
+      -- Admins pueden gestionar todos los perfiles excepto el suyo propio
+      (auth.uid() != id and exists (
+        select 1 from public.profiles 
+        where id = auth.uid() and role = 'admin'
+      ))
+      -- O usuarios pueden editar su propio perfil
+      or auth.uid() = id
+    )
+  );
 
 -- ---- Clients / Repairs / Inventory: acceso por taller ----
 create policy "clients_workshop_all" on public.clients

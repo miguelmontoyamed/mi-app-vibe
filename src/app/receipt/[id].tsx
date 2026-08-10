@@ -9,12 +9,15 @@ import { ThemedView } from '@/components/themed-view';
 import { Brand, Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { useRepair } from '@/context/repair-context';
+import { useWorkshop } from '@/context/workshop-context';
 import { formatCOP } from '@/utils/format';
+import { formatNit } from '@/utils/nit';
 
 export default function ReceiptScreen() {
   const router = useRouter();
   const { currentUser, license } = useAuth();
   const { repairs } = useRepair();
+  const { profile } = useWorkshop();
   const { id } = useLocalSearchParams<{ id: string }>();
 
   const repair = repairs.find((r) => r.id === id);
@@ -57,13 +60,28 @@ const paid = repair.advancePayment ?? 0;
       {/* Printable area — global.css hides everything outside this during print */}
       <ThemedView nativeID="receiptArea" type="backgroundElement" style={styles.receipt}>
         <View style={styles.header}>
-          <ThemedText type="title" style={styles.brand}>TechRepair Master</ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            Servicio Técnico de Celulares y Electrónica
+          <ThemedText type="title" style={styles.brand}>
+            {profile?.name ?? 'TechRepair Master'}
           </ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            NIT: 901.234.567-8 | Taller de reparación
-          </ThemedText>
+          {profile ? (
+            <>
+              <ThemedText type="small" themeColor="textSecondary">
+                NIT: {formatNit(profile.nit)}
+              </ThemedText>
+              {profile.address ? (
+                <ThemedText type="small" themeColor="textSecondary">
+                  {profile.address}
+                </ThemedText>
+              ) : null}
+              <ThemedText type="small" themeColor="textSecondary">
+                Tel: {profile.phone}
+              </ThemedText>
+            </>
+          ) : (
+            <ThemedText type="small" themeColor="textSecondary">
+              Servicio Técnico de Celulares y Electrónica
+            </ThemedText>
+          )}
           <View style={styles.divider} />
         </View>
 

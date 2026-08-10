@@ -11,7 +11,6 @@ import {
   supabaseSignInWithPassword,
   supabaseSignOut,
   supabaseSignUp,
-  supabaseVerifyRegistration,
 } from '@/lib/supabase-auth';
 import type { SupabaseUserProfile } from '@/lib/supabase-auth';
 
@@ -23,7 +22,6 @@ export interface User {
   password: string;
   role: UserRole;
   email: string;
-  phone?: string;
   /** Comisión del % del presupuesto (0.30 = 30%), solo para técnicos. */
   commissionRate?: number;
   deviceFingerprint?: string; // Simulate device block simulation
@@ -31,6 +29,11 @@ export interface User {
   avatarUrl?: string; // Google profile picture
   googleId?: string; // Google subject id
 }
+
+/** Resultado del login: usuario autenticado o motivo del rechazo. */
+export type LoginResult =
+  | { ok: true; user: User }
+  | { ok: false; reason: 'invalid' | 'unconfirmed' | 'unknown' };
 
 export interface LicenseInfo {
   isActive: boolean;
@@ -58,8 +61,9 @@ interface AuthContextType {
   blockedDevices: string[];
   switchUser: (userId: string) => void;
   /** Login real (Supabase) cuando está configurado; cae al pool demo local si
-   *  no (p. ej. cuentas seed) o cuando el identificador es un teléfono. */
-  login: (identifier: string, password: string) => Promise<User | null>;
+   *  no (p. ej. cuentas seed). Un correo sin verificar se bloquea con
+   *  `reason: 'unconfirmed'` y NUNCA cae al pool local. */
+  login: (email: string, password: string) => Promise<LoginResult>;
   /** Google: puentea el id_token a Supabase (crea/víncula la sesión). Sin
    *  Supabase configurado, simula el usuario Google localmente (demo). */
   signInWithGoogle: (auth: GoogleAuthResult) => Promise<User | null>;
@@ -67,30 +71,26 @@ interface AuthContextType {
   registerOwner: (
     name: string,
     email: string,
-    password: string,
-    phone: string
+    password: string
   ) => Promise<{
     user: User | null;
-    reason?: 'email' | 'phone' | 'device';
-    /** True cuando hay que validar el correo con el código OTP (6 dígitos). */
+    reason?: 'email' | 'device';
+    /** True cuando hay que confirmar el correo con el enlace del email. */
     pendingVerification?: boolean;
   }>;
-  /** Valida el código OTP del correo y abre la sesión real. */
-  verifyRegistration: (email: string, code: string) => Promise<boolean>;
-  /** Reenvía el código OTP del registro al correo. */
+  /** Reenvía el correo de confirmación del registro. */
   resendRegistration: (email: string) => Promise<boolean>;
   /** Crea un técnico (Dueño). Devuelve { ok } o el motivo del rechazo. */
   createTechnician: (
     name: string,
     email: string,
-    phone: string,
     commissionRate: number
-  ) => { ok: boolean; reason?: 'email' | 'phone' };
+  ) => { ok: boolean; reason?: 'email' };
   /** Elimina un técnico. Devuelve false si no existe o es el usuario actual. */
   deleteTechnician: (id: string) => boolean;
   verifyLicense: (key: string) => boolean;
   renewSubscription: () => void;
-  registerUser: (name: string, email: string, phone: string, isOwner: boolean) => boolean;
+  registerUser: (name: string, email: string, isOwner: boolean) => boolean;
   generateInviteLink: () => string;
   simulateDeviceLock: (fingerprint: string) => void;
 }
@@ -130,7 +130,6 @@ function toLocalUser(profile: SupabaseUserProfile): User {
     password: '', // Supabase guarda el hash; la app no lo necesita.
     role: 'admin', // El dueño del taller crea técnicos desde el panel (demo).
     email: profile.email,
-    phone: profile.phone,
     isGoogle: profile.isGoogle,
     avatarUrl: profile.avatarUrl,
     googleId: profile.googleId,
@@ -167,7 +166,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         }
         // Al registrar un usuario real la sesión de Supabase se crea al
-        // verificar el OTP; al recargar se restaura desde ahí.
+        // confirmar el correo; al recargar se restaura desde ahí.
         if (!cancelled && profile) {
           setCurrentUser(toLocalUser(profile));
         } else if (!cancelled && !profile) {
@@ -236,13 +235,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  /** Resuelve un identificador contra el pool demo local (correo/teléfono). */
-  const localLogin = (identifier: string, password: string): User | null => {
-    const needle = identifier.trim().toLowerCase();
+  /** Resuelve un correo contra el pool demo local. */
+  const localLogin = (email: string, password: string): User | null => {
+    const needle = email.trim().toLowerCase();
     const found =
-      users.find(
-        (u) => u.email.toLowerCase() === needle || (u.phone ?? '').replace(/\s/g, '').toLowerCase() === needle.replace(/\s/g, '')
-      ) ?? null;
+      users.find((u) => u.email.toLowerCase() === needle) ?? null;
 
     if (!found) {
       return null;
@@ -253,17 +250,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return found;
   };
 
-  const login = async (identifier: string, password: string): Promise<User | null> => {
-    const needle = identifier.trim().toLowerCase();
-    // Reales con Supabase (requiere verificación previa del correo). Si el
-    // identificador es un teléfono no hay login con contraseña en Supabase
-    // aún (requiere Twilio) -> demo local.
+  const login = async (email: string, password: string): Promise<LoginResult> => {
+    const needle = email.trim().toLowerCase();
+    // Reales con Supabase (requiere verificación previa del correo). Un correo
+    // sin confirmar se bloquea aquí y NUNCA cae al pool local (demo).
     if (isSupabaseConfigured && needle.includes('@')) {
       const result = await supabaseSignInWithPassword(needle, password);
       if (result.ok) {
         const user = toLocalUser(result.user);
         setCurrentUser(user);
-        return user;
+        return { ok: true, user };
+      }
+      if (result.reason === 'unconfirmed') {
+        return { ok: false, reason: 'unconfirmed' };
       }
       // Si las credenciales no existen en Supabase (p. demo seeds) se cae al
       // pool local para no romper la experiencia demo.
@@ -271,9 +270,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const local = localLogin(needle, password);
     if (local) {
       setCurrentUser(local);
-      return local;
+      return { ok: true, user: local };
     }
-    return null;
+    return { ok: false, reason: 'invalid' };
   };
 
   /**
@@ -362,28 +361,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   /**
-   * Creates a technician account (owner action). Rejects duplicates by email
-   * or phone. Commission rate is a fraction (0.30 = 30%).
+   * Creates a technician account (owner action). Rejects duplicates by email.
+   * Commission rate is a fraction (0.30 = 30%).
    */
   const createTechnician = (
     name: string,
     email: string,
-    phone: string,
     commissionRate: number
-  ): { ok: boolean; reason?: 'email' | 'phone' } => {
+  ): { ok: boolean; reason?: 'email' } => {
     const normalizedEmail = email.trim().toLowerCase();
     const emailTaken = users.some(
       (u) => !u.isGoogle && u.email.toLowerCase() === normalizedEmail
     );
     if (emailTaken) {
       return { ok: false, reason: 'email' };
-    }
-    const phoneNormalized = phone.replace(/\s/g, '');
-    const phoneTaken = users.some(
-      (u) => (u.phone ?? '').replace(/\s/g, '') === phoneNormalized
-    );
-    if (phoneTaken) {
-      return { ok: false, reason: 'phone' };
     }
 
     const safeRate = Number.isFinite(commissionRate)
@@ -394,7 +385,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       id: Date.now().toString(),
       name: name.trim(),
       email: normalizedEmail,
-      phone: phoneNormalized,
       password: 'tec-' + Math.random().toString(36).slice(2, 8),
       role: 'technician',
       commissionRate: safeRate,
@@ -417,7 +407,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return true;
   };
 
-  const registerUser = (name: string, email: string, phone: string, isOwner: boolean): boolean => {
+  const registerUser = (name: string, email: string, isOwner: boolean): boolean => {
     // Simulated Anti-Abuse device check (e.g. processor / footprint match)
     const simulatedFingerprint = 'DEV-FNG-HW-' + Math.floor(Math.random() * 9000 + 1000);
 
@@ -430,7 +420,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       id: Date.now().toString(),
       name,
       email,
-      phone,
       password: 'demo123',
       role: isOwner ? 'admin' : 'technician',
       deviceFingerprint: simulatedFingerprint,
@@ -454,22 +443,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   /**
-   * Owner sign-up. Con Supabase: crea el usuario real y requiere verificar el
-   * correo con el código OTP (6 dígitos) antes de abrir la sesión. Sin
+   * Owner sign-up. Con Supabase: crea el usuario real y requiere confirmar el
+   * correo con el enlace del email antes de poder iniciar sesión. Sin
    * Supabase, simula la cuenta localmente (demo).
    */
   const registerOwner = async (
     name: string,
     email: string,
-    password: string,
-    phone: string
+    password: string
   ): Promise<{
     user: User | null;
-    reason?: 'email' | 'phone' | 'device';
+    reason?: 'email' | 'device';
     pendingVerification?: boolean;
   }> => {
     if (isSupabaseConfigured) {
-      const result = await supabaseSignUp(name, email, password, phone);
+      const result = await supabaseSignUp(name, email, password);
       if (!result.ok) {
         return {
           user: null,
@@ -496,11 +484,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (emailTaken) {
       return { user: null, reason: 'email' };
     }
-    const phoneNormalized = phone.replace(/\s/g, '');
-    const phoneTaken = users.some((u) => (u.phone ?? '').replace(/\s/g, '') === phoneNormalized);
-    if (phoneTaken) {
-      return { user: null, reason: 'phone' };
-    }
 
     const newUser: User = {
       id: Date.now().toString(),
@@ -508,7 +491,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       email: email.trim().toLowerCase(),
       password,
       role: 'admin',
-      phone: phone.replace(/\s/g, ''),
       deviceFingerprint: simFingerprint,
     };
 
@@ -526,28 +508,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { user: newUser };
   };
 
-  /** Valida el código OTP (6 dígitos) enviado al correo y abre la sesión. */
-  const verifyRegistration = async (email: string, code: string): Promise<boolean> => {
-    if (!isSupabaseConfigured) return false;
-    const verification = await supabaseVerifyRegistration(email, code);
-    if (!verification.ok) return false;
-    // La verificación creó la sesión: recarga el perfil real.
-    const profile = await supabaseRestoreSession();
-    if (!profile) {
-      return false;
-    }
-    const user = toLocalUser(profile);
-    setCurrentUser(user);
-    setLicense({
-      ...DEFAULT_LICENSE,
-      expiresAt: new Date(Date.now() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000)
-        .toISOString()
-        .split('T')[0],
-      daysRemaining: TRIAL_DURATION_DAYS,
-    });
-    return true;
-  };
-
+  /** Reenvía el correo de confirmación del registro. */
   const resendRegistration = async (email: string): Promise<boolean> => {
     if (!isSupabaseConfigured) return false;
     const resend = await supabaseResendRegistration(email);
@@ -583,7 +544,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signInWithGoogle,
         logout,
         registerOwner,
-        verifyRegistration,
         resendRegistration,
         createTechnician,
         deleteTechnician,

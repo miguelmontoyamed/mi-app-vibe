@@ -21,30 +21,50 @@ const notify = (title: string, message: string) => {
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { login, signInWithGoogle } = useAuth();
+  const { login, signInWithGoogle, resendRegistration } = useAuth();
   const {
     prompt: promptGoogle,
     inProgress: googleInProgress,
     error: googleError,
   } = useGoogleSignIn();
 
-  const [identifier, setIdentifier] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  // Correo pendiente de confirmación: bloquea el login y pide verificar.
+  const [pendingVerification, setPendingVerification] = useState<string | null>(null);
 
   const handleLogin = async () => {
-    if (!identifier.trim() || !password.trim()) {
-      notify('Campos incompletos', 'Ingresa tu correo o teléfono y tu contraseña.');
+    if (!email.trim() || !password.trim()) {
+      notify('Campos incompletos', 'Ingresa tu correo y tu contraseña.');
       return;
     }
     setSubmitting(true);
     try {
-      const user = await login(identifier, password);
-      if (user) {
+      const result = await login(email, password);
+      if (result.ok) {
         router.replace('/');
+      } else if (result.reason === 'unconfirmed') {
+        setPendingVerification(email.trim().toLowerCase());
       } else {
-        notify('Error de acceso', 'Correo/Teléfono o contraseña incorrectos.');
+        notify('Error de acceso', 'Correo o contraseña incorrectos.');
       }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleResend = async () => {
+    if (!pendingVerification) return;
+    setSubmitting(true);
+    try {
+      const ok = await resendRegistration(pendingVerification);
+      notify(
+        ok ? 'Correo reenviado' : 'No se pudo reenviar',
+        ok
+          ? 'Revisa tu correo (y el spam) con el nuevo enlace de confirmación.'
+          : 'Hubo un problema al reenviar el correo. Intenta en un momento.'
+      );
     } finally {
       setSubmitting(false);
     }
@@ -73,6 +93,46 @@ export default function LoginScreen() {
     }
   };
 
+  // Correo sin confirmar: bloquea el acceso y pide verificar antes de entrar.
+  if (pendingVerification) {
+    return (
+      <Screen contentContainerStyle={styles.screen}>
+        <ThemedView style={styles.card}>
+          <ThemedText type="subtitle" style={styles.brand}>
+            Verifica tu correo
+          </ThemedText>
+          <ThemedText type="small" themeColor="textSecondary" style={styles.subtitle}>
+            Tu correo <ThemedText type="linkPrimary">{pendingVerification}</ThemedText> aún no está
+            verificado. Revisa tu bandeja de entrada (y el spam) y haz clic en el enlace de
+            confirmación antes de iniciar sesión.
+          </ThemedText>
+
+          <Button
+            label={submitting ? 'Reenviando…' : 'Reenviar correo de confirmación'}
+            onPress={handleResend}
+            style={styles.primary}
+            disabled={submitting}
+          />
+
+          <View style={styles.divider}>
+            <ThemedView style={styles.line} />
+            <ThemedText type="small" themeColor="textSecondary">
+              ¿Ya verificaste tu correo?
+            </ThemedText>
+            <ThemedView style={styles.line} />
+          </View>
+
+          <Button
+            label="Volver a intentar"
+            variant="secondary"
+            onPress={() => setPendingVerification(null)}
+            disabled={submitting}
+          />
+        </ThemedView>
+      </Screen>
+    );
+  }
+
   return (
     <Screen contentContainerStyle={styles.screen}>
       <ThemedView style={styles.card}>
@@ -84,12 +144,12 @@ export default function LoginScreen() {
         </ThemedText>
 
         <FormInput
-          label="Correo o Teléfono"
-          placeholder="correo@taller.com o +57 300 123 4567"
+          label="Correo"
+          placeholder="correo@taller.com"
           autoCapitalize="none"
           keyboardType="email-address"
-          value={identifier}
-          onChangeText={setIdentifier}
+          value={email}
+          onChangeText={setEmail}
         />
         <FormInput
           label="Contraseña"

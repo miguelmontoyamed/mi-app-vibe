@@ -67,7 +67,8 @@ export const Spacing = {
   six: 64,
 } as const;
 
-export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
+/** Altura de la barra de navegación inferior móvil, reservada como clearance al final del contenido scrolleable. */
+export const BottomTabInset = 50;
 export const MaxContentWidth = 800;
 
 /** Brand / semantic palette (theme-independent). */

@@ -105,6 +105,9 @@ export default function DashboardScreen() {
           <Button label="Ver Trabajos" variant="secondary" style={styles.actionButton} />
         </Link>
       </View>
+      <Link href="/taller" asChild>
+        <Button label="🏪 Configurar Mi Taller" variant="secondary" style={styles.tallerButton} />
+      </Link>
 
       {/* Recent Repairs Section */}
       <View style={styles.sectionHeader}>
@@ -183,6 +186,9 @@ const styles = StyleSheet.create({
   actionsRow: {
     flexDirection: 'row',
     gap: Spacing.three,
+    width: '100%',
+  },
+  tallerButton: {
     width: '100%',
   },
   actionButton: {

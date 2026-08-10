@@ -19,6 +19,7 @@ import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { useRepair } from '@/context/repair-context';
 import { useTheme } from '@/hooks/use-theme';
+import { isSupabaseConfigured } from '@/lib/supabase';
 import { formatCOP } from '@/utils/format';
 
 const SUPPORT_TYPES = [
@@ -51,7 +52,6 @@ export default function AdminScreen() {
   // Registration form states
   const [regName, setRegName] = useState('');
   const [regEmail, setRegEmail] = useState('');
-  const [regPhone, setRegPhone] = useState('');
   const [regRole, setRegRole] = useState<'admin' | 'technician'>('technician');
 
   // Invitation state
@@ -110,8 +110,8 @@ export default function AdminScreen() {
     }
   };
 
-  const handleRegister = () => {
-    if (!regName.trim() || !regEmail.trim() || !regPhone.trim()) {
+  const handleRegister = async () => {
+    if (!regName.trim() || !regEmail.trim()) {
       if (Platform.OS === 'web') {
         window.alert('Complete todos los campos para crear la cuenta.');
       } else {
@@ -129,10 +129,9 @@ export default function AdminScreen() {
       return;
     }
 
-    const success = registerUser(
+    const success = await registerUser(
       regName.trim(),
       regEmail.trim(),
-      regPhone.trim(),
       regRole === 'admin'
     );
 
@@ -144,7 +143,6 @@ export default function AdminScreen() {
       }
       setRegName('');
       setRegEmail('');
-      setRegPhone('');
     } else {
       if (Platform.OS === 'web') {
         window.alert('Error: Dispositivo bloqueado. No se permiten más registros desde esta máquina.');
@@ -165,14 +163,9 @@ export default function AdminScreen() {
   };
 
   const buildSupportMessage = () => {
-    const phone =
-      currentUser.phone && currentUser.phone.trim()
-        ? currentUser.phone
-        : 'No registrado';
     return [
       '🚨 NUEVO TICKET DE SOPORTE - TechRepair Master 🚨',
       `Taller/Dueño: ${currentUser.name}`,
-      `Teléfono: ${phone}`,
       `Licencia: ${license.licenseKey}`,
       `Plan: ${license.plan}`,
       `Necesidad: ${supportType} - ${supportMessage.trim()}`,
@@ -241,41 +234,43 @@ export default function AdminScreen() {
           </Pressable>
         </ThemedView>
 
-        {/* User Switcher (Simulation Roles) */}
-        <ThemedView type="backgroundElement" style={styles.card}>
-          <ThemedText type="subtitle">Cambiar de Técnico / Estación (Demo)</ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            Simulador de sesión activa: {currentUser.name} ({currentUser.role.toUpperCase()})
-          </ThemedText>
-          <View style={styles.rolesRow}>
-            {users.map((u) => (
-              <Pressable
-                key={u.id}
-                onPress={() => switchUser(u.id)}
-                style={[
-                  styles.roleButton,
-                  currentUser.id === u.id
-                    ? { backgroundColor: '#0284c7' }
-                    : { backgroundColor: theme.backgroundElement },
-                ]}>
-                <ThemedText
+{/* User Switcher (Simulation Roles) — SOLO demo local (sin Supabase) */}
+        {!isSupabaseConfigured && (
+          <ThemedView type="backgroundElement" style={styles.card}>
+            <ThemedText type="subtitle">Cambiar de Técnico / Estación (Demo)</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              Simulador de sesión activa: {currentUser.name} ({currentUser.role.toUpperCase()})
+            </ThemedText>
+            <View style={styles.rolesRow}>
+              {users.map((u) => (
+                <Pressable
+                  key={u.id}
+                  onPress={() => switchUser(u.id)}
                   style={[
-                    styles.roleButtonText,
-                    currentUser.id === u.id && { color: '#ffffff' },
+                    styles.roleButton,
+                    currentUser.id === u.id
+                      ? { backgroundColor: '#0284c7' }
+                      : { backgroundColor: theme.backgroundElement },
                   ]}>
-                  {u.name.split(' ')[0]} ({u.role})
-                </ThemedText>
-              </Pressable>
-            ))}
-          </View>
-        </ThemedView>
+                  <ThemedText
+                    style={[
+                      styles.roleButtonText,
+                      currentUser.id === u.id && { color: '#ffffff' },
+                    ]}>
+                    {u.name.split(' ')[0]} ({u.role})
+                  </ThemedText>
+                </Pressable>
+              ))}
+            </View>
+          </ThemedView>
+        )}
 
         {/* Create/Register Owner Account with Anti-Abuse Hardware Fingerprint Check */}
-        {currentUser.role === 'admin' && (
+        {currentUser.role === 'admin' && !isSupabaseConfigured && (
           <ThemedView type="backgroundElement" style={styles.card}>
             <ThemedText type="subtitle">SaaS Onboarding (Crear Cuenta / Taller)</ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
-              Con validación de Email, Teléfono y Reconocimiento de Procesador/Dispositivo para evitar abusos de periodos gratis.
+              Con validación de Email y Reconocimiento de Procesador/Dispositivo para evitar abusos de periodos gratis.
             </ThemedText>
             <TextInput
               style={[styles.input, { color: theme.text, borderColor: theme.backgroundElement }]}
@@ -295,15 +290,6 @@ export default function AdminScreen() {
               onChangeText={setRegEmail}
               maxLength={100}
             />
-            <TextInput
-              style={[styles.input, { color: theme.text, borderColor: theme.backgroundElement }]}
-              placeholder="Número de Teléfono"
-              placeholderTextColor="#9ca3af"
-              keyboardType="phone-pad"
-              value={regPhone}
-              onChangeText={setRegPhone}
-              maxLength={20}
-            />
             <View style={styles.rolesRow}>
               <Pressable
                 onPress={() => setRegRole('technician')}
@@ -319,6 +305,25 @@ export default function AdminScreen() {
             <Pressable style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]} onPress={handleRegister}>
               <ThemedText style={styles.buttonText}>Registrar con Huella Digital de Dispositivo</ThemedText>
             </Pressable>
+          </ThemedView>
+        )}
+
+        {/* Expiring Link Generator for Technicians */}
+        {currentUser.role === 'admin' && !isSupabaseConfigured && (
+          <ThemedView type="backgroundElement" style={styles.card}>
+            <ThemedText type="subtitle">Enlaces Temporales para Técnicos</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              El dueño genera un enlace seguro de registro temporal. Vence automáticamente en 10 minutos para máxima protección.
+            </ThemedText>
+            <Pressable style={({ pressed }) => [styles.activateButton, pressed && styles.pressed, { paddingVertical: Spacing.three }]} onPress={handleCreateInvite}>
+              <ThemedText style={styles.activateButtonText}>Generar Enlace de Invitación de Técnico</ThemedText>
+            </Pressable>
+            {currentLink ? (
+              <View style={styles.linkDisplayBox}>
+                <ThemedText type="smallBold" style={{ color: '#10b981' }}>Enlace Seguro Generado (Vence en 10 min):</ThemedText>
+                <ThemedText type="code" style={{ fontSize: 11, marginTop: 4 }}>{currentLink}</ThemedText>
+              </View>
+            ) : null}
           </ThemedView>
         )}
 
