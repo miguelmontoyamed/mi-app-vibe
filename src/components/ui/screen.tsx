@@ -54,12 +54,21 @@ export function Screen({ children, contentContainerStyle, title }: ScreenProps) 
         : MaxContentWidth;
 
   // RN insets are 0 on web; let CSS env(safe-area-inset-top) handle the
-  // browser chrome (URL bar / PWA) instead. DimensionValue doesn't accept CSS
-  // custom properties, so widen the value once here.
+  // browser chrome (URL bar / PWA) instead. Only apply when there's no Navbar
+  // (login / signup) — the Navbar handles its own top spacing in the auth area.
+  // DimensionValue doesn't accept CSS custom properties, so widen once here.
   const webSafeAreaTop = Platform.select({
-    web: { paddingTop: 'var(--sat)' } as unknown as ViewStyle,
+    web:
+      !isAuthenticated
+        ? ({ paddingTop: 'var(--sat)' } as unknown as ViewStyle)
+        : undefined,
     default: undefined,
   });
+
+  // Web bottom-bar clearance: on sub-desktop the fixed bottom tab bar overlays
+  // the last ~50px of the viewport. Add the safe-area bottom (iPhone home
+  // indicator) so the WebBadge & last content row are never obscured.
+  const isBottomNavWeb = Platform.OS === 'web' && width < BREAKPOINTS.tablet;
 
   return (
     <View
@@ -75,7 +84,9 @@ export function Screen({ children, contentContainerStyle, title }: ScreenProps) 
           styles.contentContainer,
           {
             paddingTop: (isAuthenticated ? 0 : insets.top) + Spacing.four,
-            paddingBottom: insets.bottom + BottomTabInset + Spacing.three,
+            paddingBottom: isBottomNavWeb
+              ? (`calc(var(--sab) + ${BottomTabInset + Spacing.three}px)` as unknown as ViewStyle['paddingBottom'])
+              : insets.bottom + BottomTabInset + Spacing.three,
           },
           contentContainerStyle,
         ]}>

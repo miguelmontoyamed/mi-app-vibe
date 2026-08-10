@@ -7,54 +7,77 @@ import {
   TabListProps,
 } from 'expo-router/ui';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
-import { Pressable, StyleSheet, useColorScheme, useWindowDimensions, View } from 'react-native';
+import {
+  Pressable,
+  StyleSheet,
+  useColorScheme,
+  useWindowDimensions,
+  type StyleProp,
+  type TextStyle,
+  type ViewStyle,
+} from 'react-native';
 
 import { ExternalLink } from './external-link';
 import { ThemedText } from './themed-text';
 import { ThemedView } from './themed-view';
 
-import { BREAKPOINTS, Colors, MaxContentWidth, Spacing } from '@/constants/theme';
+import { BREAKPOINTS, Colors, Spacing } from '@/constants/theme';
 
 /** Width of the desktop sidebar navigation. */
 const SIDEBAR_WIDTH = 220;
 
+/**
+ * Bottom navigation bar (mobile web & tablet). Kept fixed on top of the
+ * viewport; the screens reserve its height via `BottomTabInset` + the
+ * `--sab` safe-area inset (see `src/components/ui/screen.tsx`).
+ */
+const bottomBarWebStyle = {
+  position: 'fixed',
+  left: 0,
+  bottom: 0,
+  width: '100%',
+  zIndex: 9999,
+} as unknown as ViewStyle;
+
 export default function AppTabs() {
   const { width } = useWindowDimensions();
   const isDesktop = width >= BREAKPOINTS.tablet;
-  const isTablet = width >= BREAKPOINTS.mobile && width < BREAKPOINTS.tablet;
+  const slotStyle: ViewStyle = isDesktop ? styles.slotDesktop : { height: '100%' };
 
   return (
     <Tabs>
-      <TabSlot style={isDesktop ? styles.slotDesktop : { height: '100%' }} />
+      <TabSlot style={slotStyle} />
       <TabList asChild>
-        <CustomTabList sidebar={isDesktop} tablet={isTablet}>
+        <CustomTabList sidebar={isDesktop}>
           <TabTrigger name="index" href="/" asChild>
-            <TabButton sidebar={isDesktop} icon={{ ios: 'house.fill', web: 'home' }}>
+            <TabButton bottom={!isDesktop} icon={{ ios: 'house.fill', web: 'home' }}>
               Inicio
             </TabButton>
           </TabTrigger>
           <TabTrigger name="receive" href="/receive" asChild>
-            <TabButton sidebar={isDesktop} icon={{ ios: 'plus.circle.fill', web: 'add_box' }}>
+            <TabButton bottom={!isDesktop} icon={{ ios: 'plus.circle.fill', web: 'add_box' }}>
               Recepción
             </TabButton>
           </TabTrigger>
           <TabTrigger name="jobs" href="/jobs" asChild>
-            <TabButton sidebar={isDesktop} icon={{ ios: 'wrench.and.screwdriver.fill', web: 'handyman' }}>
+            <TabButton
+              bottom={!isDesktop}
+              icon={{ ios: 'wrench.and.screwdriver.fill', web: 'handyman' }}>
               Trabajos
             </TabButton>
           </TabTrigger>
           <TabTrigger name="customers" href="/customers" asChild>
-            <TabButton sidebar={isDesktop} icon={{ ios: 'person.2.fill', web: 'group' }}>
+            <TabButton bottom={!isDesktop} icon={{ ios: 'person.2.fill', web: 'group' }}>
               Clientes
             </TabButton>
           </TabTrigger>
           <TabTrigger name="inventory" href="/inventory" asChild>
-            <TabButton sidebar={isDesktop} icon={{ ios: 'cube.box.fill', web: 'inventory_2' }}>
+            <TabButton bottom={!isDesktop} icon={{ ios: 'cube.box.fill', web: 'inventory_2' }}>
               Inventario
             </TabButton>
           </TabTrigger>
           <TabTrigger name="admin" href="/admin" asChild>
-            <TabButton sidebar={isDesktop} icon={{ ios: 'gearshape.fill', web: 'settings' }}>
+            <TabButton bottom={!isDesktop} icon={{ ios: 'gearshape.fill', web: 'settings' }}>
               Admin & Licencia
             </TabButton>
           </TabTrigger>
@@ -71,28 +94,38 @@ export function TabButton({
   isFocused,
   icon,
   sidebar = false,
+  bottom = false,
   ...props
-}: TabTriggerSlotProps & { icon?: TabIcon; sidebar?: boolean }) {
+}: TabTriggerSlotProps & { icon?: TabIcon; sidebar?: boolean; bottom?: boolean }) {
   const scheme = useColorScheme();
   const colors = Colors[scheme === 'unspecified' ? 'light' : scheme];
 
   return (
-    <Pressable {...props} style={({ pressed }) => pressed && styles.pressed}>
+    <Pressable {...props} style={({ pressed }) => (pressed ? styles.pressed : undefined)}>
       <ThemedView
         type={isFocused ? 'backgroundSelected' : 'backgroundElement'}
         style={
-          sidebar
-            ? [styles.sidebarButtonView, !isFocused && styles.sidebarButtonIdle]
-            : styles.tabButtonView
+          (
+            sidebar
+              ? [styles.sidebarButtonView, !isFocused && styles.sidebarButtonIdle]
+              : bottom
+                ? styles.bottomButtonView
+                : styles.tabButtonView
+          ) as StyleProp<ViewStyle>
         }>
         {icon && (
           <SymbolView
             tintColor={isFocused ? colors.text : colors.textSecondary}
             name={icon}
-            size={sidebar ? 18 : 14}
+            size={sidebar ? 18 : bottom ? 20 : 14}
           />
         )}
-        <ThemedText type="small" themeColor={isFocused ? 'text' : 'textSecondary'}>
+        <ThemedText
+          type="small"
+          numberOfLines={1}
+          ellipsizeMode="tail"
+          themeColor={isFocused ? 'text' : 'textSecondary'}
+          style={(bottom ? styles.bottomLabel : undefined) as StyleProp<TextStyle>}>
           {children}
         </ThemedText>
       </ThemedView>
@@ -100,11 +133,9 @@ export function TabButton({
   );
 }
 
-export function CustomTabList({
-  sidebar = false,
-  tablet = false,
-  ...props
-}: TabListProps & { sidebar?: boolean; tablet?: boolean }) {
+type BottomTabListProps = TabListProps & { sidebar?: boolean };
+
+export function CustomTabList({ sidebar = false, ...props }: BottomTabListProps) {
   const scheme = useColorScheme();
   const colors = Colors[scheme === 'unspecified' ? 'light' : scheme];
 
@@ -121,7 +152,8 @@ export function CustomTabList({
         {props.children}
 
         <ExternalLink href="https://docs.expo.dev" asChild>
-          <Pressable style={[styles.externalPressable, styles.sidebarExternal]}>
+          <Pressable
+            style={StyleSheet.flatten([styles.externalPressable, styles.sidebarExternal])}>
             <ThemedText type="link">Docs</ThemedText>
             <SymbolView
               tintColor={colors.text}
@@ -134,55 +166,29 @@ export function CustomTabList({
     );
   }
 
+  // Mobile & tablet (< 1024px): fixed bottom navigation bar. The top
+  // bar stays owned by `Navbar` (screen.tsx); this one never overlaps it.
   return (
-    <View {...props} style={[styles.tabListContainer, tablet && styles.tabListTablet]}>
-      <ThemedView type="backgroundElement" style={styles.innerContainer}>
-        <ThemedText type="smallBold" style={styles.brandText}>
-          TechRepair
-        </ThemedText>
-
-        {props.children}
-
-        <ExternalLink href="https://docs.expo.dev" asChild>
-          <Pressable style={styles.externalPressable}>
-            <ThemedText type="link">Docs</ThemedText>
-            <SymbolView
-              tintColor={colors.text}
-              name={{ ios: 'arrow.up.right.square', web: 'link' }}
-              size={12}
-            />
-          </Pressable>
-        </ExternalLink>
-      </ThemedView>
-    </View>
+    <ThemedView
+      {...props}
+      type="backgroundElement"
+      style={[styles.bottomBar, { borderTopColor: colors.border }]}>
+      {props.children}
+    </ThemedView>
   );
 }
 
+const bottomBarFixedStyle: ViewStyle = {
+  ...bottomBarWebStyle,
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'space-around',
+  borderTopWidth: StyleSheet.hairlineWidth,
+  paddingTop: Spacing.one,
+  paddingBottom: 'var(--sab)' as unknown as ViewStyle['paddingBottom'],
+};
+
 const styles = StyleSheet.create({
-  tabListContainer: {
-    position: 'absolute',
-    width: '100%',
-    padding: Spacing.three,
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexDirection: 'row',
-  },
-  tabListTablet: {
-    top: 0,
-  },
-  innerContainer: {
-    paddingVertical: Spacing.two,
-    paddingHorizontal: Spacing.five,
-    borderRadius: Spacing.five,
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexGrow: 1,
-    gap: Spacing.two,
-    maxWidth: MaxContentWidth,
-  },
-  brandText: {
-    marginRight: 'auto',
-  },
   pressed: {
     opacity: 0.7,
   },
@@ -238,5 +244,23 @@ const styles = StyleSheet.create({
     marginLeft: 0,
     marginTop: 'auto',
     paddingVertical: Spacing.two,
+  },
+  bottomBar: bottomBarFixedStyle,
+  bottomButtonView: {
+    flex: 1,
+    maxWidth: 96,
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.half,
+    paddingVertical: Spacing.one,
+    paddingHorizontal: Spacing.one,
+    borderRadius: Spacing.three,
+  },
+  bottomLabel: {
+    fontSize: 10,
+    lineHeight: 12,
+    textAlign: 'center',
+    maxWidth: 88,
   },
 });
