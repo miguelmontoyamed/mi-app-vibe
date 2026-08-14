@@ -1,9 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Platform, StyleSheet, View, type ViewStyle } from 'react-native';
+import { Platform, StyleSheet, useWindowDimensions, View, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
-import { Brand, Spacing } from '@/constants/theme';
+import { Brand, BREAKPOINTS, Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -17,16 +17,25 @@ type NavbarProps = {
  * and the current user's name + role on the right. Handles the top safe-area
  * inset itself so it never overlaps the system status bar / notch (native) or
  * the Safari/PWA browser chrome (web, via the `--sat` CSS variable).
+ *
+ * Responsive contract (evita superposiciones en pantallas pequeñas):
+ * - En móvil (`< BREAKPOINTS.mobile`) se oculta el texto de la marca y queda
+ *   solo el ícono del logo; el título central reaparece con la marca en md+.
+ * - Las tres columnas viven en el flujo flex (sin `position: absolute`), cada
+ *   lateral con `flex: 1` + `minWidth: 0` y el centro con `flexShrink: 1`, de
+ *   modo que nada puede encimarse y los textos largos se truncan con `…`.
  */
 export function Navbar({ title }: NavbarProps) {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
+  const { width } = useWindowDimensions();
   const { currentUser } = useAuth();
 
   if (!currentUser) {
     return null;
   }
 
+  const isMobile = width < BREAKPOINTS.mobile;
   const role = currentUser.role === 'admin' ? 'Dueño / Admin' : 'Técnico';
 
   // On native, `insets.top` is the notch / Dynamic Island / status bar height.
@@ -49,32 +58,47 @@ export function Navbar({ title }: NavbarProps) {
         topInsetStyle,
       ]}>
       <View style={styles.inner}>
+        {/* Marca: en móvil queda solo el ícono (sm:hidden del texto, md:flex) */}
         <View style={styles.sectionLeft}>
           <View style={styles.logoBubble}>
             <Ionicons name="hardware-chip-outline" size={18} color={Brand.onBrand} />
           </View>
-          <ThemedText type="smallBold" style={styles.brand}>
-            TechRepair Master
-          </ThemedText>
+          {!isMobile && (
+            <ThemedText
+              type="smallBold"
+              numberOfLines={1}
+              ellipsizeMode="tail"
+              style={styles.brand}>
+              TechRepair Master
+            </ThemedText>
+          )}
         </View>
 
+        {/* Título central: en flujo (no absolute), encoge antes de solaparse */}
         {title ? (
-          <ThemedText type="smallBold" style={styles.centerTitle} numberOfLines={1}>
-            {title}
-          </ThemedText>
+          <View style={styles.centerWrap}>
+            <ThemedText
+              type="smallBold"
+              style={styles.centerTitle}
+              numberOfLines={1}
+              ellipsizeMode="tail">
+              {title}
+            </ThemedText>
+          </View>
         ) : null}
 
+        {/* Usuario: min-w-0 + flex-shrink, nombre/rol truncan con … */}
         <View style={styles.sectionRight}>
           <View style={styles.avatarCircle}>
             <ThemedText style={styles.avatarInitial}>
               {currentUser.name.trim().charAt(0).toUpperCase() || '?'}
             </ThemedText>
           </View>
-          <View style={styles.avatarText}>
-            <ThemedText type="smallBold" numberOfLines={1} style={styles.avatarName}>
+          <View style={[styles.avatarText, isMobile ? styles.avatarTextMobile : styles.avatarTextDesktop]}>
+            <ThemedText type="smallBold" numberOfLines={1} ellipsizeMode="tail" style={styles.avatarName}>
               {currentUser.name}
             </ThemedText>
-            <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.avatarRole}>
+            <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} ellipsizeMode="tail" style={styles.avatarRole}>
               {role}
             </ThemedText>
           </View>
@@ -95,12 +119,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.four,
     paddingVertical: Spacing.two,
     minHeight: 52,
+    gap: Spacing.two,
   },
   sectionLeft: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.two,
+    // min-w-0: permite que el contenido lateral se encoja/trunque.
+    minWidth: 0,
   },
   logoBubble: {
     width: 30,
@@ -109,16 +136,20 @@ const styles = StyleSheet.create({
     backgroundColor: Brand.primary,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   brand: {
     flexShrink: 1,
   },
+  centerWrap: {
+    flexShrink: 1,
+    minWidth: 0,
+    maxWidth: '42%',
+    paddingHorizontal: Spacing.one,
+  },
   centerTitle: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    textAlign: 'center',
     fontSize: 15,
+    textAlign: 'center',
   },
   sectionRight: {
     flex: 1,
@@ -126,6 +157,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-end',
     gap: Spacing.two,
+    // min-w-0 + flex-shrink del bloque de texto: el nombre largo trunca en vez
+    // de empujar/encimarse con el título central.
+    minWidth: 0,
   },
   avatarCircle: {
     width: 32,
@@ -134,6 +168,7 @@ const styles = StyleSheet.create({
     backgroundColor: Brand.primary,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   avatarInitial: {
     color: Brand.onBrand,
@@ -142,7 +177,14 @@ const styles = StyleSheet.create({
   },
   avatarText: {
     alignItems: 'flex-end',
-    maxWidth: 110,
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  avatarTextMobile: {
+    maxWidth: 96,
+  },
+  avatarTextDesktop: {
+    maxWidth: 160,
   },
   avatarName: {
     fontSize: 13,
