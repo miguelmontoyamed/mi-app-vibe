@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Alert,
   Platform,
@@ -30,6 +30,15 @@ const STATUS_FILTERS: (RepairStatus | 'Todos')[] = [
   'Entregado',
 ];
 
+/**
+ * Normaliza una cadena para búsqueda multicriterio: minúsculas, sin espacios
+ * extras al inicio/fin y con espacios internos múltiples colapsados a uno.
+ * Permite que "  mARIA   Pérez " coincida con "maria perez".
+ */
+function normalizeSearch(value: string): string {
+  return value.trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
 export default function JobsScreen() {
   const theme = useTheme();
   const { width } = useWindowDimensions();
@@ -43,15 +52,31 @@ export default function JobsScreen() {
   const [paymentInput, setPaymentInput] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('Efectivo');
 
-  const filteredRepairs = repairs.filter((item) => {
-    const matchesSearch =
-      item.clientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.device.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.issue.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus =
-      selectedFilter === 'Todos' || item.status === selectedFilter;
-    return matchesSearch && matchesStatus;
-  });
+  /**
+   * Filtrado multicriterio en memoria, memoizado para que sea fluido al
+   * escribir. La cadena normalizada busca coincidencia (case-insensitive,
+   * sin espacios extras) en: número de orden (id), cliente, celular e IMEI.
+   */
+  const filteredRepairs = useMemo(() => {
+    const query = normalizeSearch(searchQuery);
+    const hasQuery = query.length > 0;
+    return repairs.filter((item) => {
+      const matchesStatus =
+        selectedFilter === 'Todos' || item.status === selectedFilter;
+      if (!matchesStatus) {
+        return false;
+      }
+      if (!hasQuery) {
+        return true;
+      }
+      return (
+        normalizeSearch(item.id).includes(query) ||
+        normalizeSearch(item.clientName).includes(query) ||
+        normalizeSearch(item.phone).includes(query) ||
+        normalizeSearch(item.imei ?? '').includes(query)
+      );
+    });
+  }, [repairs, searchQuery, selectedFilter]);
 
   const handleSendWhatsApp = (item: {
     clientName: string;
@@ -111,7 +136,7 @@ export default function JobsScreen() {
       {/* Search Bar */}
       <FormInput
         label="Buscar trabajo"
-        placeholder="Buscar por cliente, dispositivo o falla..."
+        placeholder="Buscar por orden, cliente, celular o IMEI..."
         value={searchQuery}
         onChangeText={setSearchQuery}
         style={styles.searchInput}
