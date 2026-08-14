@@ -209,6 +209,14 @@ export default function JobsScreen() {
               {/* Payment + Receipt actions */}
               <View style={styles.rowButtons}>
                 <Button
+                  label="🔍 Ver Detalles"
+                  variant="secondary"
+                  onPress={() =>
+                    router.push({ pathname: '/job/[id]', params: { id: item.id } })
+                  }
+                  style={styles.rowButton}
+                />
+                <Button
                   label="🧾 Ver Recibo"
                   variant="primary"
                   onPress={() =>

@@ -125,6 +125,10 @@ describe('canCancel / isValidCancellation', () => {
     assert.equal(isValidCancellation('Pendiente', undefined), false);
     assert.equal(isValidCancellation('En Proceso', ''), false);
   });
+  it('acepta motivo en texto libre no vacío', () => {
+    assert.equal(isValidCancellation('Pendiente', 'El cliente no trajo el equipo'), true);
+    assert.equal(isValidCancellation('Pendiente', '   '), false);
+  });
 });
 
 describe('hasActiveRepairs', () => {

@@ -30,8 +30,8 @@ export interface RepairItem {
   /** Id del técnico asignado (ausente en datos actuales de AsyncStorage v1). */
   technicianId?: string;
   technicianName?: string;
-  /** Motivo obligatorio cuando el estado es 'Cancelado / No Reparado'. */
-  cancellationReason?: CancellationReason;
+  /** Motivo (texto libre) obligatorio cuando el estado es 'Cancelado / No Reparado'. */
+  motivoCancelacion?: string;
   status: RepairStatus;
   date: string;
 }
@@ -53,10 +53,12 @@ interface RepairContextType {
   /** Edita campos de una reparación (no el estado ni el motivo de cancelación). */
   updateRepair: (
     id: string,
-    patch: Partial<Omit<RepairItem, 'id' | 'date' | 'status' | 'cancellationReason'>>
+    patch: Partial<Omit<RepairItem, 'id' | 'date' | 'status' | 'motivoCancelacion'>>
   ) => void;
-  /** Cancela la reparación exigiendo un motivo; devuelve true si se aplicó. */
-  cancelRepair: (id: string, reason: CancellationReason) => boolean;
+  /** Cancela la reparación exigiendo un motivo (texto libre); devuelve true si se aplicó. */
+  cancelRepair: (id: string, motivo: string) => boolean;
+  /** Elimina definitivamente una orden (solo dueño). Devuelve true si existía. */
+  deleteRepair: (id: string) => boolean;
   recordRepairPayment: (id: string, amount: number, method: PaymentMethod) => void;
   addInventoryPart: (part: Omit<InventoryPart, 'id'>) => void;
   updateInventoryStock: (id: string, delta: number) => void;
@@ -88,7 +90,7 @@ interface RepairRow {
   imei: string | null;
   technician_id: string | null;
   technician_name: string | null;
-  cancellation_reason: CancellationReason | null;
+  motivo_cancelacion: string | null;
   status: string;
   date: string | null;
   created_at?: string | null;
@@ -122,7 +124,7 @@ function repairToRow(item: RepairItem, workshopId: string): RepairRow {
     imei: item.imei ?? null,
     technician_id: item.technicianId ?? null,
     technician_name: item.technicianName ?? null,
-    cancellation_reason: item.cancellationReason ?? null,
+    motivo_cancelacion: item.motivoCancelacion ?? null,
     status: item.status,
     date: item.date,
   };
@@ -142,7 +144,7 @@ function repairPatchToRow(patch: RepairPatch): Record<string, unknown> {
   if (patch.paymentMethod !== undefined) row.payment_method = patch.paymentMethod;
   if (patch.technicianId !== undefined) row.technician_id = patch.technicianId;
   if (patch.technicianName !== undefined) row.technician_name = patch.technicianName;
-  if (patch.cancellationReason !== undefined) row.cancellation_reason = patch.cancellationReason;
+  if (patch.motivoCancelacion !== undefined) row.motivo_cancelacion = patch.motivoCancelacion;
   if (patch.status !== undefined) row.status = patch.status;
   return row;
 }
@@ -162,7 +164,7 @@ function rowToRepair(row: RepairRow): RepairItem {
     paymentMethod: row.payment_method ?? undefined,
     technicianId: row.technician_id ?? undefined,
     technicianName: row.technician_name ?? undefined,
-    cancellationReason: row.cancellation_reason ?? undefined,
+    motivoCancelacion: row.motivo_cancelacion ?? undefined,
     status: row.status as RepairStatus,
     date: row.date ?? (row.created_at?.split('T')[0] ?? ''),
   };
@@ -362,7 +364,7 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
   /** Edita campos de una reparación existente (no status ni cancelación). */
   const updateRepair = (
     id: string,
-    patch: Partial<Omit<RepairItem, 'id' | 'date' | 'status' | 'cancellationReason'>>
+    patch: Partial<Omit<RepairItem, 'id' | 'date' | 'status' | 'motivoCancelacion'>>
   ) => {
     setRepairs((prev) =>
       prev.map((r) => (r.id === id ? { ...r, ...patch } : r))
@@ -379,28 +381,49 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
   };
 
   /**
-   * Cancela la reparación con un motivo obligatorio. Devuelve true si se
-   * aplicó la cancelación, false si el estado no lo permite o falta el motivo.
+   * Cancela la reparación con un motivo obligatorio (texto libre). Devuelve
+   * true si se aplicó la cancelación, false si el estado no lo permite o el
+   * motivo está vacío.
    */
-  const cancelRepair = (id: string, reason: CancellationReason): boolean => {
+  const cancelRepair = (id: string, motivo: string): boolean => {
+    const cleanMotivo = motivo.trim();
     const target = repairs.find((r) => r.id === id);
-    if (!target || !isValidCancellation(target.status, reason)) {
+    if (!target || !isValidCancellation(target.status, cleanMotivo)) {
       return false;
     }
     setRepairs((prev) =>
       prev.map((r) =>
         r.id === id
-          ? { ...r, status: 'Cancelado / No Reparado' as RepairStatus, cancellationReason: reason }
+          ? { ...r, status: 'Cancelado / No Reparado' as RepairStatus, motivoCancelacion: cleanMotivo }
           : r
       )
     );
     if (isSupabaseConfigured && workshopId) {
       void supabase
         .from('repairs')
-        .update({ status: 'Cancelado / No Reparado', cancellation_reason: reason })
+        .update({ status: 'Cancelado / No Reparado', motivo_cancelacion: cleanMotivo })
         .eq('id', id)
         .then(({ error }) => {
           if (error) console.error('Error cancelling repair:', error);
+        });
+    }
+    return true;
+  };
+
+  /** Elimina definitivamente una orden. Devuelve true si existía. */
+  const deleteRepair = (id: string): boolean => {
+    const target = repairs.find((r) => r.id === id);
+    if (!target) {
+      return false;
+    }
+    setRepairs((prev) => prev.filter((r) => r.id !== id));
+    if (isSupabaseConfigured && workshopId) {
+      void supabase
+        .from('repairs')
+        .delete()
+        .eq('id', id)
+        .then(({ error }) => {
+          if (error) console.error('Error deleting repair:', error);
         });
     }
     return true;
@@ -487,6 +510,7 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
         updateRepairStatus,
         updateRepair,
         cancelRepair,
+        deleteRepair,
         recordRepairPayment,
         addInventoryPart,
         updateInventoryStock,

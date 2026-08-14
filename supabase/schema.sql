@@ -13,9 +13,9 @@
 --    - `repairs.id` es el número de orden corto del taller (TRM-XXXX),
 --      generado por src/utils/order-generator.ts. Es la clave primaria (texto)
 --      y la misma cadena que aparece en la URL /receipt/[id].
---    - `status`, `payment_method` y `cancellation_reason` usan EXACTAMENTE los
---      literales de src/utils/repair-logic.ts (5 estados, 3 métodos de pago y
---      4 motivos de cancelación).
+--    - `status` y `payment_method` usan EXACTAMENTE los
+--      literales de src/utils/repair-logic.ts (5 estados y 3 métodos de pago).
+--    - `motivo_cancelacion` es texto libre obligatorio al cancelar (v2).
 --  El script es idempotente: se puede volver a ejecutar sin errores.
 -- ============================================================================
 
@@ -76,17 +76,13 @@ create table if not exists public.repairs (
   imei text,
   technician_id text,
   technician_name text,
-  cancellation_reason text,
+  motivo_cancelacion text,
   status text not null default 'Pendiente'
     check (status in ('Pendiente','En Proceso','Listo','Entregado','Cancelado / No Reparado')),
   date date not null default current_date,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  check (payment_method is null or payment_method in ('Efectivo','Transferencia','Tarjeta')),
-  check (
-    cancellation_reason is null
-    or cancellation_reason in ('Fuera de presupuesto','Sin reparación','Repuesto no disponible','Cliente retiró')
-  )
+  check (payment_method is null or payment_method in ('Efectivo','Transferencia','Tarjeta'))
 );
 
 -- ------------------------------------------------------------------
@@ -128,12 +124,21 @@ alter table public.repairs alter column id type text using id::text;
 
 -- Columnas que pueden faltar en una versión previa de `repairs`.
 alter table public.repairs add column if not exists payment_method text;
-alter table public.repairs add column if not exists cancellation_reason text;
 alter table public.repairs add column if not exists technician_id text;
 alter table public.repairs add column if not exists unlock_code text;
 alter table public.repairs add column if not exists imei text;
 alter table public.repairs add column if not exists issue text;
 alter table public.repairs add column if not exists updated_at timestamptz not null default now();
+
+-- v2: cancelación con motivo en texto libre. Renombra la columna legacy
+-- `cancellation_reason` (CHECK de lista fija) a `motivo_cancelacion` (sin CHECK).
+alter table public.repairs add column if not exists motivo_cancelacion text;
+update public.repairs
+   set motivo_cancelacion = cancellation_reason
+ where motivo_cancelacion is null
+   and cancellation_reason is not null;
+alter table public.repairs drop constraint if exists repairs_cancellation_reason_check;
+alter table public.repairs drop column if exists cancellation_reason;
 
 -- CHECKs con los literales exactos de src/utils/repair-logic.ts (idempotente).
 alter table public.repairs drop constraint if exists repairs_status_check;
@@ -143,11 +148,6 @@ alter table public.repairs add constraint repairs_status_check check (
 alter table public.repairs drop constraint if exists repairs_payment_method_check;
 alter table public.repairs add constraint repairs_payment_method_check check (
   payment_method is null or payment_method in ('Efectivo','Transferencia','Tarjeta')
-);
-alter table public.repairs drop constraint if exists repairs_cancellation_reason_check;
-alter table public.repairs add constraint repairs_cancellation_reason_check check (
-  cancellation_reason is null
-  or cancellation_reason in ('Fuera de presupuesto','Sin reparación','Repuesto no disponible','Cliente retiró')
 );
 
 -- `updated_at` en workshop_profiles (idempotente).

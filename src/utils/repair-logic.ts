@@ -19,8 +19,9 @@ export const PAYMENT_METHODS: readonly PaymentMethod[] = [
 ];
 
 /**
- * Mandatory cancellation reasons. A job can only be moved to
- * 'Cancelado / No Reparado' when one of these is provided.
+ * Motivos de cancelación sugeridos (legacy). Desde la v2 la cancelación
+ * acepta TEXTO LIBRE obligatorio (`motivo_cancelacion`); esta lista se
+ * conserva como atajo/quick-pick y para compatibilidad con datos previos.
  */
 export type CancellationReason =
   | 'Fuera de presupuesto'
@@ -165,20 +166,18 @@ export function canCancel(status: RepairStatus): boolean {
 }
 
 /**
- * Cancellation is only valid when the reason is one of the mandatory list.
- * The reason is REQUIRED (strict privacy of the cancellation contract).
+ * A cancellation is valid when the job is in an open status AND the motivo
+ * is a non-empty free-text string. The reason is REQUIRED (strict privacy of
+ * the cancellation contract); the specific text is up to the user.
  */
 export function isValidCancellation(
   status: RepairStatus,
-  reason: CancellationReason | undefined | null | ''
+  motivo: string | undefined | null | ''
 ): boolean {
   if (!canCancel(status)) {
     return false;
   }
-  return (
-    typeof reason === 'string' &&
-    (CANCELLATION_REASONS as readonly string[]).includes(reason)
-  );
+  return typeof motivo === 'string' && motivo.trim().length > 0;
 }
 
 /** True when a technician still has open work (blocks account deletion). */

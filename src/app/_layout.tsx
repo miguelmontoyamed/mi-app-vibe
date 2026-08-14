@@ -27,6 +27,7 @@ function RootNavigator() {
       <Stack.Protected guard={isAuthenticated}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="receipt/[id]" options={{ headerShown: false }} />
+        <Stack.Screen name="job/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="taller" options={{ headerShown: false }} />
       </Stack.Protected>
       <Stack.Screen name="login" options={{ headerShown: false }} />
