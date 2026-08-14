@@ -107,6 +107,17 @@ interface AuthContextType {
   verifyLicense: (key: string) => boolean;
   renewSubscription: () => void;
   registerUser: (name: string, email: string, isOwner: boolean) => boolean;
+  /** Registra a un técnico invitado por enlace. Con Supabase crea la cuenta
+   *  real (role='technician' + workshop_id del taller del admin) y requiere
+   *  confirmar el correo; sin Supabase cae a la simulación local (demo).
+   *  Devuelve `pendingVerification: true` cuando hay que confirmar el correo. */
+  registerInvitedTechnician: (
+    name: string,
+    email: string,
+    password: string,
+    workshopId: string,
+    workshopName: string
+  ) => Promise<{ ok: boolean; pendingVerification?: boolean; message?: string }>;
   /** Genera un enlace de invitación temporal (10 min) para que un técnico se
    *  registre y quede automáticamente asociado al taller del admin. */
   generateInviteLink: () => string | null;
@@ -151,7 +162,10 @@ function toLocalUser(profile: SupabaseUserProfile): User {
     id: profile.id,
     name: profile.name.trim() || profile.email.split('@')[0],
     password: '', // Supabase guarda el hash; la app no lo necesita.
-    role: 'admin', // El dueño del taller crea técnicos desde el panel (demo).
+    // El rol real viene del perfil de Supabase (admin del taller o técnico
+    // invitado). Antes se forzaba 'admin' para el dueño; los técnicos
+    // invitados deben conservar su rol para que RLS y visibilidad funcionen.
+    role: profile.role === 'technician' ? 'technician' : 'admin',
     email: profile.email,
     isGoogle: profile.isGoogle,
     avatarUrl: profile.avatarUrl,
@@ -480,6 +494,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   /**
+   * Registro de técnico invitado por enlace (deep link ?invite=...).
+   * Con Supabase configurado: crea la cuenta REAL con role='technician' y
+   * workshop_id del taller del admin (el trigger `handle_new_user` resuelve
+   * el taller y crea el perfil). Sin Supabase: simulación local (demo).
+   */
+  const registerInvitedTechnician = async (
+    name: string,
+    email: string,
+    password: string,
+    workshopId: string,
+    workshopName: string
+  ): Promise<{ ok: boolean; pendingVerification?: boolean; message?: string }> => {
+    if (isSupabaseConfigured) {
+      const result = await supabaseSignUp(name, email, password, {
+        role: 'technician',
+        full_name: name,
+        workshop_id: workshopId,
+        workshop_name: workshopName,
+      });
+      if (!result.ok) {
+        return { ok: false, message: result.message };
+      }
+      if (result.pendingVerification) {
+        return { ok: true, pendingVerification: true };
+      }
+      return { ok: true };
+    }
+    // Demo local: registra en el pool AsyncStorage asociado al taller.
+    const ok = registerUser(name, email, false);
+    return ok
+      ? { ok: true }
+      : {
+          ok: false,
+          message:
+            'El dispositivo o el correo ya están registrados, o el taller alcanzó el límite de 5 técnicos.',
+        };
+  };
+
+  /**
    * Owner sign-up. Con Supabase: crea el usuario real y requiere confirmar el
    * correo con el enlace del email antes de poder iniciar sesión. Sin
    * Supabase, simula la cuenta localmente (demo).
@@ -494,7 +547,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     pendingVerification?: boolean;
   }> => {
     if (isSupabaseConfigured) {
-      const result = await supabaseSignUp(name, email, password);
+      // Metadata explícita: el trigger `handle_new_user` usa role='admin'
+      // para crear el perfil como dueño del taller. Nunca enviamos null/''.
+      const result = await supabaseSignUp(name, email, password, {
+        role: 'admin',
+        full_name: name,
+        workshop_name: name.trim() || 'Mi Taller',
+      });
       if (!result.ok) {
         return {
           user: null,
@@ -616,6 +675,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         verifyLicense,
         renewSubscription,
         registerUser,
+        registerInvitedTechnician,
         generateInviteLink,
         validateInviteLink,
         simulateDeviceLock,

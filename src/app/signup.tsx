@@ -25,7 +25,7 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 export default function SignUpScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ invite?: string }>();
-  const { registerOwner, registerUser, signInWithGoogle, resendRegistration } = useAuth();
+  const { registerOwner, registerInvitedTechnician, signInWithGoogle, resendRegistration } = useAuth();
   const {
     prompt: promptGoogle,
     inProgress: googleInProgress,
@@ -66,11 +66,26 @@ export default function SignUpScreen() {
     }
     setSubmitting(true);
     try {
-      // Flujo de técnico invitado: registro local (sin Supabase) y asociación
-      // automática al taller del admin que generó el enlace.
+      // Flujo de técnico invitado: crea la cuenta real (Supabase) con
+      // role='technician' asociada al taller del admin que generó el enlace.
+      // Sin Supabase configurado cae a la simulación local (demo).
       if (inviteData && !inviteData.expired) {
-        const ok = registerUser(name.trim(), email.trim().toLowerCase(), false);
-        if (ok) {
+        const result = await registerInvitedTechnician(
+          name.trim(),
+          email.trim().toLowerCase(),
+          password,
+          inviteData.workshopId,
+          inviteData.workshopName
+        );
+        if (result.pendingVerification) {
+          setPendingVerification(email.trim().toLowerCase());
+          notify(
+            'Verifica tu correo',
+            `Enviamos un enlace de confirmación a ${email.trim().toLowerCase()}. Revisa tu bandeja (y el spam).`
+          );
+          return;
+        }
+        if (result.ok) {
           notify(
             '¡Bienvenido al equipo!',
             `Tu cuenta de técnico fue creada y asociada al taller "${inviteData.workshopName}". Inicia sesión para empezar.`
@@ -79,7 +94,8 @@ export default function SignUpScreen() {
         } else {
           notify(
             'No se pudo crear la cuenta',
-            'El dispositivo o el correo ya están registrados, o el taller alcanzó el límite de 5 técnicos. Contacta al dueño del taller.'
+            result.message ??
+              'El dispositivo o el correo ya están registrados, o el taller alcanzó el límite de 5 técnicos. Contacta al dueño del taller.'
           );
         }
         return;

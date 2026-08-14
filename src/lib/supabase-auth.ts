@@ -65,22 +65,46 @@ function toProfile(authUser: SupabaseUser): SupabaseUserProfile {
   };
 }
 
+/**
+ * Metadatos opcionales para el registro. El trigger `handle_new_user`
+ * consume `full_name`, `role` y `workshop_id`/`workshop_name` para crear
+ * el perfil y asociarlo al taller correcto (ver supabase/schema.sql).
+ * Si se omite algo, se aplica un fallback (nunca se envía null/'').
+ */
+export interface SignUpMetadata {
+  full_name?: string;
+  role?: 'admin' | 'technician';
+  workshop_id?: string;
+  workshop_name?: string;
+}
+
 /** Envía el correo de confirmación del registro (enlace de verificación). */
 export async function supabaseSignUp(
   name: string,
   email: string,
-  password: string
+  password: string,
+  metadata?: SignUpMetadata
 ): Promise<SignUpResult> {
   try {
-    const { data, error } = await supabase.auth.signUp({
+    // Fallbacks para no enviar campos null/vacíos que rompan constraints
+    // o el trigger de creación de perfil.
+    const fullName = (metadata?.full_name ?? name).trim();
+    const workshopName = (metadata?.workshop_name ?? fullName).trim() || 'Mi Taller';
+    const data: Record<string, string> = {
+      full_name: fullName || 'Usuario',
+    };
+    if (metadata?.role) {
+      data.role = metadata.role;
+    }
+    if (metadata?.workshop_id) {
+      data.workshop_id = metadata.workshop_id;
+    }
+    data.workshop_name = workshopName;
+
+    const { data: result, error } = await supabase.auth.signUp({
       email: email.trim().toLowerCase(),
       password,
-      options: {
-        data: {
-          full_name: name.trim(),
-          workshop_name: name.trim() || 'Mi Taller',
-        },
-      },
+      options: { data },
     });
     if (error) {
       const isDuplicate =
@@ -96,13 +120,13 @@ export async function supabaseSignUp(
     // Con mailer_autoconfirm=false el registro queda pendiente de verificación;
     // session llega null hasta que el usuario confirme el correo con el enlace.
     const needsVerification =
-      !data.session || data.user?.email_confirmed_at == null;
+      !result.session || result.user?.email_confirmed_at == null;
     if (needsVerification) {
       return { ok: true, pendingVerification: true };
     }
     // Caso especial (autoconfirm activo, pruebas): ya hay sesión.
-    return data.user
-      ? { ok: true, pendingVerification: false, user: toProfile(data.user) }
+    return result.user
+      ? { ok: true, pendingVerification: false, user: toProfile(result.user) }
       : { ok: true, pendingVerification: true };
   } catch (cause) {
     return {

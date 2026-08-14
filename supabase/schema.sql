@@ -188,24 +188,67 @@ security definer set search_path = public
 as $$
 declare
   w_id uuid;
+  req_workshop uuid;
+  meta jsonb := coalesce(new.raw_user_meta_data, '{}'::jsonb);
+  new_role text;
 begin
-  insert into public.workshops (name)
-  values (coalesce(new.raw_user_meta_data->>'workshop_name', 'Mi Taller'))
-  returning id into w_id;
+  -- 1) workshop_id opcional del metadata (solo si parece uuid válido;
+  --    un cast directo a uuid lanzaría excepción con valores basura).
+  begin
+    req_workshop := (meta->>'workshop_id')::uuid;
+  exception when others then
+    req_workshop := null;
+  end;
 
+  -- 2) Resolver el taller real:
+  --    - El frontend envía como workshop_id el id del admin invitador
+  --      (auth.users.id); el taller real se obtiene desde SU fila en profiles.
+  --    - Fallback: si ya llegara un workshop_id de workshops, se usa directo.
+  --    - Si no hay taller (registro de dueño): se crea uno nuevo.
+  if req_workshop is not null then
+    select p.workshop_id into w_id
+      from public.profiles p
+     where p.id = req_workshop
+     limit 1;
+    if w_id is null then
+      select id into w_id
+        from public.workshops
+       where id = req_workshop
+       limit 1;
+    end if;
+  end if;
+
+  if w_id is null then
+    insert into public.workshops (name)
+    values (coalesce(nullif(meta->>'workshop_name', ''), 'Mi Taller'))
+    returning id into w_id;
+  end if;
+
+  -- 3) Rol validado contra el CHECK de profiles ('admin' | 'technician').
+  new_role := coalesce(nullif(meta->>'role', ''), 'admin');
+  if new_role not in ('admin', 'technician') then
+    new_role := 'admin';
+  end if;
+
+  -- 4) Perfil con COALESCE total: nunca falla por datos incompletos o null.
   insert into public.profiles (id, workshop_id, full_name, role, commission_rate, is_active, specialty, joined_at)
   values (
     new.id,
     w_id,
-    coalesce(new.raw_user_meta_data->>'full_name', new.email),
-    'admin',  -- la primera cuenta (la que crea el taller) es el dueño admin
-    0,
+    coalesce(nullif(meta->>'full_name', ''), new.email, 'Usuario'),
+    new_role,
+    coalesce(nullif(meta->>'commission_rate', '')::numeric, 0),
     true,
-    null,
+    nullif(meta->>'specialty', ''),
     now()
   );
 
   return new;
+exception
+  -- Red de seguridad: un fallo aquí NUNCA debe bloquear la creación de la
+  -- cuenta en auth.users (evita el error "Database error saving new user").
+  when others then
+    return new;
 end;
 $$;
 
