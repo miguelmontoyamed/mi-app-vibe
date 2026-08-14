@@ -17,7 +17,7 @@
 const NIT_WEIGHTS = [3, 7, 13, 17, 19, 23, 29, 37, 41, 43, 47, 53, 59, 67, 71] as const;
 
 /** Longitud del NIT sin el dígito de verificación. */
-const NIT_BASE_LENGTH = 9;
+export const NIT_BASE_LENGTH = 9;
 
 /** Longitud total: 9 dígitos base + 1 dígito de verificación. */
 const NIT_TOTAL_LENGTH = 10;

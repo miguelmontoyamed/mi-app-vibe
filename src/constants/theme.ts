@@ -91,6 +91,7 @@ export const KpiAccent = {
   pending: '#f97316', // Orange — Pendientes
   progress: '#3b82f6', // Blue — En Proceso
   ready: '#10b981', // Green — Listos para Entrega
+  delivered: '#64748b', // Slate — Entregados
 } as const;
 
 export interface StatusStyle {

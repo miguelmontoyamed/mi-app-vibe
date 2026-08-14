@@ -8,16 +8,6 @@
 }
 
 /* Universal resets & cross-browser compatibility. */
-html,
-body,
-#root {
-  box-sizing: border-box;
-  -webkit-tap-highlight-color: transparent;
-  -webkit-overflow-scrolling: touch;
-  margin: 0;
-  padding: 0;
-}
-
 *,
 *::before,
 *::after {
@@ -27,9 +17,24 @@ body,
 html,
 body,
 #root {
-  height: 100dvh;
-  height: 100vh;
-  overflow: hidden;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-overflow-scrolling: touch;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  /* App-shell: el documento es un contenedor flex en columna para que los
+     contenedores de página (flex: 1) estiren a la altura real del viewport. */
+  display: flex;
+  flex-direction: column;
+  /* Dynamic Viewport Height. El fallback `100vh` va PRIMERO: los navegadores
+     que entienden `dvh` usan la última declaración (100dvh), los antiguos la
+     primera (100vh). Con `100vh` estricto, Safari iOS / Chrome Android ocultan
+     la Bottom Nav tras sus barras de navegación dinámicas. */
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow: hidden; /* el scroll vertical vive dentro de los ScrollView */
+  overflow-x: hidden; /* mata cualquier scroll horizontal fantasma */
 }
 
 /* Safe-area insets for notched devices (iOS). */

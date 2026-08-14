@@ -4,15 +4,12 @@ import { StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { Button } from '@/components/ui/button';
 import { Screen } from '@/components/ui/screen';
-import { StatusBadge } from '@/components/ui/status-badge';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BREAKPOINTS, KpiAccent, Spacing, statusStyle } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { useRepair, type RepairStatus } from '@/context/repair-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { useTheme } from '@/hooks/use-theme';
-import { formatCOP } from '@/utils/format';
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
@@ -27,11 +24,8 @@ type KpiCard = {
 export default function DashboardScreen() {
   const scheme = useColorScheme();
   const dark = scheme === 'dark';
-  const theme = useTheme();
   const { width } = useWindowDimensions();
-  const isTablet = width >= BREAKPOINTS.mobile;
-  const cardBasis =
-    width >= BREAKPOINTS.tablet ? '31%' : width >= BREAKPOINTS.mobile ? '48%' : '100%';
+  const cardBasis = width >= BREAKPOINTS.tablet ? '23%' : width >= BREAKPOINTS.mobile ? '48%' : '100%';
   const { repairs } = useRepair();
   const { currentUser, license } = useAuth();
 
@@ -53,26 +47,26 @@ export default function DashboardScreen() {
   const pendingCount = relevantRepairs.filter((r) => r.status === 'Pendiente').length;
   const inProgressCount = relevantRepairs.filter((r) => r.status === 'En Proceso').length;
   const readyCount = relevantRepairs.filter((r) => r.status === 'Listo').length;
+  const deliveredCount = relevantRepairs.filter((r) => r.status === 'Entregado').length;
 
-  const recentRepairs = relevantRepairs.slice(0, 4);
-
-  const showTrialWarning = license.plan === 'Prueba - 3 Meses' && license.daysRemaining <= 10;
+  const showLicenseWarning = license.plan === 'Licencia Inicial' && license.daysRemaining <= 10;
 
   const kpiCards: KpiCard[] = [
     { label: 'Pendientes', count: pendingCount, status: 'Pendiente', icon: 'hourglass-outline', accent: KpiAccent.pending },
     { label: 'En Proceso', count: inProgressCount, status: 'En Proceso', icon: 'construct-outline', accent: KpiAccent.progress },
     { label: 'Listos para Entrega', count: readyCount, status: 'Listo', icon: 'checkmark-circle-outline', accent: KpiAccent.ready },
+    { label: 'Equipos Entregados', count: deliveredCount, status: 'Entregado', icon: 'checkmark-done-outline', accent: KpiAccent.delivered },
   ];
 
   return (
     <Screen title="Panel de Control">
-      {/* Trial Expiring Countdown Banner */}
-      {showTrialWarning && (
+      {/* License Expiring Countdown Banner */}
+      {showLicenseWarning && (
         <ThemedView style={styles.warningBanner}>
           <View style={styles.warningRow}>
             <Ionicons name="alert-circle" size={18} color="#ffffff" />
             <ThemedText style={styles.warningText}>
-              ¡Atención! Tu periodo de prueba gratuita expira en {license.daysRemaining} días ({license.expiresAt}). Renueva para evitar bloqueos.
+              ¡Atención! Tu licencia de evaluación expira en {license.daysRemaining} días ({license.expiresAt}). Renueva para evitar bloqueos.
             </ThemedText>
           </View>
         </ThemedView>
@@ -115,44 +109,6 @@ export default function DashboardScreen() {
       <Link href="/taller" asChild>
         <Button label="🏪 Configurar Mi Taller" variant="secondary" style={styles.tallerButton} />
       </Link>
-
-      {/* Recent Repairs Section */}
-      <View style={styles.sectionHeader}>
-        <ThemedText type="subtitle">
-          {currentUser.role === 'admin' ? 'Últimos Trabajos en el Taller' : 'Mis Equipos Asignados'}
-        </ThemedText>
-        <Link href="/jobs">
-          <ThemedText type="linkPrimary">Ver todos</ThemedText>
-        </Link>
-      </View>
-
-      <View style={[styles.listContainer, isTablet && styles.listContainerTablet]}>
-        {recentRepairs.map((item) => (
-          <ThemedView
-            key={item.id}
-            type="backgroundElement"
-            style={[styles.repairCard, { flexBasis: isTablet ? '48%' : '100%' }]}>
-            <View style={styles.repairCardTop}>
-              <ThemedText type="smallBold">{item.clientName}</ThemedText>
-              <StatusBadge status={item.status} />
-            </View>
-            <View style={styles.repairDeviceRow}>
-              <Ionicons name="phone-portrait-outline" size={15} color={theme.textSecondary} />
-              <ThemedText type="small" themeColor="textSecondary" style={styles.repairDeviceText}>
-                {item.device} — {item.issue}
-              </ThemedText>
-            </View>
-            <View style={styles.repairCardBottom}>
-              <ThemedText type="small" themeColor="textSecondary" style={styles.repairMeta}>
-                Técnico: {item.technicianName || 'General'} | Seña: {formatCOP(item.advancePayment ?? 0)}
-              </ThemedText>
-              <ThemedText type="smallBold" style={styles.budgetText}>
-                {formatCOP(item.budget)}
-              </ThemedText>
-            </View>
-          </ThemedView>
-        ))}
-      </View>
     </Screen>
   );
 }
@@ -230,57 +186,5 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: 13,
     flex: 1,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: Spacing.two,
-    width: '100%',
-  },
-  listContainer: {
-    gap: Spacing.three,
-    width: '100%',
-  },
-  listContainerTablet: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  repairCard: {
-    padding: Spacing.four,
-    borderRadius: Spacing.three,
-    borderWidth: StyleSheet.hairlineWidth,
-    gap: Spacing.two,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  repairCardTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  repairDeviceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.two,
-  },
-  repairDeviceText: {
-    flex: 1,
-  },
-  repairCardBottom: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: Spacing.one,
-  },
-  repairMeta: {
-    flexShrink: 1,
-    marginRight: Spacing.two,
-  },
-  budgetText: {
-    color: KpiAccent.ready,
   },
 });

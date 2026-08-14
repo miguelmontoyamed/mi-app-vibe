@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -15,7 +15,8 @@ type NavbarProps = {
 /**
  * Shared top navigation bar: brand on the left, optional screen title centered,
  * and the current user's name + role on the right. Handles the top safe-area
- * inset itself so it never overlaps the system status bar.
+ * inset itself so it never overlaps the system status bar / notch (native) or
+ * the Safari/PWA browser chrome (web, via the `--sat` CSS variable).
  */
 export function Navbar({ title }: NavbarProps) {
   const insets = useSafeAreaInsets();
@@ -28,6 +29,15 @@ export function Navbar({ title }: NavbarProps) {
 
   const role = currentUser.role === 'admin' ? 'Dueño / Admin' : 'Técnico';
 
+  // On native, `insets.top` is the notch / Dynamic Island / status bar height.
+  // On web it is 0, so fall back to `env(safe-area-inset-top)` via `--sat` for
+  // mobile Safari in standalone/installed mode. DimensionValue rejects CSS
+  // custom properties, so widen the type once (same pattern as Screen).
+  const topInsetStyle: ViewStyle =
+    Platform.OS === 'web'
+      ? ({ paddingTop: 'var(--sat)' } as unknown as ViewStyle)
+      : { paddingTop: insets.top };
+
   return (
     <View
       style={[
@@ -35,8 +45,8 @@ export function Navbar({ title }: NavbarProps) {
         {
           backgroundColor: theme.background,
           borderBottomColor: theme.border,
-          paddingTop: insets.top,
         },
+        topInsetStyle,
       ]}>
       <View style={styles.inner}>
         <View style={styles.sectionLeft}>

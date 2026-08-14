@@ -1,17 +1,35 @@
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Platform, StyleSheet, View } from 'react-native';
+import { Alert, Platform, StyleSheet, View } from 'react-native';
 
+import {
+  CommercialBanner,
+  CONTACT_EMAIL,
+  CONTACT_URL,
+  CONTACT_WHATSAPP,
+} from '@/components/commercial-banner';
 import { Button } from '@/components/ui/button';
 import { Screen } from '@/components/ui/screen';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Brand, Spacing } from '@/constants/theme';
+import { Brand, Spacing, statusStyle } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { useRepair } from '@/context/repair-context';
 import { useWorkshop } from '@/context/workshop-context';
 import { formatCOP } from '@/utils/format';
 import { formatNit } from '@/utils/nit';
+
+/** Escape básico para insertar valores del dominio dentro del HTML del PDF. */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 export default function ReceiptScreen() {
   const router = useRouter();
@@ -37,15 +55,106 @@ export default function ReceiptScreen() {
   }
 
 const paid = repair.advancePayment ?? 0;
-  const balance = Math.max(0, repair.budget - paid);
-  const paidInFull = paid >= repair.budget;
 
-  const handlePrint = () => {
+  /**
+   * HTML autocontenido del recibo para el PDF nativo (expo-print). Mantiene el
+   * mismo contenido que el área imprimible de la pantalla: membrete, datos de
+   * la orden, cliente, equipo/servicio, total limpio y banner comercial.
+   */
+  const buildReceiptHtml = (): string => {
+    const brand = profile?.name || 'TechRepair Master';
+    const nitLine = profile ? `NIT: ${formatNit(profile.nit)}<br/>` : '';
+    const addressLine = profile?.address ? `${escapeHtml(profile.address)}<br/>` : '';
+    const phoneLine = profile ? `Tel: ${escapeHtml(profile.phone)}` : '';
+    const paidRow = paid > 0 ? `<div class="row"><strong>Abonado:</strong><span>− ${formatCOP(paid)}</span></div>` : '';
+    const imeiRow = repair.imei
+      ? `<div class="row"><strong>IMEI / Serial:</strong><span>${escapeHtml(repair.imei)}</span></div>`
+      : '';
+    const estado = statusStyle(repair.status, 'light');
+    const attendedBy = currentUser?.name || repair.technicianName || '-';
+
+    return `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Recibo ${escapeHtml(repair.id)}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #111827; padding-left: 32px; padding-right: 32px; padding-top: 24px; }
+  h1 { font-size: 24px; color: #0284c7; text-align: center; margin-bottom: 4px; }
+  .membrete { text-align: center; color: #374151; font-size: 12px; line-height: 1.5; margin-bottom: 8px; }
+  .divider { border-top: 1px solid #d1d5db; margin: 14px 0; }
+  h2 { font-size: 13px; color: #0284c7; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+  .row { display: flex; justify-content: space-between; gap: 16px; font-size: 13px; line-height: 1.7; }
+  .estado { display: inline-block; padding: 2px 8px; border: 1px solid ${estado.border}; border-radius: 4px; background: ${estado.bg}; color: ${estado.text}; font-weight: 600; }
+  .banner { margin-top: 14px; padding: 12px 14px; border: 1px solid rgba(2, 132, 199, 0.5); border-radius: 8px; background: #f0f7fc; font-size: 11px; color: #334155; line-height: 1.6; }
+  .banner strong { color: #0284c7; display: block; margin-bottom: 2px; }
+  .footer { margin-top: 14px; font-size: 12px; color: #374151; line-height: 1.7; }
+</style>
+</head>
+<body>
+  <h1>${escapeHtml(brand)}</h1>
+  <div class="membrete">${nitLine}${addressLine}${phoneLine}</div>
+  <div class="divider"></div>
+  <h2>Orden de trabajo</h2>
+  <div class="row"><strong># Orden:</strong><span>${escapeHtml(repair.id)}</span></div>
+  <div class="row"><strong>Fecha:</strong><span>${escapeHtml(repair.date)}</span></div>
+  <div class="row"><strong>Estado:</strong><span class="estado">${escapeHtml(repair.status)}</span></div>
+  <div class="divider"></div>
+  <h2>Cliente</h2>
+  <div class="row"><strong>Nombre:</strong><span>${escapeHtml(repair.clientName)}</span></div>
+  <div class="row"><strong>Teléfono:</strong><span>${escapeHtml(repair.phone)}</span></div>
+  <div class="divider"></div>
+  <h2>Equipo / Servicio</h2>
+  <div class="row"><strong>Dispositivo:</strong><span>${escapeHtml(repair.device)}</span></div>
+  ${imeiRow}
+  <div class="row"><strong>Falla reportada:</strong><span>${escapeHtml(repair.issue)}</span></div>
+  <div class="row"><strong>Técnico:</strong><span>${escapeHtml(repair.technicianName || 'General')}</span></div>
+  <div class="divider"></div>
+  <h2>Valor a pagar</h2>
+  <div class="row"><strong>Total reparación:</strong><span>${formatCOP(repair.budget)}</span></div>
+  ${paidRow}
+  <div class="divider"></div>
+  <div class="footer">
+    <div class="row"><strong>Atendido por:</strong><span>${escapeHtml(attendedBy)}</span></div>
+    <div class="row"><strong>Licencia:</strong><span>${escapeHtml(license.plan)}</span></div>
+  </div>
+  <div class="banner">
+    <strong>Adquiere la Licencia de Facturación</strong>
+    Contacta a nuestro equipo comercial para adquirir el producto o tu licencia de facturación: WhatsApp ${escapeHtml(CONTACT_WHATSAPP)} · ${escapeHtml(CONTACT_EMAIL)} · ${escapeHtml(CONTACT_URL)}
+  </div>
+</body>
+</html>`;
+  };
+
+  /**
+   * Impresión / PDF universal:
+   * - Web: impresión estándar del navegador (aprovecha el CSS print de
+   *   `#receiptArea` en global.css).
+   * - iOS/Android: genera el PDF con `printToFileAsync` desde el HTML del
+   *   recibo y lo pasa a `shareAsync` para abrir el menú nativo del sistema
+   *   (guardar en archivos, WhatsApp, correo, etc.).
+   */
+  const handlePrint = async () => {
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
       window.print();
-    } else {
-      // Native: native printing is out of scope for the current free build.
-      alert('Usa Imprimir / Guardar como PDF desde el navegador web.');
+      return;
+    }
+    try {
+      const { uri } = await Print.printToFileAsync({ html: buildReceiptHtml() });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, {
+          mimeType: 'application/pdf',
+          dialogTitle: 'Compartir recibo TechRepair Master',
+          UTI: 'com.adobe.pdf',
+        });
+      } else {
+        Alert.alert('Recibo generado', 'No hay apps de compartir disponibles en este dispositivo.');
+      }
+    } catch (error) {
+      console.error('Error generando el PDF del recibo:', error);
+      Alert.alert('Error', 'No se pudo generar el PDF del recibo. Intenta de nuevo.');
     }
   };
 
@@ -152,14 +261,6 @@ const paid = repair.advancePayment ?? 0;
               <ThemedText type="small">− {formatCOP(paid)}</ThemedText>
             </View>
           )}
-          <View style={[styles.sectionRow, styles.balanceRow]}>
-            <ThemedText type="smallBold" style={{ color: paidInFull ? Brand.success : Brand.danger }}>
-              {paidInFull ? 'ESTADO DE PAGO: CANCELADO' : 'SALDO PENDIENTE:'}
-            </ThemedText>
-            <ThemedText type="smallBold" style={{ color: paidInFull ? Brand.success : Brand.danger }}>
-              {paidInFull ? '✓' : formatCOP(balance)}
-            </ThemedText>
-          </View>
         </View>
 
         <View style={styles.divider} />
@@ -173,16 +274,21 @@ const paid = repair.advancePayment ?? 0;
             <ThemedText type="smallBold">Licencia:</ThemedText>
             <ThemedText type="small">{license.plan}</ThemedText>
           </View>
-          <ThemedText type="small" themeColor="textSecondary" style={styles.thanks}>
-            ¡Gracias por confiar en TechRepair! Conserva este recibo como soporte de tu garantía.
-          </ThemedText>
+          <View style={styles.bannerWrap}>
+            <CommercialBanner />
+          </View>
         </View>
       </ThemedView>
 
-      {/* Native reminder below printable area */}
-      {Platform.OS === 'web' && (
+      {/* Platform hint below printable area */}
+      {Platform.OS === 'web' ? (
         <ThemedText type="small" themeColor="textSecondary" style={styles.hint}>
           💡 Usa &ldquo;Imprimir / Guardar PDF&rdquo; y elige &ldquo;Guardar como PDF&rdquo; para descargar el recibo.
+        </ThemedText>
+      ) : (
+        <ThemedText type="small" themeColor="textSecondary" style={styles.hint}>
+          💡 Al generar el PDF se abrirá el menú nativo para guardarlo o compartirlo
+          (archivos, WhatsApp, correo).
         </ThemedText>
       )}
     </Screen>
@@ -227,9 +333,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: Spacing.three,
   },
-  balanceRow: {
-    marginTop: Spacing.one,
-  },
   divider: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: '#9ca3af',
@@ -238,9 +341,8 @@ const styles = StyleSheet.create({
   footer: {
     gap: Spacing.one,
   },
-  thanks: {
+  bannerWrap: {
     marginTop: Spacing.two,
-    textAlign: 'center',
   },
   hint: {
     width: '100%',

@@ -59,7 +59,7 @@ export default function JobsScreen() {
     status: string;
     phone: string;
   }) => {
-    const message = `Hola ${item.clientName}, le saludamos de TechRepair. Su equipo ${item.device} se encuentra actualmente en estado: *${item.status}*. ¡Gracias por confiar en nosotros!`;
+    const message = `Hola ${item.clientName}, le saludamos de TechRepair. Su equipo ${item.device} se encuentra actualmente en estado: *${item.status}*. Saludos cordiales, le estaremos informando.`;
     const url = `https://api.whatsapp.com/send?phone=${item.phone.replace(
       /\D/g,
       ''

@@ -9,7 +9,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Brand, Spacing } from '@/constants/theme';
 import { useWorkshop } from '@/context/workshop-context';
-import { formatNit, isValidNit, normalizeNit } from '@/utils/nit';
+import { formatNit, NIT_BASE_LENGTH, nitCheckDigit, normalizeNit } from '@/utils/nit';
 
 interface FieldErrors {
   name?: string;
@@ -19,28 +19,35 @@ interface FieldErrors {
 
 /**
  * Onboarding / perfil del taller. Guarda el membrete (nombre, NIT, dirección,
- * teléfono) que se imprime en los recibos de reparación. El NIT se valida con
- * el dígito de verificación (módulo 11 DIAN) y los errores se muestran en
- * línea, junto a cada campo.
+ * teléfono) que se imprime en los recibos de reparación.
+ *
+ * El campo NIT solo acepta los 9 dígitos base; el dígito de verificación (DV)
+ * se calcula automáticamente en segundo plano con el módulo 11 de la DIAN
+ * (`nitCheckDigit`) y se adjunta al guardar, por lo que el usuario nunca
+ * escribe guiones ni el DV.
  */
 export default function TallerScreen() {
   const router = useRouter();
   const { profile, saveProfile } = useWorkshop();
 
   const [name, setName] = useState(profile?.name ?? '');
-  const [nit, setNit] = useState(profile?.nit ?? '');
+  // Solo los 9 dígitos base: si el perfil previo guardó 10 (base + DV), se
+  // recortan y el DV se recalcula con el mismo algoritmo.
+  const [nit, setNit] = useState(() => normalizeNit(profile?.nit ?? '').slice(0, NIT_BASE_LENGTH));
   const [address, setAddress] = useState(profile?.address ?? '');
   const [phone, setPhone] = useState(profile?.phone ?? '');
   const [errors, setErrors] = useState<FieldErrors>({});
+
+  // DV calculado en vivo (módulo 11 DIAN) apenas hay 9 dígitos base.
+  const calculatedDv = nit.length === NIT_BASE_LENGTH ? nitCheckDigit(nit) : null;
 
   const handleSave = () => {
     const nextErrors: FieldErrors = {};
     if (!name.trim()) {
       nextErrors.name = 'Ingresa el nombre del taller.';
     }
-    if (!isValidNit(nit)) {
-      nextErrors.nit =
-        'NIT inválido: deben ser 9 dígitos + dígito de verificación correcto (módulo 11 DIAN).';
+    if (nit.length !== NIT_BASE_LENGTH) {
+      nextErrors.nit = 'NIT inválido: ingresa los 9 dígitos (sin guiones ni dígito de verificación).';
     }
     if (!phone.trim()) {
       nextErrors.phone = 'Ingresa el teléfono del taller.';
@@ -50,9 +57,10 @@ export default function TallerScreen() {
       return;
     }
 
+    // El DV se adjunta automáticamente: se guardan los 10 dígitos (base + DV).
     saveProfile({
       name: name.trim(),
-      nit: normalizeNit(nit),
+      nit: `${nit}${nitCheckDigit(nit)}`,
       address: address.trim(),
       phone: phone.trim(),
     });
@@ -89,13 +97,24 @@ export default function TallerScreen() {
           <FormInput
             label="NIT"
             required
-            placeholder="Ej: 901.234.567-8"
+            placeholder="Ej: 901234567"
             keyboardType="number-pad"
             value={nit}
-            onChangeText={setNit}
-            maxLength={15}
+            onChangeText={(text) => setNit(text.replace(/\D/g, '').slice(0, NIT_BASE_LENGTH))}
+            maxLength={NIT_BASE_LENGTH}
           />
           {errors.nit ? <ThemedText style={styles.error}>{errors.nit}</ThemedText> : null}
+          {calculatedDv !== null ? (
+            <ThemedText type="small" themeColor="textSecondary" style={styles.nitHint}>
+              Dígito de verificación (DV) calculado: {calculatedDv} → NIT:{' '}
+              {formatNit(`${nit}${calculatedDv}`)}
+            </ThemedText>
+          ) : (
+            <ThemedText type="small" themeColor="textSecondary" style={styles.nitHint}>
+              Ingresa los 9 dígitos del NIT: el dígito de verificación se calcula
+              automáticamente.
+            </ThemedText>
+          )}
         </View>
 
         <View style={styles.field}>
@@ -179,5 +198,8 @@ const styles = StyleSheet.create({
     fontSize: 18,
     lineHeight: 24,
     color: Brand.primary,
+  },
+  nitHint: {
+    lineHeight: 16,
   },
 });

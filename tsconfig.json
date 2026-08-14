@@ -19,5 +19,10 @@
     "**/*.tsx",
     ".expo/types/**/*.ts",
     "expo-env.d.ts"
+  ],
+  "exclude": [
+    "e2e",
+    "dist",
+    "node_modules"
   ]
 }

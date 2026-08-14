@@ -10,11 +10,12 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 
+import { CommercialBanner } from '@/components/commercial-banner';
 import { Screen } from '@/components/ui/screen';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
-import { useAuth } from '@/context/auth-context';
+import { useAuth, MAX_TECHNICIANS } from '@/context/auth-context';
 import { useRepair } from '@/context/repair-context';
 import { useTheme } from '@/hooks/use-theme';
 import { isSupabaseConfigured } from '@/lib/supabase';
@@ -40,19 +41,17 @@ export default function AdminScreen() {
     renewSubscription,
     registerUser,
     generateInviteLink,
+    inviteLink,
   } = useAuth();
   const { repairs, inventory } = useRepair();
   const router = useRouter();
 
   const [inputKey, setInputKey] = useState('');
-  
+
   // Registration form states
   const [regName, setRegName] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regRole, setRegRole] = useState<'admin' | 'technician'>('technician');
-
-  // Invitation state
-  const [currentLink, setCurrentLink] = useState('');
 
   // Support ticket state
   const [supportType, setSupportType] = useState(SUPPORT_TYPES[0]);
@@ -64,6 +63,14 @@ export default function AdminScreen() {
   }
 
   const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+  const notify = (message: string) => {
+    if (Platform.OS === 'web') {
+      window.alert(message);
+    } else {
+      Alert.alert('TechRepair', message);
+    }
+  };
 
   const handleLogout = () => {
     logout();
@@ -121,6 +128,15 @@ export default function AdminScreen() {
       return;
     }
 
+    // Límite estricto: 5 técnicos máximos por taller (no aplica al dueño).
+    if (regRole === 'technician') {
+      const techCount = users.filter((u) => u.role === 'technician').length;
+      if (techCount >= MAX_TECHNICIANS) {
+        notify(`Límite alcanzado: el taller tiene el máximo de ${MAX_TECHNICIANS} técnicos permitidos.`);
+        return;
+      }
+    }
+
     const success = await registerUser(
       regName.trim(),
       regEmail.trim(),
@@ -137,20 +153,35 @@ export default function AdminScreen() {
       setRegEmail('');
     } else {
       if (Platform.OS === 'web') {
-        window.alert('Error: Dispositivo bloqueado. No se permiten más registros desde esta máquina.');
+        window.alert('Error: Dispositivo bloqueado o límite de técnicos alcanzado. No se permiten más registros desde esta máquina.');
       } else {
-        Alert.alert('Seguridad Anti-Abuso', 'Error: Dispositivo bloqueado. No se permiten más registros.');
+        Alert.alert('Seguridad Anti-Abuso', 'Error: Dispositivo bloqueado o límite de técnicos alcanzado. No se permiten más registros.');
       }
     }
   };
 
   const handleCreateInvite = () => {
-    const link = generateInviteLink();
-    setCurrentLink(link);
-    if (Platform.OS === 'web') {
-      window.alert(`Enlace temporal generado (Vence en 10 min):\n\n${link}`);
+    // Límite estricto: no se generan enlaces si el taller ya tiene 5 técnicos.
+    const techCount = users.filter((u) => u.role === 'technician').length;
+    if (techCount >= MAX_TECHNICIANS) {
+      notify(`Límite alcanzado: el taller tiene el máximo de ${MAX_TECHNICIANS} técnicos permitidos.`);
+      return;
+    }
+    const url = generateInviteLink();
+    if (!url) {
+      notify('Solo el dueño del taller puede generar enlaces de invitación.');
+      return;
+    }
+    notify('¡Enlace de invitación generado! Vence en 10 minutos. Copia el enlace y compártelo con el técnico.');
+  };
+
+  /** Copia el enlace de invitación al portapapeles (web) o lo muestra (native). */
+  const handleCopyInvite = () => {
+    if (!inviteLink) return;
+    if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(inviteLink.url).then(() => notify('Enlace copiado al portapapeles.'));
     } else {
-      Alert.alert('Enlace Temporal Técnico', `Enlace temporal generado (Vence en 10 min):\n\n${link}`);
+      notify(`Enlace de invitación:\n\n${inviteLink.url}`);
     }
   };
 
@@ -256,7 +287,7 @@ export default function AdminScreen() {
         <ThemedView type="backgroundElement" style={styles.card}>
           <ThemedText type="subtitle">SaaS Onboarding (Crear Cuenta / Taller)</ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
-            Con validación de Email y Reconocimiento de Procesador/Dispositivo para evitar abusos de periodos gratis.
+            Con validación de Email y Reconocimiento de Procesador/Dispositivo para evitar abusos de periodos de evaluación.
           </ThemedText>
           <TextInput
             style={[styles.input, { color: theme.text, borderColor: theme.backgroundElement }]}
@@ -294,41 +325,59 @@ export default function AdminScreen() {
         </ThemedView>
       )}
 
-      {/* Expiring Link Generator for Technicians */}
-      {currentUser.role === 'admin' && !isSupabaseConfigured && (
-        <ThemedView type="backgroundElement" style={styles.card}>
-          <ThemedText type="subtitle">Enlaces Temporales para Técnicos</ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            El dueño genera un enlace seguro de registro temporal. Vence automáticamente en 10 minutos para máxima protección.
-          </ThemedText>
-          <Pressable style={({ pressed }) => [styles.activateButton, pressed && styles.pressed, { paddingVertical: Spacing.three }]} onPress={handleCreateInvite}>
-            <ThemedText style={styles.activateButtonText}>Generar Enlace de Invitación de Técnico</ThemedText>
-          </Pressable>
-          {currentLink ? (
-            <View style={styles.linkDisplayBox}>
-              <ThemedText type="smallBold" style={{ color: '#10b981' }}>Enlace Seguro Generado (Vence en 10 min):</ThemedText>
-              <ThemedText type="code" style={{ fontSize: 11, marginTop: 4 }}>{currentLink}</ThemedText>
-            </View>
-          ) : null}
-        </ThemedView>
-      )}
-
-      {/* Expiring Link Generator for Technicians */}
+      {/* Invitation Link for Technicians — consolidated for all environments */}
       {currentUser.role === 'admin' && (
         <ThemedView type="backgroundElement" style={styles.card}>
-          <ThemedText type="subtitle">Enlaces Temporales para Técnicos</ThemedText>
+          <ThemedText type="subtitle">Invitación de Técnicos al Taller</ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
-            El dueño genera un enlace seguro de registro temporal. Vence automáticamente en 10 minutos para máxima protección.
+            Genera un enlace seguro que permite a un técnico registrarse y quedar asociado
+            automáticamente al taller{' '}
+            <ThemedText type="linkPrimary">{currentUser.name}</ThemedText>.
+            El enlace vence a los 10 minutos por seguridad.
           </ThemedText>
-          <Pressable style={({ pressed }) => [styles.activateButton, pressed && styles.pressed, { paddingVertical: Spacing.three }]} onPress={handleCreateInvite}>
-            <ThemedText style={styles.activateButtonText}>Generar Enlace de Invitación de Técnico</ThemedText>
+
+          <Pressable
+            style={({ pressed }) => [
+              styles.activateButton,
+              { paddingVertical: Spacing.three, alignSelf: 'flex-start' },
+              pressed && styles.pressed,
+            ]}
+            onPress={handleCreateInvite}>
+            <ThemedText style={styles.activateButtonText}>
+              Generar Enlace de Invitación
+            </ThemedText>
           </Pressable>
-          {currentLink ? (
+
+          {inviteLink ? (
             <View style={styles.linkDisplayBox}>
-              <ThemedText type="smallBold" style={{ color: '#10b981' }}>Enlace Seguro Generado (Vence en 10 min):</ThemedText>
-              <ThemedText type="code" style={{ fontSize: 11, marginTop: 4 }}>{currentLink}</ThemedText>
+              <View style={styles.inviteHeader}>
+                <ThemedText type="smallBold" style={{ color: '#10b981' }}>
+                  Enlace generado — vence en 10 min
+                </ThemedText>
+                <ThemedText type="small" themeColor="textSecondary">
+                  Creado: {new Date(inviteLink.createdAt).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}
+                </ThemedText>
+              </View>
+              <ThemedText
+                type="code"
+                selectable
+                style={{ fontSize: 11, lineHeight: 16, marginVertical: Spacing.one }}>
+                {inviteLink.url}
+              </ThemedText>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.copyButton,
+                  pressed && styles.pressed,
+                ]}
+                onPress={handleCopyInvite}>
+                <ThemedText style={styles.copyButtonText}>Copiar enlace</ThemedText>
+              </Pressable>
             </View>
-          ) : null}
+          ) : (
+            <ThemedText type="small" themeColor="textSecondary" style={{ fontStyle: 'italic' }}>
+              Aún no hay un enlace activo. Genera uno para invitar a un técnico.
+            </ThemedText>
+          )}
         </ThemedView>
       )}
 
@@ -426,6 +475,11 @@ export default function AdminScreen() {
             Simular Pago Mensual / Renovar ($50.000 COP / mes — Acceso Ilimitado)
           </ThemedText>
         </Pressable>
+
+        {/* Commercial contact banner — replaces trial language */}
+        <View style={styles.bannerWrap}>
+          <CommercialBanner />
+        </View>
       </ThemedView>
 
       {/* Technical Support Card (visible to all roles) */}
@@ -574,6 +628,9 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: 'bold',
   },
+  bannerWrap: {
+    marginTop: Spacing.two,
+  },
   supportActions: {
     flexDirection: 'row',
     gap: Spacing.two,
@@ -616,6 +673,24 @@ const styles = StyleSheet.create({
     padding: Spacing.three,
     borderRadius: Spacing.two,
     marginTop: Spacing.one,
+  },
+  inviteHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  copyButton: {
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+    borderRadius: Spacing.two,
+    alignSelf: 'flex-start',
+  },
+  copyButtonText: {
+    color: '#10b981',
+    fontWeight: '600',
+    fontSize: 12,
   },
   logoutButton: {
     backgroundColor: '#ef4444',

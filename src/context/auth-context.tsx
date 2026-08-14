@@ -1,4 +1,3 @@
-import * as Crypto from 'expo-crypto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
@@ -13,6 +12,13 @@ import {
   supabaseSignUp,
 } from '@/lib/supabase-auth';
 import type { SupabaseUserProfile } from '@/lib/supabase-auth';
+import {
+  generateInviteToken,
+  decodeInviteToken,
+  validateInviteToken,
+  buildInviteUrl,
+  type InviteValidation,
+} from '@/utils/auth-links';
 
 export type UserRole = 'admin' | 'technician';
 
@@ -38,14 +44,24 @@ export type LoginResult =
 export interface LicenseInfo {
   isActive: boolean;
   licenseKey: string;
-  plan: 'Prueba - 3 Meses' | 'Mensual - Pro' | 'Anual';
+  plan: 'Licencia Inicial' | 'Mensual - Pro' | 'Anual';
   expiresAt: string;
   daysRemaining: number;
 }
 
 export interface InviteLink {
+  /** Token criptográfico (16 chars, uppercase, sin guiones). */
   token: string;
-  expiresAt: number; // timestamp
+  /** ID del admin dueño del taller que generó la invitación. */
+  workshopId: string;
+  /** Nombre del taller (para UX en el banner de invitación del técnico). */
+  workshopName: string;
+  /** URL completa que se comparte con el técnico (deep link / URL web). */
+  url: string;
+  /** Timestamp de expiración (epoch millis). */
+  expiresAt: number;
+  /** Timestamp de creación (epoch millis), para auditoría. */
+  createdAt: number;
 }
 
 interface AuthContextType {
@@ -85,13 +101,17 @@ interface AuthContextType {
     name: string,
     email: string,
     commissionRate: number
-  ) => { ok: boolean; reason?: 'email' };
+  ) => { ok: boolean; reason?: 'email' | 'limit' };
   /** Elimina un técnico. Devuelve false si no existe o es el usuario actual. */
   deleteTechnician: (id: string) => boolean;
   verifyLicense: (key: string) => boolean;
   renewSubscription: () => void;
   registerUser: (name: string, email: string, isOwner: boolean) => boolean;
-  generateInviteLink: () => string;
+  /** Genera un enlace de invitación temporal (10 min) para que un técnico se
+   *  registre y quede automáticamente asociado al taller del admin. */
+  generateInviteLink: () => string | null;
+  /** Valida un token de invitación decodificado; devuelve el workshopId si es válido. */
+  validateInviteLink: (encodedToken: string) => InviteValidation;
   simulateDeviceLock: (fingerprint: string) => void;
 }
 
@@ -101,18 +121,21 @@ const USERS_STORAGE_KEY = 'techrepair.users.v1';
 /** Persiste solo el id del usuario activo, para restaurar la sesión en reload/restart. */
 const SESSION_STORAGE_KEY = 'techrepair.session.v1';
 
-const TRIAL_DURATION_DAYS = 90;
-const TRIAL_EXPIRES_AT = new Date(Date.now() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000)
+/** Límite estricto de técnicos por taller/entorno (requisito de licenciamiento). */
+export const MAX_TECHNICIANS = 5;
+
+const EVAL_DURATION_DAYS = 90;
+const EVAL_EXPIRES_AT = new Date(Date.now() + EVAL_DURATION_DAYS * 24 * 60 * 60 * 1000)
   .toISOString()
   .split('T')[0];
 
 // Computed at module scope (not during render) to satisfy React purity rules.
 const DEFAULT_LICENSE: LicenseInfo = {
   isActive: true,
-  licenseKey: 'TRIAL-90DAYS-ACTIVE',
-  plan: 'Prueba - 3 Meses',
-  expiresAt: TRIAL_EXPIRES_AT,
-  daysRemaining: TRIAL_DURATION_DAYS,
+  licenseKey: 'EVAL-90DAYS-ACTIVE',
+  plan: 'Licencia Inicial',
+  expiresAt: EVAL_EXPIRES_AT,
+  daysRemaining: EVAL_DURATION_DAYS,
 };
 
 // Structural check for Pro license keys. NOTE: this is a client-side simulation —
@@ -143,7 +166,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [blockedDevices, setBlockedDevices] = useState<string[]>(['DEV-FNG-HW-BAD6']); // Simulated blocklist
   const [inviteLink, setInviteLink] = useState<InviteLink | null>(null);
 
-  // Default Trial is 3 Months (90 days). For UI testing we can set it to 9 days to trigger the countdown.
+  // Default Licencia Inicial (90 días de evaluación). Para probar UI se puede
+  // bajar a 9 días para disparar el contador.
   const [license, setLicense] = useState<LicenseInfo>(DEFAULT_LICENSE);
 
   const [hydrated, setHydrated] = useState(false);
@@ -361,15 +385,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   /**
-   * Creates a technician account (owner action). Rejects duplicates by email.
+   * Creates a technician account (owner action). Rejects duplicates by email
+   * and enforces the strict 5-technician limit per workshop.
    * Commission rate is a fraction (0.30 = 30%).
    */
   const createTechnician = (
     name: string,
     email: string,
     commissionRate: number
-  ): { ok: boolean; reason?: 'email' } => {
+  ): { ok: boolean; reason?: 'email' | 'limit' } => {
     const normalizedEmail = email.trim().toLowerCase();
+    const techCount = users.filter((u) => u.role === 'technician').length;
+    if (techCount >= MAX_TECHNICIANS) {
+      return { ok: false, reason: 'limit' };
+    }
     const emailTaken = users.some(
       (u) => !u.isGoogle && u.email.toLowerCase() === normalizedEmail
     );
@@ -408,6 +437,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const registerUser = (name: string, email: string, isOwner: boolean): boolean => {
+    // Límite estricto de 5 técnicos por taller (no aplica al dueño/admin).
+    if (!isOwner) {
+      const techCount = users.filter((u) => u.role === 'technician').length;
+      if (techCount >= MAX_TECHNICIANS) {
+        return false; // Límite de técnicos alcanzado
+      }
+    }
+
     // Simulated Anti-Abuse device check (e.g. processor / footprint match)
     const simulatedFingerprint = 'DEV-FNG-HW-' + Math.floor(Math.random() * 9000 + 1000);
 
@@ -429,11 +466,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setCurrentUser(newUser);
 
     if (isOwner) {
-      // Set fresh 3-Month Trial
+      // Set fresh 90-day initial license
       setLicense({
         isActive: true,
-        licenseKey: 'TRIAL-90DAYS-ACTIVE',
-        plan: 'Prueba - 3 Meses',
+        licenseKey: 'EVAL-90DAYS-ACTIVE',
+        plan: 'Licencia Inicial',
         expiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
         daysRemaining: 90,
       });
@@ -496,11 +533,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     setUsers((prev) => [...prev, newUser]);
     setCurrentUser(newUser);
-    // Fresh 3-Month Trial for the new workshop owner
+    // Fresh 90-day initial license for the new workshop owner
     setLicense({
       isActive: true,
-      licenseKey: 'TRIAL-90DAYS-ACTIVE',
-      plan: 'Prueba - 3 Meses',
+      licenseKey: 'EVAL-90DAYS-ACTIVE',
+      plan: 'Licencia Inicial',
       expiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       daysRemaining: 90,
     });
@@ -515,12 +552,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return resend.ok;
   };
 
-  const generateInviteLink = (): string => {
-    // Cryptographically random token (not Math.random, which is predictable).
-    const token = Crypto.randomUUID().toUpperCase();
-    const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes from now
-    setInviteLink({ token, expiresAt });
-    return `https://techrepair.saas/join?token=${token}&exp=${expiresAt}`;
+  /**
+   * Genera un enlace de invitación temporal (10 min) para que un técnico se
+   * registre y quede automáticamente asociado al taller del admin. Solo el
+   * dueño (admin) actual puede generar enlaces — el taller se identifica con
+   * el nombre e ID del `currentUser`.
+   */
+  const generateInviteLink = (): string | null => {
+    if (!currentUser || currentUser.role !== 'admin') {
+      return null;
+    }
+    // No generar enlaces si el taller ya alcanzó el límite de 5 técnicos.
+    const techCount = users.filter((u) => u.role === 'technician').length;
+    if (techCount >= MAX_TECHNICIANS) {
+      return null;
+    }
+    const token = generateInviteToken(currentUser.id, currentUser.name);
+    const url = buildInviteUrl(token);
+    setInviteLink({
+      token: token.token,
+      workshopId: currentUser.id,
+      workshopName: currentUser.name,
+      url,
+      expiresAt: token.expiresAt,
+      createdAt: token.createdAt,
+    });
+    return url;
+  };
+
+  /** Valida un token de invitación codificado y devuelve el workshopId si es válido. */
+  const validateInviteLink = (encodedToken: string): InviteValidation => {
+    const decoded = decodeInviteToken(encodedToken);
+    if (!decoded) {
+      return { valid: false, reason: 'invalid' };
+    }
+    return validateInviteToken(decoded);
   };
 
   const simulateDeviceLock = (fingerprint: string) => {
@@ -551,6 +617,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         renewSubscription,
         registerUser,
         generateInviteLink,
+        validateInviteLink,
         simulateDeviceLock,
       }}>
       {children}

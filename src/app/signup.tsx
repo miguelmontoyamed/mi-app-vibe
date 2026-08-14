@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Alert, Platform, StyleSheet, View } from 'react-native';
-import { Link, useRouter } from 'expo-router';
+import { Link, useLocalSearchParams, useRouter } from 'expo-router';
 
 import { Button } from '@/components/ui/button';
 import { FormInput } from '@/components/ui/form-input';
@@ -10,6 +10,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Brand, Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { isGoogleConfigured, useGoogleSignIn } from '@/lib/google-auth';
+import { decodeInviteToken, validateInviteToken } from '@/utils/auth-links';
 
 const notify = (title: string, message: string) => {
   if (Platform.OS === 'web') {
@@ -23,12 +24,24 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 export default function SignUpScreen() {
   const router = useRouter();
-  const { registerOwner, signInWithGoogle, resendRegistration } = useAuth();
+  const params = useLocalSearchParams<{ invite?: string }>();
+  const { registerOwner, registerUser, signInWithGoogle, resendRegistration } = useAuth();
   const {
     prompt: promptGoogle,
     inProgress: googleInProgress,
     error: googleError,
   } = useGoogleSignIn();
+
+  // ── Invitación de técnico (token en URL ?invite=...) ──
+  const inviteData = useMemo(() => {
+    const raw = params.invite;
+    if (!raw || typeof raw !== 'string') return null;
+    const decoded = decodeInviteToken(raw);
+    if (!decoded) return null;
+    const validation = validateInviteToken(decoded);
+    if (!validation.valid) return { expired: true as const };
+    return { expired: false as const, workshopName: validation.workshopName, workshopId: validation.workshopId };
+  }, [params.invite]);
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -51,9 +64,27 @@ export default function SignUpScreen() {
       notify('Contraseña débil', 'La contraseña debe tener al menos 6 caracteres.');
       return;
     }
-
     setSubmitting(true);
     try {
+      // Flujo de técnico invitado: registro local (sin Supabase) y asociación
+      // automática al taller del admin que generó el enlace.
+      if (inviteData && !inviteData.expired) {
+        const ok = registerUser(name.trim(), email.trim().toLowerCase(), false);
+        if (ok) {
+          notify(
+            '¡Bienvenido al equipo!',
+            `Tu cuenta de técnico fue creada y asociada al taller "${inviteData.workshopName}". Inicia sesión para empezar.`
+          );
+          router.replace('/login');
+        } else {
+          notify(
+            'No se pudo crear la cuenta',
+            'El dispositivo o el correo ya están registrados, o el taller alcanzó el límite de 5 técnicos. Contacta al dueño del taller.'
+          );
+        }
+        return;
+      }
+      // Flujo estándar: registro de dueño de taller.
       const { user, reason, pendingVerification: pending } = await registerOwner(
         name,
         email,
@@ -65,7 +96,6 @@ export default function SignUpScreen() {
         return;
       }
       if (pending) {
-        // El correo de Supabase incluye el enlace de confirmación.
         setPendingVerification(email.trim().toLowerCase());
         notify(
           'Verifica tu correo',
@@ -153,12 +183,33 @@ export default function SignUpScreen() {
   return (
     <Screen contentContainerStyle={styles.screen}>
       <ThemedView style={styles.card}>
+        {/* Encabezado contextual: taller propio o invitación de técnico */}
+        {inviteData?.expired ? (
+          <ThemedView style={styles.inviteBannerExpired}>
+            <ThemedText type="smallBold" style={styles.inviteBannerText}>
+              Esta invitación ha expirado.
+            </ThemedText>
+            <ThemedText type="small" style={styles.inviteBannerText}>
+              Solicita un nuevo enlace al dueño del taller.
+            </ThemedText>
+          </ThemedView>
+        ) : inviteData ? (
+          <ThemedView style={styles.inviteBanner}>
+            <ThemedText type="smallBold" style={styles.inviteBannerText}>
+              Has sido invitado a unirte como técnico
+            </ThemedText>
+            <ThemedText type="small" style={styles.inviteBannerText}>
+              Taller: {inviteData.workshopName}
+            </ThemedText>
+          </ThemedView>
+        ) : null}
         <ThemedText type="subtitle" style={styles.brand}>
-          Crea tu taller
+          {inviteData && !inviteData.expired ? 'Únete al equipo' : 'Crea tu taller'}
         </ThemedText>
         <ThemedText type="small" themeColor="textSecondary" style={styles.subtitle}>
-          Registra tu taller para administrar equipos y agregar técnicos. Te pediremos
-          confirmar tu correo con el enlace que te enviamos.
+          {inviteData && !inviteData.expired
+            ? `Regístrate para empezar a trabajar con el taller "${inviteData.workshopName}".`
+            : 'Registra tu taller para administrar equipos y agregar técnicos. Te pediremos confirmar tu correo con el enlace que te enviamos.'}
         </ThemedText>
 
         <FormInput
@@ -274,6 +325,29 @@ const styles = StyleSheet.create({
   },
   googleError: {
     color: Brand.danger,
+    textAlign: 'center',
+  },
+  inviteBanner: {
+    backgroundColor: 'rgba(16, 185, 129, 0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.40)',
+    borderRadius: Spacing.three,
+    padding: Spacing.three,
+    marginBottom: Spacing.two,
+    alignItems: 'center',
+    gap: Spacing.one,
+  },
+  inviteBannerExpired: {
+    backgroundColor: 'rgba(239, 68, 68, 0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.40)',
+    borderRadius: Spacing.three,
+    padding: Spacing.three,
+    marginBottom: Spacing.two,
+    alignItems: 'center',
+    gap: Spacing.one,
+  },
+  inviteBannerText: {
     textAlign: 'center',
   },
 });

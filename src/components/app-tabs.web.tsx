@@ -42,7 +42,7 @@ const bottomBarWebStyle = {
 export default function AppTabs() {
   const { width } = useWindowDimensions();
   const isDesktop = width >= BREAKPOINTS.tablet;
-  const slotStyle: ViewStyle = isDesktop ? styles.slotDesktop : { height: '100%' };
+  const slotStyle: ViewStyle = isDesktop ? styles.slotDesktop : styles.slotMobile;
 
   return (
     <Tabs>
@@ -209,7 +209,10 @@ const styles = StyleSheet.create({
   },
   slotDesktop: {
     marginLeft: SIDEBAR_WIDTH,
-    height: '100%',
+    flex: 1,
+  },
+  slotMobile: {
+    flex: 1,
   },
   sidebarContainer: {
     position: 'absolute',

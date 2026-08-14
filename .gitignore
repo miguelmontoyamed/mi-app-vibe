@@ -54,3 +54,7 @@ example
 
 # supabase local CLI state (never commit)
 supabase/.temp/
+
+# runtime logs & static export artifacts (dev tooling, never commit)
+*.log
+.e2e-export/
