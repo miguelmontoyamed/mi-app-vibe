@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured, getRedirectUrl } from '@/lib/supabase';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 import { Platform } from 'react-native';
 
@@ -248,42 +248,44 @@ export async function supabaseRestoreSession(): Promise<SupabaseUserProfile | nu
 /**
  * Google OAuth en WEB con redirección de ventana completa (SIN popups).
  *
- * Pide a Supabase la URL de autorización de Google y navega la VENTANA
- * PRINCIPAL a esa URL (`window.location.href = data.url`). Al volver de
- * Google a `redirectTo` (la raíz del sitio), `detectSessionInUrl` captura el
- * code/access_token de la URL y el listener `onAuthStateChange` del
- * AuthContext sincroniza la sesión con Expo Router.
+ * 🛑 FLUJO ESTRICTO PARA WEB: SIN POPUPS, SIN WEBBROWSER.
  *
- * `skipBrowserRedirect: true` NO abre ventanas: devuelve la URL y nosotros
- * decidimos navegar la pestaña actual. En móvil/nativo este flujo no aplica
- * (allí se usa el puente de expo-auth-session + id_token).
+ * `skipBrowserRedirect` se deja en su default (`false`): el SDK de Supabase
+ * ejecuta `window.location.assign(data.url)` y navega LA MISMA PESTAÑA
+ * completa (verificado en @supabase/auth-js 2.112.2, GoTrueClient.js:2135).
+ * Nunca se abre una ventana secundaria ni se usa WebBrowser.
+ *
+ * Al volver de Google a `redirectTo` (la raíz del sitio), `detectSessionInUrl`
+ * captura el code/access_token de la URL y el listener `onAuthStateChange` del
+ * AuthContext sincroniza la sesión con Expo Router.
  */
 export async function supabaseSignInWithGoogleRedirect(): Promise<
   | { ok: true }
   | { ok: false; message: string }
 > {
+  // Guardia absoluta: este flujo SOLO existe en web. En nativo no se ejecuta.
+  if (Platform.OS !== 'web' || typeof window === 'undefined') {
+    return { ok: false, message: 'El inicio con Google por redirección solo aplica en web.' };
+  }
   try {
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: getRedirectUrl(),
-        // true: Supabase NO abre popup; devuelve la URL y navegamos nosotros
-        // la ventana principal. false abriría una ventana emergente.
-        skipBrowserRedirect: true,
+        // La pestaña actual (misma ventana) es la que viaja a Google y vuelve.
+        redirectTo: window.location.origin,
+        // skipBrowserRedirect OMITIDO (default false): el SDK navega la
+        // ventana principal con window.location.assign. Sin popups.
       },
     });
     if (error) {
       return { ok: false, message: error.message };
     }
-    if (!data.url) {
-      return { ok: false, message: 'No se obtuvo la URL de autorización de Google.' };
-    }
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      // Redirección de ventana completa: reemplaza la página actual por Google.
+    // El SDK ya navegó la ventana principal (window.location.assign). Red de
+    // seguridad: si el entorno no llegó a navegar, forzamos la misma pestaña.
+    if (data?.url && window.location.href !== data.url) {
       window.location.href = data.url;
-      return { ok: true };
     }
-    return { ok: false, message: 'El inicio con Google por redirección solo aplica en web.' };
+    return { ok: true };
   } catch (cause) {
     return {
       ok: false,

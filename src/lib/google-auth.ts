@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { AccessTokenRequest, ResponseType } from 'expo-auth-session';
 import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
+import { Platform } from 'react-native';
 
 /**
  * Real Google OAuth sign-in (Authorization Code + PKCE) for web and native.
@@ -24,7 +25,13 @@ import * as WebBrowser from 'expo-web-browser';
  */
 
 // On web this closes the OAuth popup once Google redirects back to the app.
-WebBrowser.maybeCompleteAuthSession();
+// 🛑 WEB: este módulo NO debe ejecutar NINGUNA lógica de popup/ventana
+// secundaria. En web el Google sign-in usa la redirección de ventana completa
+// de Supabase (supabaseSignInWithGoogleRedirect); `maybeCompleteAuthSession`
+// solo corre en nativo (iOS/Android) donde sí hay un flujo in-app browser.
+if (Platform.OS !== 'web') {
+  WebBrowser.maybeCompleteAuthSession();
+}
 
 const GOOGLE_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID ?? '';
 const GOOGLE_CLIENT_SECRET = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_SECRET ?? '';
@@ -149,6 +156,12 @@ export function useGoogleSignIn(): {
   });
 
   const prompt = useCallback(async (): Promise<GoogleAuthResult | null> => {
+    // 🛑 WEB: barrera absoluta. Este hook es EXCLUSIVO del flujo nativo
+    // (expo-auth-session). En web jamás debe abrir popup/ventana secundaria:
+    // si algo lo invoca, retorna null sin tocar WebBrowser ni promptAsync.
+    if (Platform.OS === 'web') {
+      return null;
+    }
     if (!request || !GOOGLE_CLIENT_ID) {
       setError('Google no está configurado (falta EXPO_PUBLIC_GOOGLE_CLIENT_ID).');
       return null;

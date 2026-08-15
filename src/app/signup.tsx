@@ -147,9 +147,9 @@ export default function SignUpScreen() {
   };
 
   const handleGoogle = async () => {
-    // Web: flujo de redirección de ventana completa (sin popups). Supabase
-    // devuelve la URL de Google y navegamos la pestaña principal; al volver,
-    // el listener onAuthStateChange captura la sesión y el guard redirige.
+    // 🛑 FLUJO ESTRICTO PARA WEB: SIN POPUPS, SIN WEBBROWSER.
+    // Supabase navega la pestaña principal completa (window.location.assign)
+    // y el return inmediato evita que se ejecute CUALQUIER otra lógica.
     if (Platform.OS === 'web') {
       const result = await supabaseSignInWithGoogleRedirect();
       if (!result.ok) {
