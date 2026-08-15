@@ -140,6 +140,18 @@ update public.repairs
 alter table public.repairs drop constraint if exists repairs_cancellation_reason_check;
 alter table public.repairs drop column if exists cancellation_reason;
 
+-- Columnas de `profiles` que pueden faltar en una versión previa (v2 técnicos).
+-- OBLIGATORIO: el trigger handle_new_user inserta estas columnas; si la tabla
+-- no las tiene, el INSERT falla (error 42703) y el `exception when others`
+-- del trigger traga el error: la cuenta se crea SIN perfil y el usuario queda
+-- bloqueado (current_workshop_id() = null). Este bloque evita ese fallo.
+alter table public.profiles add column if not exists commission_rate numeric default 0
+  check (commission_rate >= 0 and commission_rate <= 1);
+alter table public.profiles add column if not exists is_active boolean default true;
+alter table public.profiles add column if not exists specialty text;
+alter table public.profiles add column if not exists joined_at timestamptz default now();
+alter table public.profiles add column if not exists notes text;
+
 -- CHECKs con los literales exactos de src/utils/repair-logic.ts (idempotente).
 alter table public.repairs drop constraint if exists repairs_status_check;
 alter table public.repairs add constraint repairs_status_check check (
