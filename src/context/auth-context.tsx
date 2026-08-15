@@ -166,12 +166,17 @@ interface ProfileRow {
   created_at: string;
 }
 
-/** Convierte el perfil de Supabase (sesión) en la forma local User de la app. */
-function profileToUser(profile: SupabaseUserProfile): User {
+/** Convierte el perfil de Supabase (sesión) en la forma local User de la app.
+ *  `authoritativeRole` (desde `profiles`) prevalece sobre el `user_metadata`
+ *  de la sesión, que NO es confiable: las cuentas creadas por Google
+ *  (signInWithIdToken) no traen `role` y `toProfile` las degrada a 'technician',
+ *  lo que ocultaría la administración al dueño del taller. */
+function profileToUser(profile: SupabaseUserProfile, authoritativeRole?: string): User {
+  const role = authoritativeRole ?? profile.role;
   return {
     id: profile.id,
     name: profile.name.trim() || profile.email.split('@')[0],
-    role: profile.role === 'technician' ? 'technician' : 'admin',
+    role: role === 'technician' ? 'technician' : 'admin',
     email: profile.email,
     commissionRate:
       profile.commission_rate != null ? Number(profile.commission_rate) : undefined,
@@ -191,6 +196,20 @@ function profileRowToUser(row: ProfileRow): User {
     role: row.role === 'technician' ? 'technician' : 'admin',
     commissionRate: row.commission_rate != null ? Number(row.commission_rate) : undefined,
   };
+}
+
+/** Devuelve el rol autoritativo del usuario desde `profiles` (fuente de verdad),
+ *  o null si no se puede resolver. La sesión NO es confiable para el rol:
+ *  `user_metadata.role` falta en cuentas creadas por Google y `toProfile` las
+ *  degrada a 'technician', ocultando la administración al dueño del taller. */
+async function fetchAuthoritativeRole(userId: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', userId)
+    .maybeSingle();
+  if (error || !data) return null;
+  return data.role;
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -248,7 +267,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         const profile = await supabaseRestoreSession();
         if (!cancelled && profile) {
-          setCurrentUser(profileToUser(profile));
+          const role = await fetchAuthoritativeRole(profile.id);
+          setCurrentUser(profileToUser(profile, role ?? undefined));
         }
         const { data: wid } = await supabase.rpc('current_workshop_id');
         if (!cancelled && typeof wid === 'string') {
@@ -287,10 +307,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
-        setCurrentUser(profileToUser(toProfile(session.user)));
-        // Mantener `users` al día con los miembros del taller.
+        const profile = toProfile(session.user);
+        // Rol autoritativo desde `profiles` (el metadata de la sesión no es
+        // confiable para cuentas Google). Actualiza `currentUser` y, de paso,
+        // los miembros del taller.
         (async () => {
           try {
+            const role = await fetchAuthoritativeRole(profile.id);
+            setCurrentUser(profileToUser(profile, role ?? undefined));
             const { data: wid } = await supabase.rpc('current_workshop_id');
             if (typeof wid === 'string') {
               setWorkshopId(wid);
@@ -312,7 +336,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Supabase SIEMPRE: no hay pool local ni cuentas seed.
     const result = await supabaseSignInWithPassword(needle, password);
     if (result.ok) {
-      const user = profileToUser(result.user);
+      const role = await fetchAuthoritativeRole(result.user.id);
+      const user = profileToUser(result.user, role ?? undefined);
       setCurrentUser(user);
       // Sincronizar los miembros del taller desde `profiles`.
       const { data: wid } = await supabase.rpc('current_workshop_id');
@@ -335,7 +360,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const result = await supabaseSignInWithGoogleIdToken(idToken);
       if (result.ok) {
-        const user = profileToUser(result.user);
+        const role = await fetchAuthoritativeRole(result.user.id);
+        const user = profileToUser(result.user, role ?? undefined);
         setCurrentUser(user);
         const { data: wid } = await supabase.rpc('current_workshop_id');
         if (typeof wid === 'string') {
