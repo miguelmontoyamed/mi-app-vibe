@@ -324,17 +324,21 @@ create policy "profiles_own_update" on public.profiles
   );
 
 -- Admins pueden gestionar los demás perfiles del taller (crear técnicos).
+-- NOTA: NO usar subquery sobre profiles aquí (recursión infinita 42P17:
+-- la política de profiles re-evalúa profiles). current_user_role() es
+-- SECURITY DEFINER y devuelve el rol sin volver a pasar por RLS.
 drop policy if exists "profiles_admin_manage_technicians" on public.profiles;
 create policy "profiles_admin_manage_technicians" on public.profiles
-  for all using (
+  for all
+  using (
     workshop_id = current_workshop_id()
-    and (
-      (auth.uid() != id and exists (
-        select 1 from public.profiles
-        where id = auth.uid() and role = 'admin'
-      ))
-      or auth.uid() = id
-    )
+    and auth.uid() != id
+    and public.current_user_role() = 'admin'
+  )
+  with check (
+    workshop_id = current_workshop_id()
+    and auth.uid() != id
+    and public.current_user_role() = 'admin'
   );
 
 -- ---- Clients / Repairs / Inventory: acceso por taller ----
