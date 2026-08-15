@@ -21,7 +21,11 @@ const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
  */
 const getRedirectUrl = () => {
   if (Platform.OS === 'web') {
-    return `${window.location.origin}/auth/callback`;
+    // Raíz de la app: al volver de Google, la app recarga aquí y
+    // `detectSessionInUrl` captura la sesión (code PKCE en la URL). No existe
+    // una ruta /auth/callback: el guard del router decide login vs. zona
+    // protegida a partir de la sesión restaurada.
+    return window.location.origin;
   }
   // Use Expo's auth proxy for native — requires adding the URL to Supabase dashboard
   return Linking.createURL('/auth/callback', { scheme: 'techrepair' });

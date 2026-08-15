@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
 import type { GoogleAuthResult } from '@/lib/google-auth';
-import { isSupabaseConfigured } from '@/lib/supabase';
+import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import {
   supabaseRestoreSession,
   supabaseResendRegistration,
@@ -10,6 +10,7 @@ import {
   supabaseSignInWithPassword,
   supabaseSignOut,
   supabaseSignUp,
+  toProfile,
 } from '@/lib/supabase-auth';
 import type { SupabaseUserProfile } from '@/lib/supabase-auth';
 import {
@@ -232,6 +233,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  // Listener global de sesión de Supabase. Captura el retorno de Google OAuth
+  // (tokens en la URL), refrescos de token y cierres de sesión. Mantiene
+  // `currentUser` sincronizado con la fuente de verdad (Supabase) y permite
+  // que el guard del router navegue a la zona protegida sin recargar.
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        setCurrentUser(toLocalUser(toProfile(session.user)));
+      } else {
+        setCurrentUser(null);
+      }
+    });
+    return () => subscription.unsubscribe();
   }, []);
 
   // Persist the active session (user id only) so a web reload / app restart

@@ -10,6 +10,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Brand, Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { isGoogleConfigured, useGoogleSignIn } from '@/lib/google-auth';
+import { supabaseSignInWithGoogleRedirect } from '@/lib/supabase-auth';
 
 const notify = (title: string, message: string) => {
   if (Platform.OS === 'web') {
@@ -71,6 +72,17 @@ export default function LoginScreen() {
   };
 
   const handleGoogle = async () => {
+    // Web: flujo de redirección de ventana completa (sin popups). Supabase
+    // devuelve la URL de Google y navegamos la pestaña principal; al volver,
+    // el listener onAuthStateChange captura la sesión y el guard redirige.
+    if (Platform.OS === 'web') {
+      const result = await supabaseSignInWithGoogleRedirect();
+      if (!result.ok) {
+        notify('Error de acceso', result.message);
+      }
+      return;
+    }
+    // Nativo: puente expo-auth-session (in-app browser) + id_token.
     if (!isGoogleConfigured) {
       notify(
         'Google no configurado',

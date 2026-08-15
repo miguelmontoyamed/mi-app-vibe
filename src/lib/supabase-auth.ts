@@ -1,5 +1,6 @@
-import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { supabase, isSupabaseConfigured, getRedirectUrl } from '@/lib/supabase';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
+import { Platform } from 'react-native';
 
 /**
  * Capa de autenticación real sobre Supabase Auth (email + password y Google).
@@ -49,7 +50,7 @@ export type SignInResult =
     };
 
 /** Construye el perfil de app desde el usuario de una sesión de Supabase. */
-function toProfile(authUser: SupabaseUser): SupabaseUserProfile {
+export function toProfile(authUser: SupabaseUser): SupabaseUserProfile {
   const metadata = authUser.user_metadata ?? {};
   const googleIdentity = (authUser.identities ?? []).find(
     (identity) => identity.provider === 'google'
@@ -241,5 +242,52 @@ export async function supabaseRestoreSession(): Promise<SupabaseUserProfile | nu
     return toProfile(data.session.user);
   } catch {
     return null;
+  }
+}
+
+/**
+ * Google OAuth en WEB con redirección de ventana completa (SIN popups).
+ *
+ * Pide a Supabase la URL de autorización de Google y navega la VENTANA
+ * PRINCIPAL a esa URL (`window.location.href = data.url`). Al volver de
+ * Google a `redirectTo` (la raíz del sitio), `detectSessionInUrl` captura el
+ * code/access_token de la URL y el listener `onAuthStateChange` del
+ * AuthContext sincroniza la sesión con Expo Router.
+ *
+ * `skipBrowserRedirect: true` NO abre ventanas: devuelve la URL y nosotros
+ * decidimos navegar la pestaña actual. En móvil/nativo este flujo no aplica
+ * (allí se usa el puente de expo-auth-session + id_token).
+ */
+export async function supabaseSignInWithGoogleRedirect(): Promise<
+  | { ok: true }
+  | { ok: false; message: string }
+> {
+  try {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: getRedirectUrl(),
+        // true: Supabase NO abre popup; devuelve la URL y navegamos nosotros
+        // la ventana principal. false abriría una ventana emergente.
+        skipBrowserRedirect: true,
+      },
+    });
+    if (error) {
+      return { ok: false, message: error.message };
+    }
+    if (!data.url) {
+      return { ok: false, message: 'No se obtuvo la URL de autorización de Google.' };
+    }
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      // Redirección de ventana completa: reemplaza la página actual por Google.
+      window.location.href = data.url;
+      return { ok: true };
+    }
+    return { ok: false, message: 'El inicio con Google por redirección solo aplica en web.' };
+  } catch (cause) {
+    return {
+      ok: false,
+      message: cause instanceof Error ? cause.message : 'No se pudo conectar con Google.',
+    };
   }
 }
