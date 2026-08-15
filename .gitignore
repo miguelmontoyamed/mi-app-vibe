@@ -58,3 +58,7 @@ supabase/.temp/
 # runtime logs & static export artifacts (dev tooling, never commit)
 *.log
 .e2e-export/
+
+# Playwright artifacts (QA e2e)
+test-results/
+playwright-report/
