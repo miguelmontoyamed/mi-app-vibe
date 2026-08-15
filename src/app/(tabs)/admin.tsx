@@ -42,6 +42,8 @@ export default function AdminScreen() {
     registerUser,
     generateInviteLink,
     inviteLink,
+    createTechnician,
+    deleteTechnician,
   } = useAuth();
   const { repairs, inventory } = useRepair();
   const router = useRouter();
@@ -52,6 +54,11 @@ export default function AdminScreen() {
   const [regName, setRegName] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regRole, setRegRole] = useState<'admin' | 'technician'>('technician');
+
+  // Technician management form states
+  const [techName, setTechName] = useState('');
+  const [techEmail, setTechEmail] = useState('');
+  const [techCommission, setTechCommission] = useState('');
 
   // Support ticket state
   const [supportType, setSupportType] = useState(SUPPORT_TYPES[0]);
@@ -182,6 +189,55 @@ export default function AdminScreen() {
       navigator.clipboard.writeText(inviteLink.url).then(() => notify('Enlace copiado al portapapeles.'));
     } else {
       notify(`Enlace de invitación:\n\n${inviteLink.url}`);
+    }
+  };
+
+  const handleDeleteTechnician = (tech: (typeof users)[number]) => {
+    const confirmDelete = () => {
+      const deleted = deleteTechnician(tech.id);
+      if (deleted) {
+        notify('Técnico eliminado.');
+      } else {
+        notify('No se puede eliminar este técnico.');
+      }
+    };
+    if (Platform.OS === 'web') {
+      if (window.confirm(`¿Eliminar a ${tech.name} del taller?`)) {
+        confirmDelete();
+      }
+    } else {
+      Alert.alert('Eliminar técnico', `¿Eliminar a ${tech.name} del taller?`, [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Eliminar', style: 'destructive', onPress: confirmDelete },
+      ]);
+    }
+  };
+
+  const handleAddTechnician = () => {
+    if (!techName.trim() || !techEmail.trim()) {
+      notify('Complete todos los campos para agregar el técnico.');
+      return;
+    }
+    if (!EMAIL_REGEX.test(techEmail.trim())) {
+      notify('Ingrese un correo electrónico válido.');
+      return;
+    }
+    const result = createTechnician(
+      techName.trim(),
+      techEmail.trim(),
+      Number(techCommission) / 100
+    );
+    if (result.ok) {
+      setTechName('');
+      setTechEmail('');
+      setTechCommission('');
+      notify('Técnico agregado al taller.');
+    } else if (result.reason === 'limit') {
+      notify(
+        `Límite alcanzado: el taller tiene el máximo de ${MAX_TECHNICIANS} técnicos permitidos.`
+      );
+    } else {
+      notify('Ya existe un usuario con ese correo.');
     }
   };
 
@@ -378,6 +434,96 @@ export default function AdminScreen() {
               Aún no hay un enlace activo. Genera uno para invitar a un técnico.
             </ThemedText>
           )}
+        </ThemedView>
+      )}
+
+      {/* Technician Management Card */}
+      {currentUser.role === 'admin' && (
+        <ThemedView type="backgroundElement" style={styles.card}>
+          <ThemedText type="subtitle">Gestión de Técnicos</ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">
+            {users.filter((u) => u.role === 'technician').length} de {MAX_TECHNICIANS}{' '}
+            técnicos
+          </ThemedText>
+
+          {users.filter((u) => u.role === 'technician').length === 0 ? (
+            <ThemedText
+              type="small"
+              themeColor="textSecondary"
+              style={{ fontStyle: 'italic' }}>
+              Aún no hay técnicos. Genera un enlace de invitación o agrega uno
+              manualmente.
+            </ThemedText>
+          ) : (
+            users
+              .filter((u) => u.role === 'technician')
+              .map((u) => (
+                <View key={u.id} style={styles.techRow}>
+                  <View style={styles.techInfo}>
+                    <ThemedText type="smallBold">{u.name}</ThemedText>
+                    <ThemedText type="small" themeColor="textSecondary">
+                      {u.email} · Comisión:{' '}
+                      {Math.round((u.commissionRate ?? 0) * 100) + '%'}
+                    </ThemedText>
+                  </View>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.deleteButton,
+                      pressed && styles.pressed,
+                    ]}
+                    onPress={() => handleDeleteTechnician(u)}>
+                    <ThemedText style={styles.deleteButtonText}>Eliminar</ThemedText>
+                  </Pressable>
+                </View>
+              ))
+          )}
+
+          <View style={styles.techForm}>
+            <TextInput
+              style={[
+                styles.input,
+                { color: theme.text, borderColor: theme.backgroundElement },
+              ]}
+              placeholder="Nombre"
+              placeholderTextColor="#9ca3af"
+              value={techName}
+              onChangeText={setTechName}
+              maxLength={80}
+            />
+            <TextInput
+              style={[
+                styles.input,
+                { color: theme.text, borderColor: theme.backgroundElement },
+              ]}
+              placeholder="Correo"
+              placeholderTextColor="#9ca3af"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              value={techEmail}
+              onChangeText={setTechEmail}
+              maxLength={100}
+            />
+            <TextInput
+              style={[
+                styles.input,
+                { color: theme.text, borderColor: theme.backgroundElement },
+              ]}
+              placeholder="Comisión % (Ej: 30)"
+              placeholderTextColor="#9ca3af"
+              keyboardType="number-pad"
+              value={techCommission}
+              onChangeText={(t) => setTechCommission(t.replace(/[^0-9]/g, ''))}
+              maxLength={3}
+            />
+            <Pressable
+              style={({ pressed }) => [
+                styles.primaryButton,
+                pressed && styles.pressed,
+              ]}
+              onPress={handleAddTechnician}>
+              <ThemedText style={styles.buttonText}>Agregar Técnico</ThemedText>
+            </Pressable>
+          </View>
         </ThemedView>
       )}
 
@@ -703,5 +849,33 @@ const styles = StyleSheet.create({
   logoutButtonText: {
     color: '#ffffff',
     fontWeight: '700',
+  },
+  techRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.two,
+    paddingVertical: Spacing.one,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.06)',
+  },
+  techInfo: {
+    flex: 1,
+    gap: Spacing.one,
+  },
+  deleteButton: {
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.one,
+    borderRadius: Spacing.two,
+  },
+  deleteButtonText: {
+    color: '#ef4444',
+    fontWeight: '600',
+    fontSize: 12,
+  },
+  techForm: {
+    gap: Spacing.two,
+    marginTop: Spacing.one,
   },
 });
