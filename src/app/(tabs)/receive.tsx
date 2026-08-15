@@ -117,7 +117,7 @@ export default function ReceiveScreen() {
 
     const advanceNum = advancePayment.trim() ? (parseMoney(advancePayment) ?? 0) : 0;
 
-    addRepair({
+    await addRepair({
       clientName: clientName.trim(),
       phone: phone.trim(),
       device: device.trim(),

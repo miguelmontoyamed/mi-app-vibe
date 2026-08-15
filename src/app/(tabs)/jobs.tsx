@@ -99,7 +99,7 @@ export default function JobsScreen() {
     }
   };
 
-  const handleSubmitPayment = (id: string, budget: number, advance: number) => {
+  const handleSubmitPayment = async (id: string, budget: number, advance: number) => {
     const remaining = Math.max(0, budget - advance);
     const value = paymentInput.trim() ? (parseCOPInput(paymentInput) ?? 0) : remaining;
     if (value <= 0) {
@@ -107,7 +107,7 @@ export default function JobsScreen() {
       return;
     }
     const applied = Math.min(value, remaining);
-    recordRepairPayment(id, applied, paymentMethod);
+    await recordRepairPayment(id, applied, paymentMethod);
     if (Platform.OS === 'web') {
       window.alert(
         `Pago registrado: ${formatCOP(applied)}${applied < value ? ' (supera el saldo, se tomó el saldo)' : ''}`
@@ -329,7 +329,7 @@ export default function JobsScreen() {
                       <Pressable
                         key={st}
                         disabled={item.status === st}
-                        onPress={() => updateRepairStatus(item.id, st)}
+                        onPress={() => void updateRepairStatus(item.id, st)}
                         style={[
                           styles.actionBtn,
                           item.status === st

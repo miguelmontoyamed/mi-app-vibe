@@ -1,8 +1,8 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { Alert, Platform } from 'react-native';
 
 import type { GoogleAuthResult } from '@/lib/google-auth';
-import { isSupabaseConfigured, supabase } from '@/lib/supabase';
+import { getSupabaseEnvError, isSupabaseConfigured, supabase } from '@/lib/supabase';
 import {
   supabaseRestoreSession,
   supabaseResendRegistration,
@@ -26,15 +26,13 @@ export type UserRole = 'admin' | 'technician';
 export interface User {
   id: string;
   name: string;
-  password: string;
-  role: UserRole;
   email: string;
+  role: UserRole;
   /** Comisión del % del presupuesto (0.30 = 30%), solo para técnicos. */
   commissionRate?: number;
-  deviceFingerprint?: string; // Simulate device block simulation
-  isGoogle?: boolean; // Simulated Google account (no password needed)
-  avatarUrl?: string; // Google profile picture
-  googleId?: string; // Google subject id
+  isGoogle?: boolean; // Cuenta de Google (sin password)
+  avatarUrl?: string; // Foto de perfil de Google
+  googleId?: string; // Subject id de Google
 }
 
 /** Resultado del login: usuario autenticado o motivo del rechazo. */
@@ -68,21 +66,20 @@ export interface InviteLink {
 interface AuthContextType {
   currentUser: User | null;
   isAuthenticated: boolean;
-  /** True cuando AsyncStorage terminó de hidratar usuarios/sesión y Supabase
-   *  verificó si existe una sesión persistida. El router debe esperarlo antes
+  /** True cuando Supabase terminó de restaurar la sesión y cargar los
+   *  miembros del taller desde `profiles`. El router debe esperarlo antes
    *  de decidir entre login y la zona protegida. */
   hydrated: boolean;
+  /** Miembros del taller: filas de `public.profiles` (role technician/admin). */
   users: User[];
   license: LicenseInfo;
   inviteLink: InviteLink | null;
-  blockedDevices: string[];
-  switchUser: (userId: string) => void;
-  /** Login real (Supabase) cuando está configurado; cae al pool demo local si
-   *  no (p. ej. cuentas seed). Un correo sin verificar se bloquea con
-   *  `reason: 'unconfirmed'` y NUNCA cae al pool local. */
+  /** Error visible de hidratación (env faltante), o null. */
+  loadError: string | null;
+  /** Login real (Supabase). Un correo sin verificar se bloquea con
+   *  `reason: 'unconfirmed'`. No hay fallback local. */
   login: (email: string, password: string) => Promise<LoginResult>;
-  /** Google: puentea el id_token a Supabase (crea/víncula la sesión). Sin
-   *  Supabase configurado, simula el usuario Google localmente (demo). */
+  /** Google: puentea el id_token a Supabase (crea/víncula la sesión). */
   signInWithGoogle: (auth: GoogleAuthResult) => Promise<User | null>;
   logout: () => Promise<void>;
   registerOwner: (
@@ -97,21 +94,26 @@ interface AuthContextType {
   }>;
   /** Reenvía el correo de confirmación del registro. */
   resendRegistration: (email: string) => Promise<boolean>;
-  /** Crea un técnico (Dueño). Devuelve { ok } o el motivo del rechazo. */
+  /** Crea un técnico REAL en Supabase (cuenta pendiente de verificación).
+   *  Devuelve { ok } o el motivo del rechazo. */
   createTechnician: (
     name: string,
     email: string,
     commissionRate: number
-  ) => { ok: boolean; reason?: 'email' | 'limit' };
-  /** Elimina un técnico. Devuelve false si no existe o es el usuario actual. */
-  deleteTechnician: (id: string) => boolean;
+  ) => Promise<{
+    ok: boolean;
+    reason?: 'email' | 'limit' | 'unknown';
+    message?: string;
+  }>;
+  /** Elimina (soft delete) un técnico. Devuelve false si no existe o es el
+   *  usuario actual. */
+  deleteTechnician: (id: string) => Promise<boolean>;
   verifyLicense: (key: string) => boolean;
   renewSubscription: () => void;
-  registerUser: (name: string, email: string, isOwner: boolean) => boolean;
-  /** Registra a un técnico invitado por enlace. Con Supabase crea la cuenta
-   *  real (role='technician' + workshop_id del taller del admin) y requiere
-   *  confirmar el correo; sin Supabase cae a la simulación local (demo).
-   *  Devuelve `pendingVerification: true` cuando hay que confirmar el correo. */
+  /** Registra a un técnico invitado por enlace. Crea la cuenta REAL
+   *  (role='technician' + workshop_id del taller del admin) y requiere
+   *  confirmar el correo. Devuelve `pendingVerification: true` cuando hay
+   *  que confirmar el correo. */
   registerInvitedTechnician: (
     name: string,
     email: string,
@@ -124,14 +126,9 @@ interface AuthContextType {
   generateInviteLink: () => string | null;
   /** Valida un token de invitación decodificado; devuelve el workshopId si es válido. */
   validateInviteLink: (encodedToken: string) => InviteValidation;
-  simulateDeviceLock: (fingerprint: string) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-const USERS_STORAGE_KEY = 'techrepair.users.v1';
-/** Persiste solo el id del usuario activo, para restaurar la sesión en reload/restart. */
-const SESSION_STORAGE_KEY = 'techrepair.session.v1';
 
 /** Límite estricto de técnicos por taller/entorno (requisito de licenciamiento). */
 export const MAX_TECHNICIANS = 5;
@@ -154,31 +151,52 @@ const DEFAULT_LICENSE: LicenseInfo = {
 // a production build must validate license keys against a server.
 const PRO_LICENSE_REGEX = /^TR-PRO-[A-Z0-9-]{12,}$/;
 
-/** Pool local sin usuarios: la única forma de entrar es registrarse con Supabase. */
-const SEED_USERS: User[] = [];
+/** Fila de `public.profiles` (PostgreSQL). No contiene email: vive en
+ *  `auth.users` y no es consultable desde el cliente. */
+interface ProfileRow {
+  id: string;
+  workshop_id: string;
+  full_name: string | null;
+  role: string;
+  commission_rate: number | null;
+  is_active: boolean | null;
+  specialty: string | null;
+  joined_at: string | null;
+  notes: string | null;
+  created_at: string;
+}
 
-/** Convierte el perfil de Supabase en la forma local User de la app. */
-function toLocalUser(profile: SupabaseUserProfile): User {
+/** Convierte el perfil de Supabase (sesión) en la forma local User de la app. */
+function profileToUser(profile: SupabaseUserProfile): User {
   return {
     id: profile.id,
     name: profile.name.trim() || profile.email.split('@')[0],
-    password: '', // Supabase guarda el hash; la app no lo necesita.
-    // El rol real viene del perfil de Supabase (admin del taller o técnico
-    // invitado). Antes se forzaba 'admin' para el dueño; los técnicos
-    // invitados deben conservar su rol para que RLS y visibilidad funcionen.
     role: profile.role === 'technician' ? 'technician' : 'admin',
     email: profile.email,
+    commissionRate:
+      profile.commission_rate != null ? Number(profile.commission_rate) : undefined,
     isGoogle: profile.isGoogle,
     avatarUrl: profile.avatarUrl,
     googleId: profile.googleId,
   };
 }
 
+/** Convierte una fila de `profiles` en la forma local User. `email` queda ''
+ *  porque la tabla no lo tiene (no se fabrica). */
+function profileRowToUser(row: ProfileRow): User {
+  return {
+    id: row.id,
+    name: row.full_name ?? '',
+    email: '',
+    role: row.role === 'technician' ? 'technician' : 'admin',
+    commissionRate: row.commission_rate != null ? Number(row.commission_rate) : undefined,
+  };
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [users, setUsers] = useState<User[]>(SEED_USERS);
+  const [users, setUsers] = useState<User[]>([]);
 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [blockedDevices, setBlockedDevices] = useState<string[]>(['DEV-FNG-HW-BAD6']); // Simulated blocklist
   const [inviteLink, setInviteLink] = useState<InviteLink | null>(null);
 
   // Default Licencia Inicial (90 días de evaluación). Para probar UI se puede
@@ -186,46 +204,70 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [license, setLicense] = useState<LicenseInfo>(DEFAULT_LICENSE);
 
   const [hydrated, setHydrated] = useState(false);
+  /** Error visible de hidratación (env faltante), o null. */
+  const [loadError, setLoadError] = useState<string | null>(null);
+  /** Workshop id resuelto vía `current_workshop_id()` (SECURITY DEFINER). */
+  const [workshopId, setWorkshopId] = useState<string | null>(null);
 
-  // Hydrate: pool local + sesión persistida de Supabase (una sola vez). La
-  // sesión de Supabase es la fuente de verdad para `currentUser`.
+  /** Muestra un error visible en web (window.alert) o nativo (Alert.alert). */
+  const notifyError = (message: string) => {
+    if (Platform.OS === 'web') {
+      window.alert(message);
+    } else {
+      Alert.alert('Error', message);
+    }
+  };
+
+  /** Recarga los miembros del taller desde `profiles` (fuente de verdad). */
+  const refreshUsers = useCallback(async (wid: string) => {
+    const { data: profilesData, error: profilesError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('workshop_id', wid)
+      .order('created_at', { ascending: true });
+    if (!profilesError && profilesData) {
+      setUsers(
+        (profilesData as ProfileRow[])
+          .filter((row) => row.is_active !== false)
+          .map(profileRowToUser)
+      );
+    }
+  }, []);
+
+  // Hydrate: sesión de Supabase + miembros del taller desde `profiles` (una
+  // sola vez). La sesión de Supabase es la fuente de verdad para `currentUser`
+  // y `profiles` para `users`. Sin Supabase configurado NO se siembran
+  // usuarios: solo se reporta el error de entorno.
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        let parsed: unknown = null;
-        const [raw, profile] = await Promise.all([
-          AsyncStorage.getItem(USERS_STORAGE_KEY).catch(() => null),
-          supabaseRestoreSession(),
-        ]);
-        if (raw && !cancelled) {
-          parsed = JSON.parse(raw);
-          if (Array.isArray(parsed)) {
-            setUsers(parsed);
-          }
+        if (!isSupabaseConfigured) {
+          setLoadError(getSupabaseEnvError() ?? 'Supabase no está configurado.');
+          return;
         }
-        // Al registrar un usuario real la sesión de Supabase se crea al
-        // confirmar el correo; al recargar se restaura desde ahí.
+        const profile = await supabaseRestoreSession();
         if (!cancelled && profile) {
-          setCurrentUser(toLocalUser(profile));
-        } else if (!cancelled && !profile) {
-          // Session local demo (no hay Supabase configurado o sin sesión).
-          const sessionRaw = await AsyncStorage.getItem(SESSION_STORAGE_KEY);
-          if (sessionRaw) {
-            try {
-              const session = JSON.parse(sessionRaw) as { userId?: string } | null;
-              const pool: User[] = Array.isArray(parsed) ? parsed : SEED_USERS;
-              const resume = pool.find((u) => u.id === session?.userId);
-              if (resume) {
-                setCurrentUser(resume);
-              }
-            } catch (error) {
-              console.error('Error restoring TechRepair session:', error);
-            }
+          setCurrentUser(profileToUser(profile));
+        }
+        const { data: wid } = await supabase.rpc('current_workshop_id');
+        if (!cancelled && typeof wid === 'string') {
+          setWorkshopId(wid);
+          const { data: profilesData, error: profilesError } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('workshop_id', wid)
+            .order('created_at', { ascending: true });
+          if (!cancelled && !profilesError && profilesData) {
+            setUsers(
+              (profilesData as ProfileRow[])
+                .filter((row) => row.is_active !== false)
+                .map(profileRowToUser)
+            );
           }
         }
       } catch (error) {
-        console.error('Error loading TechRepair users:', error);
+        console.error('Error loading TechRepair session:', error);
       } finally {
         if (!cancelled) setHydrated(true);
       }
@@ -237,151 +279,75 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Listener global de sesión de Supabase. Captura el retorno de Google OAuth
   // (tokens en la URL), refrescos de token y cierres de sesión. Mantiene
-  // `currentUser` sincronizado con la fuente de verdad (Supabase) y permite
-  // que el guard del router navegue a la zona protegida sin recargar.
+  // `currentUser` y `users` sincronizados con la fuente de verdad (Supabase)
+  // y permite que el guard del router navegue a la zona protegida sin recargar.
   useEffect(() => {
     if (!isSupabaseConfigured) return;
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
-        setCurrentUser(toLocalUser(toProfile(session.user)));
+        setCurrentUser(profileToUser(toProfile(session.user)));
+        // Mantener `users` al día con los miembros del taller.
+        (async () => {
+          try {
+            const { data: wid } = await supabase.rpc('current_workshop_id');
+            if (typeof wid === 'string') {
+              setWorkshopId(wid);
+              await refreshUsers(wid);
+            }
+          } catch {
+            // Ignorar: el listener no debe romper por un refresh fallido.
+          }
+        })();
       } else {
         setCurrentUser(null);
       }
     });
     return () => subscription.unsubscribe();
-  }, []);
-
-  // Persist the active session (user id only) so a web reload / app restart
-  // keeps the user signed in. Source of truth for the user remains the users key.
-  useEffect(() => {
-    if (!hydrated) return;
-    try {
-      if (currentUser) {
-        AsyncStorage.setItem(
-          SESSION_STORAGE_KEY,
-          JSON.stringify({ userId: currentUser.id })
-        ).catch((error) => console.error('Error saving TechRepair session:', error));
-      } else {
-        AsyncStorage.removeItem(SESSION_STORAGE_KEY).catch((error) =>
-          console.error('Error clearing TechRepair session:', error)
-        );
-      }
-    } catch (error) {
-      console.error('Error saving TechRepair session:', error);
-    }
-  }, [currentUser, hydrated]);
-
-  // Persist users after hydration so we never overwrite stored data with seeds.
-  useEffect(() => {
-    if (!hydrated) return;
-    try {
-      AsyncStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users)).catch(
-        (error) => console.error('Error saving TechRepair users:', error)
-      );
-    } catch (error) {
-      console.error('Error saving TechRepair users:', error);
-    }
-  }, [users, hydrated]);
-
-  const switchUser = (userId: string) => {
-    const found = users.find((u) => u.id === userId);
-    if (found) {
-      setCurrentUser(found);
-    }
-  };
-
-  /** Resuelve un correo contra el pool demo local. */
-  const localLogin = (email: string, password: string): User | null => {
-    const needle = email.trim().toLowerCase();
-    const found =
-      users.find((u) => u.email.toLowerCase() === needle) ?? null;
-
-    if (!found) {
-      return null;
-    }
-    if (!found.isGoogle && found.password !== password) {
-      return null;
-    }
-    return found;
-  };
+  }, [refreshUsers]);
 
   const login = async (email: string, password: string): Promise<LoginResult> => {
     const needle = email.trim().toLowerCase();
-    // Reales con Supabase (requiere verificación previa del correo). Un correo
-    // sin confirmar se bloquea aquí y NUNCA cae al pool local (demo).
-    if (isSupabaseConfigured && needle.includes('@')) {
-      const result = await supabaseSignInWithPassword(needle, password);
-      if (result.ok) {
-        const user = toLocalUser(result.user);
-        setCurrentUser(user);
-        return { ok: true, user };
+    // Supabase SIEMPRE: no hay pool local ni cuentas seed.
+    const result = await supabaseSignInWithPassword(needle, password);
+    if (result.ok) {
+      const user = profileToUser(result.user);
+      setCurrentUser(user);
+      // Sincronizar los miembros del taller desde `profiles`.
+      const { data: wid } = await supabase.rpc('current_workshop_id');
+      if (typeof wid === 'string') {
+        setWorkshopId(wid);
+        await refreshUsers(wid);
       }
-      if (result.reason === 'unconfirmed') {
-        return { ok: false, reason: 'unconfirmed' };
-      }
-      // Si las credenciales no existen en Supabase (p. demo seeds) se cae al
-      // pool local para no romper la experiencia demo.
+      return { ok: true, user };
     }
-    const local = localLogin(needle, password);
-    if (local) {
-      setCurrentUser(local);
-      return { ok: true, user: local };
-    }
-    return { ok: false, reason: 'invalid' };
+    return { ok: false, reason: result.reason };
   };
 
   /**
    * Google real: usa el id_token que google-auth.ts obtuvo del endpoint OAuth
    * y lo puentea a Supabase (`signInWithIdToken`), que crea o vincula la
-   * sesión. Sin Supabase configurado, cae a la simulación local (demo).
+   * sesión. Sin Supabase configurado no hay simulación local: devuelve null.
    */
   const signInWithGoogle = async (auth: GoogleAuthResult): Promise<User | null> => {
-    const { profile, idToken } = auth;
-    if (isSupabaseConfigured) {
-      try {
-        const result = await supabaseSignInWithGoogleIdToken(idToken);
-        if (result.ok) {
-          const user = toLocalUser(result.user);
-          setCurrentUser(user);
-          return user;
+    const { idToken } = auth;
+    try {
+      const result = await supabaseSignInWithGoogleIdToken(idToken);
+      if (result.ok) {
+        const user = profileToUser(result.user);
+        setCurrentUser(user);
+        const { data: wid } = await supabase.rpc('current_workshop_id');
+        if (typeof wid === 'string') {
+          setWorkshopId(wid);
+          await refreshUsers(wid);
         }
-      } catch {
-        // Fallback a local si el puente falla (red, token expirado, etc.)
+        return user;
       }
+    } catch {
+      // Sin fallback local: el error lo reporta el llamador (login.tsx).
     }
-
-    // === Simulación local (demo sin backend que vincular) ===
-    const email = profile.email.trim().toLowerCase();
-    if (!email) {
-      return null;
-    }
-    let existing =
-      users.find((u) => u.isGoogle && u.googleId === profile.googleId) ??
-      users.find((u) => u.isGoogle && u.email.toLowerCase() === email) ??
-      null;
-
-    if (!existing) {
-      const newGoogle: User = {
-        id: 'g-' + Date.now().toString(),
-        name: profile.name.trim() || email.split('@')[0].replace(/[._-]+/g, ' '),
-        password: '',
-        role: 'admin',
-        email,
-        isGoogle: true,
-        avatarUrl: profile.picture,
-        googleId: profile.googleId,
-      };
-      setUsers((prev) => [...prev, newGoogle]);
-      existing = newGoogle;
-    } else if (profile.picture && !existing.avatarUrl) {
-      const enriched = { ...existing, avatarUrl: profile.picture };
-      setUsers((prev) => prev.map((u) => (u.id === existing?.id ? enriched : u)));
-      existing = enriched;
-    }
-    setCurrentUser(existing);
-    return existing;
+    return null;
   };
 
   const logout = async () => {
@@ -418,105 +384,91 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   /**
-   * Creates a technician account (owner action). Rejects duplicates by email
-   * and enforces the strict 5-technician limit per workshop.
-   * Commission rate is a fraction (0.30 = 30%).
+   * Creates a REAL technician account in Supabase (owner action). Rejects
+   * duplicates by email and enforces the strict 5-technician limit per
+   * workshop. Commission rate is a fraction (0.30 = 30%).
+   *
+   * La cuenta queda pendiente de verificación: el técnico recibe el correo de
+   * confirmación de Supabase y puede restablecer su contraseña. El trigger
+   * `handle_new_user` crea su fila en `profiles` (role='technician').
    */
-  const createTechnician = (
+  const createTechnician = async (
     name: string,
     email: string,
     commissionRate: number
-  ): { ok: boolean; reason?: 'email' | 'limit' } => {
+  ): Promise<{
+    ok: boolean;
+    reason?: 'email' | 'limit' | 'unknown';
+    message?: string;
+  }> => {
     const normalizedEmail = email.trim().toLowerCase();
     const techCount = users.filter((u) => u.role === 'technician').length;
     if (techCount >= MAX_TECHNICIANS) {
       return { ok: false, reason: 'limit' };
     }
-    const emailTaken = users.some(
-      (u) => !u.isGoogle && u.email.toLowerCase() === normalizedEmail
-    );
-    if (emailTaken) {
-      return { ok: false, reason: 'email' };
+    // Resolver el taller actual (mismo patrón que repair/workshop contexts).
+    let wid = workshopId;
+    if (!wid) {
+      const { data } = await supabase.rpc('current_workshop_id');
+      if (typeof data === 'string') {
+        wid = data;
+        setWorkshopId(data);
+      }
+    }
+    if (!wid) {
+      return { ok: false, reason: 'unknown', message: 'No se pudo resolver el taller actual.' };
     }
 
     const safeRate = Number.isFinite(commissionRate)
       ? Math.min(1, Math.max(0, commissionRate))
       : 0;
 
-    const newUser: User = {
-      id: Date.now().toString(),
-      name: name.trim(),
-      email: normalizedEmail,
-      password: 'tec-' + Math.random().toString(36).slice(2, 8),
+    // Contraseña temporal: el técnico recibe el correo de confirmación de
+    // Supabase y puede restablecerla desde ahí.
+    const tempPassword = 'trm-' + Math.random().toString(36).slice(2, 10);
+    const result = await supabaseSignUp(name, normalizedEmail, tempPassword, {
+      full_name: name,
       role: 'technician',
-      commissionRate: safeRate,
-      deviceFingerprint: 'DEV-FNG-HW-' + Math.floor(Math.random() * 9000 + 1000),
-    };
-
-    setUsers((prev) => [...prev, newUser]);
+      workshop_id: wid,
+      commission_rate: safeRate,
+    });
+    if (!result.ok) {
+      return {
+        ok: false,
+        reason: result.reason === 'email' ? 'email' : 'unknown',
+        message: result.message,
+      };
+    }
+    // Refrescar la lista de miembros (el trigger ya creó la fila en profiles).
+    await refreshUsers(wid);
     return { ok: true };
   };
 
-  /** Removes a technician account. Never the currently signed-in user. */
-  const deleteTechnician = (id: string): boolean => {
+  /** Removes a technician account (soft delete). Never the current user. */
+  const deleteTechnician = async (id: string): Promise<boolean> => {
     if (!users.some((u) => u.id === id && u.role === 'technician')) {
       return false;
     }
     if (currentUser?.id === id) {
       return false;
     }
+    // Soft delete: cero pérdida de datos (is_active=false).
+    const { error } = await supabase
+      .from('profiles')
+      .update({ is_active: false })
+      .eq('id', id);
+    if (error) {
+      console.error('Error deleting technician:', error);
+      return false;
+    }
     setUsers((prev) => prev.filter((u) => u.id !== id));
-    return true;
-  };
-
-  const registerUser = (name: string, email: string, isOwner: boolean): boolean => {
-    // Límite estricto de 5 técnicos por taller (no aplica al dueño/admin).
-    if (!isOwner) {
-      const techCount = users.filter((u) => u.role === 'technician').length;
-      if (techCount >= MAX_TECHNICIANS) {
-        return false; // Límite de técnicos alcanzado
-      }
-    }
-
-    // Simulated Anti-Abuse device check (e.g. processor / footprint match)
-    const simulatedFingerprint = 'DEV-FNG-HW-' + Math.floor(Math.random() * 9000 + 1000);
-
-    // Check if this simulated hardware signature is in the blocklist
-    if (blockedDevices.includes(simulatedFingerprint)) {
-      return false; // Hardware blocked due to multiple account registrations
-    }
-
-    const newUser: User = {
-      id: Date.now().toString(),
-      name,
-      email,
-      password: 'demo123',
-      role: isOwner ? 'admin' : 'technician',
-      deviceFingerprint: simulatedFingerprint,
-    };
-
-    setUsers((prev) => [...prev, newUser]);
-    setCurrentUser(newUser);
-
-    if (isOwner) {
-      // Set fresh 90-day initial license
-      setLicense({
-        isActive: true,
-        licenseKey: 'EVAL-90DAYS-ACTIVE',
-        plan: 'Licencia Inicial',
-        expiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        daysRemaining: 90,
-      });
-    }
-
     return true;
   };
 
   /**
    * Registro de técnico invitado por enlace (deep link ?invite=...).
-   * Con Supabase configurado: crea la cuenta REAL con role='technician' y
-   * workshop_id del taller del admin (el trigger `handle_new_user` resuelve
-   * el taller y crea el perfil). Sin Supabase: simulación local (demo).
+   * Crea la cuenta REAL con role='technician' y workshop_id del taller del
+   * admin (el trigger `handle_new_user` resuelve el taller y crea el perfil).
    */
   const registerInvitedTechnician = async (
     name: string,
@@ -525,36 +477,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     workshopId: string,
     workshopName: string
   ): Promise<{ ok: boolean; pendingVerification?: boolean; message?: string }> => {
-    if (isSupabaseConfigured) {
-      const result = await supabaseSignUp(name, email, password, {
-        role: 'technician',
-        full_name: name,
-        workshop_id: workshopId,
-        workshop_name: workshopName,
-      });
-      if (!result.ok) {
-        return { ok: false, message: result.message };
-      }
-      if (result.pendingVerification) {
-        return { ok: true, pendingVerification: true };
-      }
-      return { ok: true };
+    const result = await supabaseSignUp(name, email, password, {
+      role: 'technician',
+      full_name: name,
+      workshop_id: workshopId,
+      workshop_name: workshopName,
+    });
+    if (!result.ok) {
+      return { ok: false, message: result.message };
     }
-    // Demo local: registra en el pool AsyncStorage asociado al taller.
-    const ok = registerUser(name, email, false);
-    return ok
-      ? { ok: true }
-      : {
-          ok: false,
-          message:
-            'El dispositivo o el correo ya están registrados, o el taller alcanzó el límite de 5 técnicos.',
-        };
+    if (result.pendingVerification) {
+      return { ok: true, pendingVerification: true };
+    }
+    return { ok: true };
   };
 
   /**
-   * Owner sign-up. Con Supabase: crea el usuario real y requiere confirmar el
-   * correo con el enlace del email antes de poder iniciar sesión. Sin
-   * Supabase, simula la cuenta localmente (demo).
+   * Owner sign-up. Crea el usuario real en Supabase y requiere confirmar el
+   * correo con el enlace del email antes de poder iniciar sesión.
    */
   const registerOwner = async (
     name: string,
@@ -565,62 +505,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     reason?: 'email' | 'device';
     pendingVerification?: boolean;
   }> => {
-    if (isSupabaseConfigured) {
-      // Metadata explícita: el trigger `handle_new_user` usa role='admin'
-      // para crear el perfil como dueño del taller. Nunca enviamos null/''.
-      const result = await supabaseSignUp(name, email, password, {
-        role: 'admin',
-        full_name: name,
-        workshop_name: name.trim() || 'Mi Taller',
-      });
-      if (!result.ok) {
-        return {
-          user: null,
-          reason: result.reason === 'email' ? 'email' : 'device',
-        };
-      }
-      if (result.pendingVerification) {
-        return { user: null, pendingVerification: true };
-      }
-      if (result.user) {
-        const user = toLocalUser(result.user);
-        setCurrentUser(user);
-        return { user };
-      }
-      return { user: null };
-    }
-
-    // ── Simulación local (demo, sin backend) ──
-    const simFingerprint = 'DEV-FNG-HW-' + Math.floor(Math.random() * 9000 + 1000);
-    if (blockedDevices.includes(simFingerprint)) {
-      return { user: null, reason: 'device' };
-    }
-    const emailTaken = users.some((u) => u.email.toLowerCase() === email.trim().toLowerCase() && !u.isGoogle);
-    if (emailTaken) {
-      return { user: null, reason: 'email' };
-    }
-
-    const newUser: User = {
-      id: Date.now().toString(),
-      name: name.trim(),
-      email: email.trim().toLowerCase(),
-      password,
+    // Metadata explícita: el trigger `handle_new_user` usa role='admin'
+    // para crear el perfil como dueño del taller. Nunca enviamos null/''.
+    const result = await supabaseSignUp(name, email, password, {
       role: 'admin',
-      deviceFingerprint: simFingerprint,
-    };
-
-    setUsers((prev) => [...prev, newUser]);
-    setCurrentUser(newUser);
-    // Fresh 90-day initial license for the new workshop owner
-    setLicense({
-      isActive: true,
-      licenseKey: 'EVAL-90DAYS-ACTIVE',
-      plan: 'Licencia Inicial',
-      expiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      daysRemaining: 90,
+      full_name: name,
+      workshop_name: name.trim() || 'Mi Taller',
     });
-
-    return { user: newUser };
+    if (!result.ok) {
+      return {
+        user: null,
+        reason: result.reason === 'email' ? 'email' : 'device',
+      };
+    }
+    if (result.pendingVerification) {
+      return { user: null, pendingVerification: true };
+    }
+    if (result.user) {
+      const user = profileToUser(result.user);
+      setCurrentUser(user);
+      return { user };
+    }
+    return { user: null };
   };
 
   /** Reenvía el correo de confirmación del registro. */
@@ -634,7 +540,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
    * Genera un enlace de invitación temporal (10 min) para que un técnico se
    * registre y quede automáticamente asociado al taller del admin. Solo el
    * dueño (admin) actual puede generar enlaces — el taller se identifica con
-   * el nombre e ID del `currentUser`.
+   * el nombre e ID del `currentUser` (el trigger `handle_new_user` resuelve
+   * el taller real desde la fila en `profiles` del admin invitador).
    */
   const generateInviteLink = (): string | null => {
     if (!currentUser || currentUser.role !== 'admin') {
@@ -667,12 +574,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return validateInviteToken(decoded);
   };
 
-  const simulateDeviceLock = (fingerprint: string) => {
-    if (!blockedDevices.includes(fingerprint)) {
-      setBlockedDevices((prev) => [...prev, fingerprint]);
-    }
-  };
-
   return (
     <AuthContext.Provider
       value={{
@@ -682,8 +583,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         users,
         license,
         inviteLink,
-        blockedDevices,
-        switchUser,
+        loadError,
         login,
         signInWithGoogle,
         logout,
@@ -693,11 +593,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         deleteTechnician,
         verifyLicense,
         renewSubscription,
-        registerUser,
         registerInvitedTechnician,
         generateInviteLink,
         validateInviteLink,
-        simulateDeviceLock,
       }}>
       {children}
     </AuthContext.Provider>

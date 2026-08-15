@@ -18,7 +18,6 @@ import { Spacing } from '@/constants/theme';
 import { useAuth, MAX_TECHNICIANS } from '@/context/auth-context';
 import { useRepair } from '@/context/repair-context';
 import { useTheme } from '@/hooks/use-theme';
-import { isSupabaseConfigured } from '@/lib/supabase';
 import { formatCOP } from '@/utils/format';
 
 const SUPPORT_TYPES = [
@@ -34,12 +33,10 @@ export default function AdminScreen() {
   const {
     currentUser,
     users,
-    switchUser,
     logout,
     license,
     verifyLicense,
     renewSubscription,
-    registerUser,
     generateInviteLink,
     inviteLink,
     createTechnician,
@@ -49,11 +46,6 @@ export default function AdminScreen() {
   const router = useRouter();
 
   const [inputKey, setInputKey] = useState('');
-
-  // Registration form states
-  const [regName, setRegName] = useState('');
-  const [regEmail, setRegEmail] = useState('');
-  const [regRole, setRegRole] = useState<'admin' | 'technician'>('technician');
 
   // Technician management form states
   const [techName, setTechName] = useState('');
@@ -116,57 +108,6 @@ export default function AdminScreen() {
     }
   };
 
-  const handleRegister = async () => {
-    if (!regName.trim() || !regEmail.trim()) {
-      if (Platform.OS === 'web') {
-        window.alert('Complete todos los campos para crear la cuenta.');
-      } else {
-        Alert.alert('Campos incompletos', 'Complete todos los campos.');
-      }
-      return;
-    }
-
-    if (!EMAIL_REGEX.test(regEmail.trim())) {
-      if (Platform.OS === 'web') {
-        window.alert('Ingrese un correo electrónico válido.');
-      } else {
-        Alert.alert('Correo inválido', 'Ingrese un correo electrónico válido.');
-      }
-      return;
-    }
-
-    // Límite estricto: 5 técnicos máximos por taller (no aplica al dueño).
-    if (regRole === 'technician') {
-      const techCount = users.filter((u) => u.role === 'technician').length;
-      if (techCount >= MAX_TECHNICIANS) {
-        notify(`Límite alcanzado: el taller tiene el máximo de ${MAX_TECHNICIANS} técnicos permitidos.`);
-        return;
-      }
-    }
-
-    const success = await registerUser(
-      regName.trim(),
-      regEmail.trim(),
-      regRole === 'admin'
-    );
-
-    if (success) {
-      if (Platform.OS === 'web') {
-        window.alert(`¡Usuario ${regName} registrado con éxito con huella de dispositivo única!`);
-      } else {
-        Alert.alert('Registro Exitoso', `¡Usuario ${regName} registrado con éxito con huella de dispositivo única!`);
-      }
-      setRegName('');
-      setRegEmail('');
-    } else {
-      if (Platform.OS === 'web') {
-        window.alert('Error: Dispositivo bloqueado o límite de técnicos alcanzado. No se permiten más registros desde esta máquina.');
-      } else {
-        Alert.alert('Seguridad Anti-Abuso', 'Error: Dispositivo bloqueado o límite de técnicos alcanzado. No se permiten más registros.');
-      }
-    }
-  };
-
   const handleCreateInvite = () => {
     // Límite estricto: no se generan enlaces si el taller ya tiene 5 técnicos.
     const techCount = users.filter((u) => u.role === 'technician').length;
@@ -192,9 +133,9 @@ export default function AdminScreen() {
     }
   };
 
-  const handleDeleteTechnician = (tech: (typeof users)[number]) => {
-    const confirmDelete = () => {
-      const deleted = deleteTechnician(tech.id);
+  const handleDeleteTechnician = async (tech: (typeof users)[number]) => {
+    const confirmDelete = async () => {
+      const deleted = await deleteTechnician(tech.id);
       if (deleted) {
         notify('Técnico eliminado.');
       } else {
@@ -203,7 +144,7 @@ export default function AdminScreen() {
     };
     if (Platform.OS === 'web') {
       if (window.confirm(`¿Eliminar a ${tech.name} del taller?`)) {
-        confirmDelete();
+        await confirmDelete();
       }
     } else {
       Alert.alert('Eliminar técnico', `¿Eliminar a ${tech.name} del taller?`, [
@@ -213,7 +154,7 @@ export default function AdminScreen() {
     }
   };
 
-  const handleAddTechnician = () => {
+  const handleAddTechnician = async () => {
     if (!techName.trim() || !techEmail.trim()) {
       notify('Complete todos los campos para agregar el técnico.');
       return;
@@ -222,7 +163,7 @@ export default function AdminScreen() {
       notify('Ingrese un correo electrónico válido.');
       return;
     }
-    const result = createTechnician(
+    const result = await createTechnician(
       techName.trim(),
       techEmail.trim(),
       Number(techCommission) / 100
@@ -231,13 +172,17 @@ export default function AdminScreen() {
       setTechName('');
       setTechEmail('');
       setTechCommission('');
-      notify('Técnico agregado al taller.');
+      notify(
+        'Técnico agregado al taller. Recibirá un correo de confirmación para activar su cuenta.'
+      );
     } else if (result.reason === 'limit') {
       notify(
         `Límite alcanzado: el taller tiene el máximo de ${MAX_TECHNICIANS} técnicos permitidos.`
       );
-    } else {
+    } else if (result.reason === 'email') {
       notify('Ya existe un usuario con ese correo.');
+    } else {
+      notify(result.message ?? 'No se pudo agregar el técnico.');
     }
   };
 
@@ -306,80 +251,6 @@ export default function AdminScreen() {
           <ThemedText style={styles.logoutButtonText}>Cerrar sesión</ThemedText>
         </Pressable>
       </ThemedView>
-
-      {/* User Switcher (Simulation Roles) — SOLO demo local (sin Supabase) */}
-      {!isSupabaseConfigured && (
-        <ThemedView type="backgroundElement" style={styles.card}>
-          <ThemedText type="subtitle">Cambiar de Técnico / Estación (Demo)</ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            Simulador de sesión activa: {currentUser.name} ({currentUser.role.toUpperCase()})
-          </ThemedText>
-          <View style={styles.rolesRow}>
-            {users.map((u) => (
-              <Pressable
-                key={u.id}
-                onPress={() => switchUser(u.id)}
-                style={[
-                  styles.roleButton,
-                  currentUser.id === u.id
-                    ? { backgroundColor: '#0284c7' }
-                    : { backgroundColor: theme.backgroundElement },
-                ]}>
-                <ThemedText
-                  style={[
-                    styles.roleButtonText,
-                    currentUser.id === u.id && { color: '#ffffff' },
-                  ]}>
-                  {u.name.split(' ')[0]} ({u.role})
-                </ThemedText>
-              </Pressable>
-            ))}
-          </View>
-        </ThemedView>
-      )}
-
-      {/* Create/Register Owner Account with Anti-Abuse Hardware Fingerprint Check */}
-      {currentUser.role === 'admin' && !isSupabaseConfigured && (
-        <ThemedView type="backgroundElement" style={styles.card}>
-          <ThemedText type="subtitle">SaaS Onboarding (Crear Cuenta / Taller)</ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            Con validación de Email y Reconocimiento de Procesador/Dispositivo para evitar abusos de periodos de evaluación.
-          </ThemedText>
-          <TextInput
-            style={[styles.input, { color: theme.text, borderColor: theme.backgroundElement }]}
-            placeholder="Nombre Completo"
-            placeholderTextColor="#9ca3af"
-            value={regName}
-            onChangeText={setRegName}
-            maxLength={80}
-          />
-          <TextInput
-            style={[styles.input, { color: theme.text, borderColor: theme.backgroundElement }]}
-            placeholder="Correo Electrónico"
-            placeholderTextColor="#9ca3af"
-            keyboardType="email-address"
-            autoCapitalize="none"
-            value={regEmail}
-            onChangeText={setRegEmail}
-            maxLength={100}
-          />
-          <View style={styles.rolesRow}>
-            <Pressable
-              onPress={() => setRegRole('technician')}
-              style={[styles.roleButton, regRole === 'technician' ? { backgroundColor: '#334155' } : { backgroundColor: theme.backgroundElement }]}>
-              <ThemedText style={{ color: '#fff' }}>Técnico</ThemedText>
-            </Pressable>
-            <Pressable
-              onPress={() => setRegRole('admin')}
-              style={[styles.roleButton, regRole === 'admin' ? { backgroundColor: '#334155' } : { backgroundColor: theme.backgroundElement }]}>
-              <ThemedText style={{ color: '#fff' }}>Dueño (Admin)</ThemedText>
-            </Pressable>
-          </View>
-          <Pressable style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]} onPress={handleRegister}>
-            <ThemedText style={styles.buttonText}>Registrar con Huella Digital de Dispositivo</ThemedText>
-          </Pressable>
-        </ThemedView>
-      )}
 
       {/* Invitation Link for Technicians — consolidated for all environments */}
       {currentUser.role === 'admin' && (
@@ -462,7 +333,7 @@ export default function AdminScreen() {
                   <View style={styles.techInfo}>
                     <ThemedText type="smallBold">{u.name}</ThemedText>
                     <ThemedText type="small" themeColor="textSecondary">
-                      {u.email} · Comisión:{' '}
+                      Comisión:{' '}
                       {Math.round((u.commissionRate ?? 0) * 100) + '%'}
                     </ThemedText>
                   </View>

@@ -45,7 +45,7 @@ export default function InventoryScreen() {
       item.category.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleAddPart = () => {
+  const handleAddPart = async () => {
     if (!name.trim() || !category.trim() || !stock.trim() || !price.trim()) {
       notify('Complete todos los campos de la pieza.');
       return;
@@ -68,7 +68,7 @@ export default function InventoryScreen() {
       return;
     }
 
-    addInventoryPart({
+    await addInventoryPart({
       name: name.trim(),
       category: category.trim(),
       stock: stockNum,
@@ -187,12 +187,12 @@ export default function InventoryScreen() {
                     <View style={styles.stockButtons}>
                       <Pressable
                         style={({ pressed }) => [styles.stockBtn, pressed && styles.pressed]}
-                        onPress={() => updateInventoryStock(item.id, -1)}>
+                        onPress={() => void updateInventoryStock(item.id, -1)}>
                         <ThemedText style={styles.stockBtnText}>−</ThemedText>
                       </Pressable>
                       <Pressable
                         style={({ pressed }) => [styles.stockBtn, pressed && styles.pressed]}
-                        onPress={() => updateInventoryStock(item.id, 1)}>
+                        onPress={() => void updateInventoryStock(item.id, 1)}>
                         <ThemedText style={styles.stockBtnText}>+</ThemedText>
                       </Pressable>
                     </View>

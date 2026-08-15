@@ -1,5 +1,11 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { isSupabaseConfigured, supabase } from '@/lib/supabase';
+import { Alert, Platform } from 'react-native';
+import {
+  assertSupabaseConfigured,
+  getSupabaseEnvError,
+  isSupabaseConfigured,
+  supabase,
+} from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
 
 /**
@@ -25,8 +31,10 @@ interface WorkshopContextType {
   profile: WorkshopProfile | null;
   /** False hasta que Supabase terminó de leer el perfil guardado. */
   hydrated: boolean;
+  /** Error visible de hidratación (env faltante o lectura fallida), o null. */
+  loadError: string | null;
   /** Persiste el perfil del taller (fuente única para el membrete del recibo). */
-  saveProfile: (profile: WorkshopProfile) => void;
+  saveProfile: (profile: WorkshopProfile) => Promise<void>;
 }
 
 /** Fila de `public.workshop_profiles` (snake_case; address/phone nullable en la DB). */
@@ -47,8 +55,19 @@ export function WorkshopProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<WorkshopProfile | null>(null);
   /** False until stored data (if any) has been read, so we don't overwrite it. */
   const [hydrated, setHydrated] = useState(false);
+  /** Error visible de hidratación (env faltante o lectura fallida), o null. */
+  const [loadError, setLoadError] = useState<string | null>(null);
   /** Workshop id resuelto vía `current_workshop_id()` (SECURITY DEFINER). */
   const [workshopId, setWorkshopId] = useState<string | null>(null);
+
+  /** Muestra un error visible en web (window.alert) o nativo (Alert.alert). */
+  const notifyError = (message: string) => {
+    if (Platform.OS === 'web') {
+      window.alert(message);
+    } else {
+      Alert.alert('Error', message);
+    }
+  };
 
   // Hydrate from Supabase once the authenticated user is known.
   useEffect(() => {
@@ -59,6 +78,7 @@ export function WorkshopProvider({ children }: { children: React.ReactNode }) {
       setHydrated(false);
       setWorkshopId(null);
       setProfile(null);
+      setLoadError(null);
       try {
         if (isSupabaseConfigured && userId) {
           const { data: { session } } = await supabase.auth.getSession();
@@ -86,9 +106,15 @@ export function WorkshopProvider({ children }: { children: React.ReactNode }) {
             }
             // Si no hay fila (wid null o sin perfil guardado) el perfil queda null.
           }
+        } else {
+          if (!isSupabaseConfigured) setLoadError(getSupabaseEnvError());
         }
       } catch (error) {
-        console.error('Error loading workshop profile:', error);
+        setLoadError(
+          error instanceof Error
+            ? error.message
+            : 'Error al cargar el perfil del taller desde la nube.'
+        );
       } finally {
         if (!cancelled) setHydrated(true);
       }
@@ -98,17 +124,28 @@ export function WorkshopProvider({ children }: { children: React.ReactNode }) {
     };
   }, [userId]);
 
-  const saveProfile = (next: WorkshopProfile) => {
-    // Optimista: actualiza el estado local de inmediato.
-    setProfile(next);
-    // Sin Supabase configurado o sin taller resuelto: queda solo en memoria
-    // (usuarios demo locales).
-    if (!isSupabaseConfigured || !workshopId) return;
-    supabase
+  const saveProfile = async (next: WorkshopProfile): Promise<void> => {
+    // 1. Validar que Supabase está configurado y que hay taller resuelto.
+    let blockReason: string | null = null;
+    try {
+      assertSupabaseConfigured();
+    } catch (e) {
+      blockReason = e instanceof Error ? e.message : 'Supabase no está configurado.';
+    }
+    if (!blockReason && !workshopId) {
+      blockReason = 'No se pudo resolver el taller. Inicia sesión de nuevo.';
+    }
+    if (blockReason) {
+      notifyError(blockReason);
+      return;
+    }
+
+    // 2. Persistir en Supabase y esperar la confirmación.
+    const { error } = await supabase
       .from('workshop_profiles')
       .upsert(
         {
-          workshop_id: workshopId,
+          workshop_id: workshopId as string,
           name: next.name,
           nit: next.nit,
           address: next.address || null,
@@ -116,14 +153,19 @@ export function WorkshopProvider({ children }: { children: React.ReactNode }) {
           updated_at: new Date().toISOString(),
         },
         { onConflict: 'workshop_id' }
-      )
-      .then(({ error }) => {
-        if (error) console.error('Error saving workshop profile:', error);
-      });
+      );
+
+    if (error) {
+      notifyError(`No se pudo guardar el perfil del taller: ${error.message}`);
+      return;
+    }
+
+    // 3. Solo tras confirmación exitosa se actualiza el estado en pantalla.
+    setProfile(next);
   };
 
   return (
-    <WorkshopContext.Provider value={{ profile, hydrated, saveProfile }}>
+    <WorkshopContext.Provider value={{ profile, hydrated, loadError, saveProfile }}>
       {children}
     </WorkshopContext.Provider>
   );

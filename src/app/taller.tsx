@@ -41,7 +41,7 @@ export default function TallerScreen() {
   // DV calculado en vivo (módulo 11 DIAN) apenas hay 9 dígitos base.
   const calculatedDv = nit.length === NIT_BASE_LENGTH ? nitCheckDigit(nit) : null;
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const nextErrors: FieldErrors = {};
     if (!name.trim()) {
       nextErrors.name = 'Ingresa el nombre del taller.';
@@ -58,7 +58,9 @@ export default function TallerScreen() {
     }
 
     // El DV se adjunta automáticamente: se guardan los 10 dígitos (base + DV).
-    saveProfile({
+    // `saveProfile` espera la confirmación de Supabase y muestra su propio
+    // alert de error en caso de fallo; solo resolvemos aquí si persistió.
+    await saveProfile({
       name: name.trim(),
       nit: `${nit}${nitCheckDigit(nit)}`,
       address: address.trim(),

@@ -77,6 +77,8 @@ export interface SignUpMetadata {
   role?: 'admin' | 'technician';
   workshop_id?: string;
   workshop_name?: string;
+  /** Comisión del técnico (fracción, 0.30 = 30%). Se persiste en profiles.commission_rate vía el trigger handle_new_user. */
+  commission_rate?: number;
 }
 
 /** Envía el correo de confirmación del registro (enlace de verificación). */
@@ -99,6 +101,9 @@ export async function supabaseSignUp(
     }
     if (metadata?.workshop_id) {
       data.workshop_id = metadata.workshop_id;
+    }
+    if (typeof metadata?.commission_rate === 'number') {
+      data.commission_rate = String(metadata.commission_rate);
     }
     data.workshop_name = workshopName;
 

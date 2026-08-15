@@ -45,4 +45,34 @@ export const isSupabaseConfigured = Boolean(
   supabaseUrl.startsWith('http') && supabaseAnonKey.startsWith('eyJ')
 );
 
+/**
+ * Mensaje de error legible cuando faltan o son inválidas las variables de
+ * entorno del backend (EXPO_PUBLIC_SUPABASE_URL / EXPO_PUBLIC_SUPABASE_ANON_KEY).
+ * Devuelve null si la configuración es correcta.
+ */
+export function getSupabaseEnvError(): string | null {
+  if (!supabaseUrl.trim()) {
+    return 'EXPO_PUBLIC_SUPABASE_URL no está configurada. La app no puede conectarse a la nube.';
+  }
+  if (!supabaseAnonKey.trim()) {
+    return 'EXPO_PUBLIC_SUPABASE_ANON_KEY no está configurada. La app no puede conectarse a la nube.';
+  }
+  if (!supabaseUrl.startsWith('http')) {
+    return 'EXPO_PUBLIC_SUPABASE_URL no es una URL válida (debe comenzar con http).';
+  }
+  if (!supabaseAnonKey.startsWith('eyJ')) {
+    return 'EXPO_PUBLIC_SUPABASE_ANON_KEY no parece un JWT válido.';
+  }
+  return null;
+}
+
+/**
+ * Lanza si las variables de entorno del backend no están configuradas.
+ * Usar al inicio de cada operación que requiera Supabase.
+ */
+export function assertSupabaseConfigured(): void {
+  const err = getSupabaseEnvError();
+  if (err) throw new Error(err);
+}
+
 export { getRedirectUrl };

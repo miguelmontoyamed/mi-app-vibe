@@ -52,13 +52,13 @@ export default function JobDetailScreen() {
     setCancelModalVisible(true);
   };
 
-  const handleConfirmCancel = () => {
+  const handleConfirmCancel = async () => {
     const cleanMotivo = cancelMotivo.trim();
     if (!cleanMotivo) {
       Alert.alert('Motivo requerido', 'Escribe el motivo por el cual no se realizó el trabajo.');
       return;
     }
-    if (cancelRepair(repair.id, cleanMotivo)) {
+    if (await cancelRepair(repair.id, cleanMotivo)) {
       setCancelModalVisible(false);
       setCancelMotivo('');
     } else {
@@ -75,8 +75,8 @@ export default function JobDetailScreen() {
         {
           text: 'Sí, eliminar',
           style: 'destructive',
-          onPress: () => {
-            if (deleteRepair(repair.id)) {
+          onPress: async () => {
+            if (await deleteRepair(repair.id)) {
               router.replace('/');
             }
           },

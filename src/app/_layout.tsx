@@ -12,12 +12,12 @@ SplashScreen.preventAutoHideAsync();
 function RootNavigator() {
   const { isAuthenticated, hydrated } = useAuth();
 
-  // Esperar la hidratación de AsyncStorage ANTES de montar el router. Si el
-  // Stack se monta con `isAuthenticated=false` (estado inicial) y la sesión se
-  // restaura después, el guard no re-navega y el usuario queda atrapado en
-  // /login tras un reload. Montar solo con `hydrated` garantiza que la primera
-  // render del guard ya decide con la sesión real (AnimatedSplashOverlay cubre
-  // la pausa).
+  // Esperar la restauración de la sesión de Supabase ANTES de montar el router.
+  // Si el Stack se monta con `isAuthenticated=false` (estado inicial) y la
+  // sesión se restaura después, el guard no re-navega y el usuario queda
+  // atrapado en /login tras un reload. Montar solo con `hydrated` garantiza que
+  // la primera render del guard ya decide con la sesión real
+  // (AnimatedSplashOverlay cubre la pausa).
   if (!hydrated) {
     return null;
   }

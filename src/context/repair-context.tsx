@@ -1,7 +1,13 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { Alert, Platform } from 'react-native';
 
 import { useAuth } from '@/context/auth-context';
-import { isSupabaseConfigured, supabase } from '@/lib/supabase';
+import {
+  assertSupabaseConfigured,
+  getSupabaseEnvError,
+  isSupabaseConfigured,
+  supabase,
+} from '@/lib/supabase';
 import {
   applyPayment,
   isValidCancellation,
@@ -48,28 +54,25 @@ interface RepairContextType {
   repairs: RepairItem[];
   inventory: InventoryPart[];
   hydrated: boolean;
-  addRepair: (repair: Omit<RepairItem, 'id' | 'status' | 'date'>) => void;
-  updateRepairStatus: (id: string, status: RepairStatus) => void;
+  /** Error visible de carga desde la nube (null cuando todo salió bien). */
+  loadError: string | null;
+  addRepair: (repair: Omit<RepairItem, 'id' | 'status' | 'date'>) => Promise<void>;
+  updateRepairStatus: (id: string, status: RepairStatus) => Promise<void>;
   /** Edita campos de una reparación (no el estado ni el motivo de cancelación). */
   updateRepair: (
     id: string,
     patch: Partial<Omit<RepairItem, 'id' | 'date' | 'status' | 'motivoCancelacion'>>
-  ) => void;
+  ) => Promise<void>;
   /** Cancela la reparación exigiendo un motivo (texto libre); devuelve true si se aplicó. */
-  cancelRepair: (id: string, motivo: string) => boolean;
+  cancelRepair: (id: string, motivo: string) => Promise<boolean>;
   /** Elimina definitivamente una orden (solo dueño). Devuelve true si existía. */
-  deleteRepair: (id: string) => boolean;
-  recordRepairPayment: (id: string, amount: number, method: PaymentMethod) => void;
-  addInventoryPart: (part: Omit<InventoryPart, 'id'>) => void;
-  updateInventoryStock: (id: string, delta: number) => void;
+  deleteRepair: (id: string) => Promise<boolean>;
+  recordRepairPayment: (id: string, amount: number, method: PaymentMethod) => Promise<void>;
+  addInventoryPart: (part: Omit<InventoryPart, 'id'>) => Promise<void>;
+  updateInventoryStock: (id: string, delta: number) => Promise<void>;
 }
 
 const RepairContext = createContext<RepairContextType | undefined>(undefined);
-
-/** Fallback: sin datos hasta que el dueño registre sus primeros trabajos. */
-const SEED_REPAIRS: RepairItem[] = [];
-
-const SEED_INVENTORY: InventoryPart[] = [];
 
 // ────────────────────────────────────────────────────────────────────────────
 // Mapeo de filas Supabase (snake_case) ↔ estado local (camelCase)
@@ -209,12 +212,34 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
   const { currentUser } = useAuth();
   const userId = currentUser?.id ?? null;
 
-  const [repairs, setRepairs] = useState<RepairItem[]>(SEED_REPAIRS);
-  const [inventory, setInventory] = useState<InventoryPart[]>(SEED_INVENTORY);
+  const [repairs, setRepairs] = useState<RepairItem[]>([]);
+  const [inventory, setInventory] = useState<InventoryPart[]>([]);
   /** False until stored data (if any) has been read, so we don't overwrite it with seeds. */
   const [hydrated, setHydrated] = useState(false);
   /** Id del taller (workshops.id) resuelto para el usuario autenticado; null en demo local. */
   const [workshopId, setWorkshopId] = useState<string | null>(null);
+  /** Error visible de carga desde la nube (null cuando todo salió bien). */
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const notifyError = (message: string) => {
+    if (Platform.OS === 'web') {
+      window.alert(message);
+    } else {
+      Alert.alert('Error', message);
+    }
+  };
+
+  const requireWorkshop = (): string | null => {
+    try {
+      assertSupabaseConfigured();
+    } catch (e) {
+      return e instanceof Error ? e.message : 'Supabase no está configurado.';
+    }
+    if (!workshopId) {
+      return 'No se pudo resolver el taller. Inicia sesión de nuevo.';
+    }
+    return null;
+  };
 
   // Hydrate desde Supabase (una vez por usuario). Sin Supabase configurado o sin
   // sesión/taller, el estado queda vacío (solo en memoria, demo local).
@@ -225,6 +250,7 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
       // heredar datos del usuario anterior (logout / switch de cuenta).
       setHydrated(false);
       setWorkshopId(null);
+      setLoadError(null);
       try {
         if (isSupabaseConfigured && userId) {
           const { data: { session } } = await supabase.auth.getSession();
@@ -240,14 +266,14 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
               const repairsLoaded = !repResult.error;
               const inventoryLoaded = !invResult.error;
               if (!repairsLoaded) {
-                console.error('Error loading repairs from Supabase:', repResult.error);
+                setLoadError('Error al cargar reparaciones: ' + repResult.error.message);
               }
               if (!inventoryLoaded) {
-                console.error('Error loading inventory from Supabase:', invResult.error);
+                setLoadError('Error al cargar inventario: ' + invResult.error.message);
               }
               // Cada hidratación reemplaza el estado completo: si una consulta
-              // falla, esa lista queda vacía (demo local) en lugar de heredar
-              // datos del usuario anterior.
+              // falla, esa lista queda vacía en lugar de heredar datos del
+              // usuario anterior.
               if (!cancelled) {
                 setRepairs(repairsLoaded ? ((repResult.data ?? []) as RepairRow[]).map(rowToRepair) : []);
                 setInventory(inventoryLoaded ? ((invResult.data ?? []) as InventoryRow[]).map(rowToInventory) : []);
@@ -273,14 +299,15 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
             setWorkshopId(null);
             setRepairs([]);
             setInventory([]);
+            setLoadError(getSupabaseEnvError() ?? 'Supabase no está configurado.');
           }
         }
       } catch (error) {
-        console.error('Error loading TechRepair data from Supabase:', error);
         if (!cancelled) {
           setWorkshopId(null);
           setRepairs([]);
           setInventory([]);
+          setLoadError(error instanceof Error ? error.message : 'Error al cargar los datos desde la nube.');
         }
       } finally {
         if (!cancelled) setHydrated(true);
@@ -296,88 +323,49 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
    * alfanumérico (TRM-XXXX). Si el ID generado ya existe en el estado
    * actual, se reintenta hasta 10 veces antes de fallar.
    */
-  const addRepair = (newRep: Omit<RepairItem, 'id' | 'status' | 'date'>) => {
-    // Generación PURA del id+item (fuera del updater) contra el estado actual.
+  const addRepair = async (newRep: Omit<RepairItem, 'id' | 'status' | 'date'>): Promise<void> => {
+    const blockReason = requireWorkshop();
+    if (blockReason) { notifyError(blockReason); return; }
+
     const existingIds = new Set(repairs.map((r) => r.id));
     let id = generateOrderId();
     let attempts = 0;
-    while (existingIds.has(id) && attempts < 10) {
-      id = generateOrderId();
-      attempts++;
-    }
-    // Si tras 10 intentos sigue habiendo colisión (prácticamente imposible
-    // con 30^4 = 810 000 combinaciones), usamos un fallback con timestamp.
-    if (existingIds.has(id)) {
-      id = `${ORDER_PREFIX}-${Date.now().toString(36).slice(-4).toUpperCase()}`;
-    }
+    while (existingIds.has(id) && attempts < 10) { id = generateOrderId(); attempts++; }
+    if (existingIds.has(id)) { id = `${ORDER_PREFIX}-${Date.now().toString(36).slice(-4).toUpperCase()}`; }
 
-    const item: RepairItem = {
-      ...newRep,
-      id,
-      status: 'Pendiente',
-      date: new Date().toISOString().split('T')[0],
-    };
+    const item: RepairItem = { ...newRep, id, status: 'Pendiente', date: new Date().toISOString().split('T')[0] };
+
+    const { error } = await supabase.from('repairs').insert(repairToRow(item, workshopId!));
+    if (error) {
+      if (String(error.code) === '23505') {
+        const retryId = `${ORDER_PREFIX}-${Date.now().toString(36).slice(-4).toUpperCase()}`;
+        const retryItem: RepairItem = { ...item, id: retryId };
+        const { error: retryError } = await supabase.from('repairs').insert(repairToRow(retryItem, workshopId!));
+        if (retryError) { notifyError(`No se pudo guardar la reparación: ${retryError.message}`); return; }
+        setRepairs((prev) => [retryItem, ...prev]);
+        return;
+      }
+      notifyError(`No se pudo guardar la reparación: ${error.message}`);
+      return;
+    }
     setRepairs((prev) => [item, ...prev]);
-
-    // Write-through optimista a Supabase (fire-and-forget).
-    if (isSupabaseConfigured && workshopId) {
-      void supabase
-        .from('repairs')
-        .insert(repairToRow(item, workshopId))
-        .then(({ error }) => {
-          if (error) {
-            console.error('Error inserting repair:', error);
-            // PK duplicado (23505): colisión de TRM-XXXX entre dispositivos.
-            // Regenerar el id con fallback de timestamp y reintentar una vez.
-            if (String(error.code) === '23505') {
-              const retryId = `${ORDER_PREFIX}-${Date.now().toString(36).slice(-4).toUpperCase()}`;
-              const retryItem: RepairItem = { ...item, id: retryId };
-              void supabase
-                .from('repairs')
-                .insert(repairToRow(retryItem, workshopId))
-                .then(({ error: retryError }) => {
-                  if (retryError) {
-                    console.error('Error retrying repair insert:', retryError);
-                  }
-                });
-            }
-          }
-        });
-    }
   };
 
-  const updateRepairStatus = (id: string, status: RepairStatus) => {
-    setRepairs((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, status } : r))
-    );
-    if (isSupabaseConfigured && workshopId) {
-      void supabase
-        .from('repairs')
-        .update(repairPatchToRow({ status }))
-        .eq('id', id)
-        .then(({ error }) => {
-          if (error) console.error('Error updating repair status:', error);
-        });
-    }
+  const updateRepairStatus = async (id: string, status: RepairStatus): Promise<void> => {
+    const blockReason = requireWorkshop();
+    if (blockReason) { notifyError(blockReason); return; }
+    const { error } = await supabase.from('repairs').update(repairPatchToRow({ status })).eq('id', id);
+    if (error) { notifyError(`No se pudo actualizar el estado: ${error.message}`); return; }
+    setRepairs((prev) => prev.map((r) => (r.id === id ? { ...r, status } : r)));
   };
 
   /** Edita campos de una reparación existente (no status ni cancelación). */
-  const updateRepair = (
-    id: string,
-    patch: Partial<Omit<RepairItem, 'id' | 'date' | 'status' | 'motivoCancelacion'>>
-  ) => {
-    setRepairs((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, ...patch } : r))
-    );
-    if (isSupabaseConfigured && workshopId) {
-      void supabase
-        .from('repairs')
-        .update(repairPatchToRow(patch))
-        .eq('id', id)
-        .then(({ error }) => {
-          if (error) console.error('Error updating repair:', error);
-        });
-    }
+  const updateRepair = async (id: string, patch: Partial<Omit<RepairItem, 'id' | 'date' | 'status' | 'motivoCancelacion'>>): Promise<void> => {
+    const blockReason = requireWorkshop();
+    if (blockReason) { notifyError(blockReason); return; }
+    const { error } = await supabase.from('repairs').update(repairPatchToRow(patch)).eq('id', id);
+    if (error) { notifyError(`No se pudo actualizar la reparación: ${error.message}`); return; }
+    setRepairs((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
   };
 
   /**
@@ -385,119 +373,60 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
    * true si se aplicó la cancelación, false si el estado no lo permite o el
    * motivo está vacío.
    */
-  const cancelRepair = (id: string, motivo: string): boolean => {
+  const cancelRepair = async (id: string, motivo: string): Promise<boolean> => {
     const cleanMotivo = motivo.trim();
     const target = repairs.find((r) => r.id === id);
-    if (!target || !isValidCancellation(target.status, cleanMotivo)) {
-      return false;
-    }
-    setRepairs((prev) =>
-      prev.map((r) =>
-        r.id === id
-          ? { ...r, status: 'Cancelado / No Reparado' as RepairStatus, motivoCancelacion: cleanMotivo }
-          : r
-      )
-    );
-    if (isSupabaseConfigured && workshopId) {
-      void supabase
-        .from('repairs')
-        .update({ status: 'Cancelado / No Reparado', motivo_cancelacion: cleanMotivo })
-        .eq('id', id)
-        .then(({ error }) => {
-          if (error) console.error('Error cancelling repair:', error);
-        });
-    }
+    if (!target || !isValidCancellation(target.status, cleanMotivo)) return false;
+    const blockReason = requireWorkshop();
+    if (blockReason) { notifyError(blockReason); return false; }
+    const { error } = await supabase.from('repairs').update({ status: 'Cancelado / No Reparado', motivo_cancelacion: cleanMotivo }).eq('id', id);
+    if (error) { notifyError(`No se pudo cancelar la orden: ${error.message}`); return false; }
+    setRepairs((prev) => prev.map((r) => r.id === id ? { ...r, status: 'Cancelado / No Reparado' as RepairStatus, motivoCancelacion: cleanMotivo } : r));
     return true;
   };
 
   /** Elimina definitivamente una orden. Devuelve true si existía. */
-  const deleteRepair = (id: string): boolean => {
-    const target = repairs.find((r) => r.id === id);
-    if (!target) {
-      return false;
-    }
+  const deleteRepair = async (id: string): Promise<boolean> => {
+    if (!repairs.some((r) => r.id === id)) return false;
+    const blockReason = requireWorkshop();
+    if (blockReason) { notifyError(blockReason); return false; }
+    const { error } = await supabase.from('repairs').delete().eq('id', id);
+    if (error) { notifyError(`No se pudo eliminar la orden: ${error.message}`); return false; }
     setRepairs((prev) => prev.filter((r) => r.id !== id));
-    if (isSupabaseConfigured && workshopId) {
-      void supabase
-        .from('repairs')
-        .delete()
-        .eq('id', id)
-        .then(({ error }) => {
-          if (error) console.error('Error deleting repair:', error);
-        });
-    }
     return true;
   };
 
   /** Adds a payment toward the balance due (capped at the remaining balance). */
-  const recordRepairPayment = (id: string, amount: number, method: PaymentMethod) => {
+  const recordRepairPayment = async (id: string, amount: number, method: PaymentMethod): Promise<void> => {
     const target = repairs.find((r) => r.id === id);
     if (!target) return;
     const result = applyPayment(target.advancePayment ?? 0, target.budget, amount);
     if (result.applied <= 0) return;
-    setRepairs((prev) =>
-      prev.map((r) =>
-        r.id === id
-          ? { ...r, advancePayment: result.newAdvance, paymentMethod: method }
-          : r
-      )
-    );
-    if (isSupabaseConfigured && workshopId) {
-      void supabase
-        .from('repairs')
-        .update({ advance_payment: result.newAdvance, payment_method: method })
-        .eq('id', id)
-        .then(({ error }) => {
-          if (error) console.error('Error recording repair payment:', error);
-        });
-    }
+    const blockReason = requireWorkshop();
+    if (blockReason) { notifyError(blockReason); return; }
+    const { error } = await supabase.from('repairs').update({ advance_payment: result.newAdvance, payment_method: method }).eq('id', id);
+    if (error) { notifyError(`No se pudo registrar el pago: ${error.message}`); return; }
+    setRepairs((prev) => prev.map((r) => r.id === id ? { ...r, advancePayment: result.newAdvance, paymentMethod: method } : r));
   };
 
-  const addInventoryPart = (part: Omit<InventoryPart, 'id'>) => {
-    const item: InventoryPart = {
-      ...part,
-      id: Date.now().toString(),
-    };
-    setInventory((prev) => [item, ...prev]);
-    if (isSupabaseConfigured && workshopId) {
-      void supabase
-        .from('inventory')
-        .insert(inventoryToRowItem(part, workshopId))
-        .select('id')
-        .single()
-        .then(({ data, error }) => {
-          if (error) {
-            console.error('Error inserting inventory part:', error);
-            return;
-          }
-          if (data) {
-            // Reemplaza el id local (timestamp) por el uuid real de la DB para
-            // que updateInventoryStock apunte a la fila persistida.
-            const dbId = (data as { id: string }).id;
-            setInventory((prev) =>
-              prev.map((p) => (p.id === item.id ? { ...p, id: dbId } : p))
-            );
-          }
-        });
-    }
+  const addInventoryPart = async (part: Omit<InventoryPart, 'id'>): Promise<void> => {
+    const blockReason = requireWorkshop();
+    if (blockReason) { notifyError(blockReason); return; }
+    const { data, error } = await supabase.from('inventory').insert(inventoryToRowItem(part, workshopId!)).select('id').single();
+    if (error || !data) { notifyError(`No se pudo agregar la pieza: ${error?.message ?? 'respuesta vacía'}`); return; }
+    const dbId = (data as { id: string }).id;
+    setInventory((prev) => [{ ...part, id: dbId }, ...prev]);
   };
 
-  const updateInventoryStock = (id: string, delta: number) => {
+  const updateInventoryStock = async (id: string, delta: number): Promise<void> => {
     const target = inventory.find((p) => p.id === id);
     if (!target) return;
     const stock = Math.max(0, target.stock + delta);
-    setInventory((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, stock } : p))
-    );
-    if (isSupabaseConfigured && workshopId) {
-      void supabase
-        .from('inventory')
-        .update({ stock })
-        .eq('id', id)
-        .then(({ error }) => {
-          if (error) console.error('Error updating inventory stock:', error);
-        });
-    }
+    const blockReason = requireWorkshop();
+    if (blockReason) { notifyError(blockReason); return; }
+    const { error } = await supabase.from('inventory').update({ stock }).eq('id', id);
+    if (error) { notifyError(`No se pudo actualizar el stock: ${error.message}`); return; }
+    setInventory((prev) => prev.map((p) => (p.id === id ? { ...p, stock } : p)));
   };
 
   return (
@@ -506,6 +435,7 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
         repairs,
         inventory,
         hydrated,
+        loadError,
         addRepair,
         updateRepairStatus,
         updateRepair,
