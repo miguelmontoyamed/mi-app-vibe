@@ -3,9 +3,9 @@ import { Platform, StyleSheet, useWindowDimensions, View, type ViewStyle } from 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
-import { Brand, BREAKPOINTS, Spacing } from '@/constants/theme';
+import { Brand, BREAKPOINTS, Colors, Glass, Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
-import { useTheme } from '@/hooks/use-theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 
 type NavbarProps = {
   /** Optional screen title rendered in the center of the bar. */
@@ -27,7 +27,9 @@ type NavbarProps = {
  */
 export function Navbar({ title }: NavbarProps) {
   const insets = useSafeAreaInsets();
-  const theme = useTheme();
+  const scheme = useColorScheme();
+  const dark = scheme === 'dark';
+  const glass = Glass[dark ? 'dark' : 'light'];
   const { width } = useWindowDimensions();
   const { currentUser } = useAuth();
 
@@ -47,16 +49,23 @@ export function Navbar({ title }: NavbarProps) {
       ? ({ paddingTop: 'var(--sat)' } as unknown as ViewStyle)
       : { paddingTop: insets.top };
 
+  // Superficie híbrida MD3 + Liquid Glass (AGENTS.md §3): translúcida con blur
+  // en web; sólida `surfaceContainer` en nativo (máximo rendimiento).
+  const barSurface: ViewStyle = Platform.select({
+    web: {
+      backgroundColor: glass.background,
+      borderBottomColor: glass.border,
+      backdropFilter: `blur(${glass.blur}px) saturate(180%)`,
+      WebkitBackdropFilter: `blur(${glass.blur}px) saturate(180%)`,
+    } as unknown as ViewStyle,
+    default: {
+      backgroundColor: Colors[dark ? 'dark' : 'light'].surfaceContainer,
+      borderBottomColor: Colors[dark ? 'dark' : 'light'].border,
+    },
+  });
+
   return (
-    <View
-      style={[
-        styles.bar,
-        {
-          backgroundColor: theme.background,
-          borderBottomColor: theme.border,
-        },
-        topInsetStyle,
-      ]}>
+    <View style={[styles.bar, barSurface, topInsetStyle]}>
       <View style={styles.inner}>
         {/* Marca: en móvil queda solo el ícono (sm:hidden del texto, md:flex) */}
         <View style={styles.sectionLeft}>

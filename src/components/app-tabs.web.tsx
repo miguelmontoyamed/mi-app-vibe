@@ -21,7 +21,7 @@ import { ExternalLink } from './external-link';
 import { ThemedText } from './themed-text';
 import { ThemedView } from './themed-view';
 
-import { BREAKPOINTS, Colors, Spacing } from '@/constants/theme';
+import { BREAKPOINTS, Colors, Glass, Spacing } from '@/constants/theme';
 
 /** Width of the desktop sidebar navigation. */
 const SIDEBAR_WIDTH = 220;
@@ -137,14 +137,24 @@ type BottomTabListProps = TabListProps & { sidebar?: boolean };
 
 export function CustomTabList({ sidebar = false, ...props }: BottomTabListProps) {
   const scheme = useColorScheme();
-  const colors = Colors[scheme === 'unspecified' ? 'light' : scheme];
+  const theme = Colors[scheme === 'unspecified' ? 'light' : scheme];
+  const glass = Glass[scheme === 'dark' ? 'dark' : 'light'];
+  // Glass sutil del scaffold web (AGENTS.md §3): translúcido + blur, bordes
+  // luminosos. Los pills de los tabs conservan fondo sólido MD3 (legibilidad).
+  const glassSurface: ViewStyle = {
+    backgroundColor: glass.background,
+    borderRightColor: glass.border,
+    borderTopColor: glass.border,
+    backdropFilter: `blur(${glass.blur}px) saturate(180%)`,
+    WebkitBackdropFilter: `blur(${glass.blur}px) saturate(180%)`,
+  } as unknown as ViewStyle;
 
   if (sidebar) {
     return (
       <ThemedView
         {...props}
         type="backgroundElement"
-        style={[styles.sidebarContainer, { borderRightColor: colors.border }]}>
+        style={[styles.sidebarContainer, glassSurface]}>
         <ThemedText type="smallBold" style={styles.sidebarBrand}>
           TechRepair
         </ThemedText>
@@ -156,7 +166,7 @@ export function CustomTabList({ sidebar = false, ...props }: BottomTabListProps)
             style={StyleSheet.flatten([styles.externalPressable, styles.sidebarExternal])}>
             <ThemedText type="link">Docs</ThemedText>
             <SymbolView
-              tintColor={colors.text}
+              tintColor={theme.text}
               name={{ ios: 'arrow.up.right.square', web: 'link' }}
               size={12}
             />
@@ -172,7 +182,7 @@ export function CustomTabList({ sidebar = false, ...props }: BottomTabListProps)
     <ThemedView
       {...props}
       type="backgroundElement"
-      style={[styles.bottomBar, { borderTopColor: colors.border }]}>
+      style={[styles.bottomBar, glassSurface]}>
       {props.children}
     </ThemedView>
   );

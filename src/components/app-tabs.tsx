@@ -150,7 +150,7 @@ function MobileTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
         styles.bar,
         {
           height: BAR_HEIGHT + insets.bottom,
-          backgroundColor: theme.backgroundElement,
+          backgroundColor: theme.surfaceContainer,
           borderTopColor: theme.border,
           paddingBottom: insets.bottom + BAR_PADDING,
         },
