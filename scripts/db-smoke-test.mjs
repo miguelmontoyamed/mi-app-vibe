@@ -113,6 +113,8 @@ try {
 // Test 4: roundtrip con usuario real (solo si hay sesión o service role)
 // ────────────────────────────────────────────────────────────────────────────
 let userToCleanup = null;
+let techUserToCleanup = null;
+let techOrphanWorkshop = null;
 let healedWorkshop = null;
 
 try {
@@ -193,6 +195,55 @@ try {
       const found = !selErr && Array.isArray(sel) && sel.length === 1 && sel[0].client_name === row.client_name;
       report('SELECT con usuario real (RLS permite y devuelve la fila)', found, selErr ? `code=${selErr.code} ${selErr.message}` : `filas=${sel?.length}`);
 
+      // 4c: TÉCNICO del mismo taller NO puede eliminar órdenes (RLS: DELETE solo admin).
+      if (admin) {
+        const techEmail = `tech-${Date.now()}@example.com`;
+        const { data: techUser, error: techErr } = await admin.auth.admin.createUser({
+          email: techEmail,
+          password: 'SmokeTest123!',
+          email_confirm: true,
+        });
+        if (!techErr && techUser.user) {
+          techUserToCleanup = techUser.user.id;
+          // El trigger handle_new_user ya creó perfil (y taller propio) para el
+          // técnico; lo redirigimos al taller del admin con rol técnico vía upsert.
+          const { data: techProfBefore, error: techProfReadErr } = await admin
+            .from('profiles').select('workshop_id').eq('id', techUser.user.id).maybeSingle();
+          if (!techProfReadErr && techProfBefore?.workshop_id && techProfBefore.workshop_id !== healedWorkshop) {
+            techOrphanWorkshop = techProfBefore.workshop_id;
+          }
+          const { error: profErr } = await admin.from('profiles').upsert({
+            id: techUser.user.id,
+            workshop_id: healedWorkshop,
+            full_name: 'Tecnico Prueba',
+            role: 'technician',
+          }, { onConflict: 'id' });
+          const { data: techSession, error: tSignErr } = await anon.auth.signInWithPassword({ email: techEmail, password: 'SmokeTest123!' });
+          if (!profErr && !tSignErr && techSession.session) {
+            const techClient = createClient(URL, ANON_KEY, {
+              global: { headers: { Authorization: `Bearer ${techSession.session.access_token}` } },
+              auth: { persistSession: false },
+            });
+            // DELETE filtrado por RLS devuelve 200/204 con 0 filas (NO lanza 42501):
+            // la fila es invisible para `using (… AND role='admin')` y no se borra.
+            const { data: delData, error: delErr } = await techClient.from('repairs').delete().eq('id', FAKE_ID).select('id');
+            const silentBlock = !delErr && (!delData || delData.length === 0);
+            // Prueba contundente: la orden SIGUE existiendo tras el intento del técnico.
+            const { data: stillThere, error: stillErr } = await techClient.from('repairs').select('id').eq('id', FAKE_ID);
+            const rowSurvived = !stillErr && Array.isArray(stillThere) && stillThere.length === 1;
+            const blocked = silentBlock && rowSurvived;
+            report('Seguridad: técnico NO puede eliminar (RLS bloquea, la orden sobrevive)', blocked,
+              delErr ? `code=${delErr.code} ${delErr.message}` : `DELETE devolvió ${delData?.length ?? 0} filas; SELECT tras intento=${stillThere?.length ?? 0}`);
+          } else {
+            report('Seguridad: técnico NO puede eliminar (RLS bloquea, la orden sobrevive)', false, profErr ? profErr.message : (tSignErr ? tSignErr.message : 'sin sesión de técnico'));
+          }
+        } else {
+          report('Seguridad: técnico NO puede eliminar (RLS 42501)', false, techErr?.message ?? 'no se pudo crear el técnico de prueba');
+        }
+      } else {
+        report('Seguridad: técnico NO puede eliminar (RLS 42501)', false, 'sin admin (service role) no se puede crear el técnico');
+      }
+
       const { error: delErr } = await client.from('repairs').delete().eq('id', FAKE_ID);
       report('Limpieza: DELETE del registro de prueba', !delErr, delErr ? delErr.message : 'ok');
     }
@@ -209,6 +260,14 @@ if (userToCleanup && admin) {
   if (healedWorkshop) {
     const { error: wErr } = await admin.from('workshops').delete().eq('id', healedWorkshop);
     console.log(`CLEAN  taller de prueba ${healedWorkshop} ${wErr ? `(fallo: ${wErr.message})` : 'eliminado'}`);
+  }
+}
+if (techUserToCleanup && admin) {
+  const { error } = await admin.auth.admin.deleteUser(techUserToCleanup);
+  console.log(`CLEAN  técnico de prueba ${techUserToCleanup} ${error ? `(fallo: ${error.message})` : 'eliminado'}`);
+  if (techOrphanWorkshop) {
+    const { error: wErr } = await admin.from('workshops').delete().eq('id', techOrphanWorkshop);
+    console.log(`CLEAN  taller huérfano del técnico ${techOrphanWorkshop} ${wErr ? `(fallo: ${wErr.message})` : 'eliminado'}`);
   }
 }
 

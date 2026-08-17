@@ -403,10 +403,26 @@ create policy "clients_workshop_all" on public.clients
   for all using (workshop_id = current_workshop_id())
   with check (workshop_id = current_workshop_id());
 
+-- DELETE de reparaciones: SOLO el dueño/admin del taller. Los técnicos pueden
+-- leer, crear, editar y marcar como 'Cancelado / No Reparado' (UPDATE), pero
+-- NUNCA eliminar órdenes. current_user_role() es SECURITY DEFINER (sin recursión).
 drop policy if exists "repairs_workshop_all" on public.repairs;
-create policy "repairs_workshop_all" on public.repairs
-  for all using (workshop_id = current_workshop_id())
+drop policy if exists "repairs_workshop_select" on public.repairs;
+drop policy if exists "repairs_workshop_insert" on public.repairs;
+drop policy if exists "repairs_workshop_update" on public.repairs;
+drop policy if exists "repairs_admin_delete" on public.repairs;
+create policy "repairs_workshop_select" on public.repairs
+  for select using (workshop_id = current_workshop_id());
+create policy "repairs_workshop_insert" on public.repairs
+  for insert with check (workshop_id = current_workshop_id());
+create policy "repairs_workshop_update" on public.repairs
+  for update using (workshop_id = current_workshop_id())
   with check (workshop_id = current_workshop_id());
+create policy "repairs_admin_delete" on public.repairs
+  for delete using (
+    workshop_id = current_workshop_id()
+    and public.current_user_role() = 'admin'
+  );
 
 drop policy if exists "inventory_workshop_all" on public.inventory;
 create policy "inventory_workshop_all" on public.inventory

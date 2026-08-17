@@ -503,13 +503,26 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
     return true;
   };
 
-  /** Elimina definitivamente una orden. Devuelve true si existía. */
+  /** Elimina definitivamente una orden. SOLO el dueño/admin del taller.
+   *  Devuelve true si existía y fue eliminada de la nube. */
   const deleteRepair = async (id: string): Promise<boolean> => {
     if (!repairs.some((r) => r.id === id)) return false;
+    if (currentUser?.role !== 'admin') {
+      notifyError('Solo el dueño del taller puede eliminar órdenes.');
+      return false;
+    }
     const blockReason = requireWorkshop();
     if (blockReason) { notifyError(blockReason); return false; }
-    const { error } = await supabase.from('repairs').delete().eq('id', id);
-    if (error) { console.error(formatDbError('deleteRepair (delete)', error)); notifyError(`No se pudo eliminar la orden: ${error.message}`); return false; }
+    const { data, error } = await supabase.from('repairs').delete().eq('id', id).select('id');
+    if (error) {
+      console.error(formatDbError('deleteRepair (delete)', error));
+      notifyError(`No se pudo eliminar la orden: ${error.message}`);
+      return false;
+    }
+    if (!data || data.length === 0) {
+      notifyError('No se pudo eliminar la orden: no pertenece a tu taller o ya no existe.');
+      return false;
+    }
     setRepairs((prev) => prev.filter((r) => r.id !== id));
     return true;
   };
