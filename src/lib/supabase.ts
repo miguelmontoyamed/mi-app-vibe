@@ -76,3 +76,33 @@ export function assertSupabaseConfigured(): void {
 }
 
 export { getRedirectUrl };
+
+/**
+ * Resuelve el `workshop_id` del usuario autenticado con auto-aprovisionamiento
+ * (self-healing):
+ *
+ * 1. Intenta `ensure_workshop()` — RPC `SECURITY DEFINER` (ver schema.sql) que,
+ *    si la cuenta no tiene fila en `public.profiles` (cuentas creadas antes del
+ *    trigger `handle_new_user`, o con trigger que tragó un error), crea el
+ *    taller por defecto "Mi Taller" + el perfil con rol 'admin' y devuelve el
+ *    workshop_id. Así `current_workshop_id()` NUNCA es null para un usuario
+ *    autenticado activo.
+ * 2. Si el RPC aún no existe en la BD (transición previa a aplicar el schema),
+ *    cae a `current_workshop_id()` para no romper la app.
+ *
+ * Devuelve null solo si no hay sesión o ambos RPC fallan.
+ */
+export async function resolveWorkshopId(): Promise<string | null> {
+  const { data: ensured, error } = await supabase.rpc('ensure_workshop');
+  if (!error && typeof ensured === 'string') {
+    return ensured;
+  }
+  if (error) {
+    console.error(
+      '[supabase] ensure_workshop falló (¿RPC no aplicado a la BD?): ' +
+        JSON.stringify({ code: error.code, message: error.message, hint: error.hint })
+    );
+  }
+  const { data } = await supabase.rpc('current_workshop_id');
+  return typeof data === 'string' ? data : null;
+}

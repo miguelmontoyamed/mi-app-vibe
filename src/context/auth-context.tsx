@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useState } fr
 import { Alert, Platform } from 'react-native';
 
 import type { GoogleAuthResult } from '@/lib/google-auth';
-import { getSupabaseEnvError, isSupabaseConfigured, supabase } from '@/lib/supabase';
+import { getSupabaseEnvError, isSupabaseConfigured, resolveWorkshopId, supabase } from '@/lib/supabase';
 import {
   supabaseRestoreSession,
   supabaseResendRegistration,
@@ -225,7 +225,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [hydrated, setHydrated] = useState(false);
   /** Error visible de hidratación (env faltante), o null. */
   const [loadError, setLoadError] = useState<string | null>(null);
-  /** Workshop id resuelto vía `current_workshop_id()` (SECURITY DEFINER). */
+  /** Workshop id resuelto vía `resolveWorkshopId()` (ensure_workshop, SECURITY DEFINER). */
   const [workshopId, setWorkshopId] = useState<string | null>(null);
 
   /** Muestra un error visible en web (window.alert) o nativo (Alert.alert). */
@@ -270,7 +270,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const role = await fetchAuthoritativeRole(profile.id);
           setCurrentUser(profileToUser(profile, role ?? undefined));
         }
-        const { data: wid } = await supabase.rpc('current_workshop_id');
+        const wid = await resolveWorkshopId();
         if (!cancelled && typeof wid === 'string') {
           setWorkshopId(wid);
           const { data: profilesData, error: profilesError } = await supabase
@@ -315,7 +315,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           try {
             const role = await fetchAuthoritativeRole(profile.id);
             setCurrentUser(profileToUser(profile, role ?? undefined));
-            const { data: wid } = await supabase.rpc('current_workshop_id');
+            const wid = await resolveWorkshopId();
             if (typeof wid === 'string') {
               setWorkshopId(wid);
               await refreshUsers(wid);
@@ -340,7 +340,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const user = profileToUser(result.user, role ?? undefined);
       setCurrentUser(user);
       // Sincronizar los miembros del taller desde `profiles`.
-      const { data: wid } = await supabase.rpc('current_workshop_id');
+      const wid = await resolveWorkshopId();
       if (typeof wid === 'string') {
         setWorkshopId(wid);
         await refreshUsers(wid);
@@ -363,7 +363,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const role = await fetchAuthoritativeRole(result.user.id);
         const user = profileToUser(result.user, role ?? undefined);
         setCurrentUser(user);
-        const { data: wid } = await supabase.rpc('current_workshop_id');
+        const wid = await resolveWorkshopId();
         if (typeof wid === 'string') {
           setWorkshopId(wid);
           await refreshUsers(wid);
@@ -435,11 +435,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Resolver el taller actual (mismo patrón que repair/workshop contexts).
     let wid = workshopId;
     if (!wid) {
-      const { data } = await supabase.rpc('current_workshop_id');
-      if (typeof data === 'string') {
-        wid = data;
-        setWorkshopId(data);
-      }
+      wid = await resolveWorkshopId();
+      if (wid) setWorkshopId(wid);
     }
     if (!wid) {
       return { ok: false, reason: 'unknown', message: 'No se pudo resolver el taller actual.' };

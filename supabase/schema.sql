@@ -191,6 +191,62 @@ as $$
 $$;
 
 -- ============================================================
+-- SELF-HEALING DE TALLER (auto-aprovisionamiento)
+-- ============================================================
+-- Repara cuentas autenticadas sin fila en `public.profiles` (creadas antes
+-- del trigger `handle_new_user` o con trigger que tragó un error): crea el
+-- taller por defecto "Mi Taller" y el perfil con rol 'admin', y devuelve el
+-- workshop_id resultante. Así `current_workshop_id()` NUNCA es null para un
+-- usuario autenticado activo y el RLS deja de bloquear sus INSERT/SELECT.
+-- Idempotente: si el perfil ya existe, solo devuelve su taller. SECURITY
+-- DEFINER para sortear el RLS (el cliente no tiene políticas de INSERT).
+create or replace function public.ensure_workshop()
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  uid uuid := auth.uid();
+  w_id uuid;
+  full_name text;
+begin
+  -- Sin sesión: nada que sanear.
+  if uid is null then
+    return null;
+  end if;
+
+  -- Perfil existente → devolver su taller tal cual.
+  select workshop_id into w_id from public.profiles where id = uid;
+  if w_id is not null then
+    return w_id;
+  end if;
+
+  -- Sin perfil: crear taller por defecto + perfil admin (mismo COALESCE que
+  -- el trigger handle_new_user: nunca falla por datos incompletos).
+  select coalesce(nullif(raw_user_meta_data->>'full_name', ''), email, 'Mi Taller')
+    into full_name
+    from auth.users
+   where id = uid;
+
+  insert into public.workshops (name)
+  values (coalesce(nullif(full_name, ''), 'Mi Taller'))
+  returning id into w_id;
+
+  insert into public.profiles (id, workshop_id, full_name, role, is_active, joined_at)
+  values (uid, w_id, coalesce(nullif(full_name, ''), 'Usuario'), 'admin', true, now())
+  on conflict (id) do nothing;
+
+  -- Re-leer por si otra sesión creó el perfil en paralelo (race).
+  select workshop_id into w_id from public.profiles where id = uid;
+  return w_id;
+end;
+$$;
+
+revoke execute on function public.ensure_workshop() from public, anon, authenticated;
+grant execute on function public.ensure_workshop() to authenticated, service_role;
+
+-- ============================================================
 -- TRIGGER: al registrarse una cuenta nueva se crea su taller y su perfil.
 -- ============================================================
 create or replace function public.handle_new_user()

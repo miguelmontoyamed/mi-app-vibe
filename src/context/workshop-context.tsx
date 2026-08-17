@@ -4,6 +4,7 @@ import {
   assertSupabaseConfigured,
   getSupabaseEnvError,
   isSupabaseConfigured,
+  resolveWorkshopId,
   supabase,
 } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
@@ -57,7 +58,7 @@ export function WorkshopProvider({ children }: { children: React.ReactNode }) {
   const [hydrated, setHydrated] = useState(false);
   /** Error visible de hidratación (env faltante o lectura fallida), o null. */
   const [loadError, setLoadError] = useState<string | null>(null);
-  /** Workshop id resuelto vía `current_workshop_id()` (SECURITY DEFINER). */
+  /** Workshop id resuelto vía `resolveWorkshopId()` (ensure_workshop, SECURITY DEFINER). */
   const [workshopId, setWorkshopId] = useState<string | null>(null);
 
   /** Muestra un error visible en web (window.alert) o nativo (Alert.alert). */
@@ -83,8 +84,8 @@ export function WorkshopProvider({ children }: { children: React.ReactNode }) {
         if (isSupabaseConfigured && userId) {
           const { data: { session } } = await supabase.auth.getSession();
           if (session?.user) {
-            const { data: wid } = await supabase.rpc('current_workshop_id');
-            if (typeof wid === 'string') {
+            const wid = await resolveWorkshopId();
+            if (wid) {
               setWorkshopId(wid);
               const { data, error } = await supabase
                 .from('workshop_profiles')

@@ -113,6 +113,7 @@ try {
 // Test 4: roundtrip con usuario real (solo si hay sesión o service role)
 // ────────────────────────────────────────────────────────────────────────────
 let userToCleanup = null;
+let healedWorkshop = null;
 
 try {
   let session = null;
@@ -153,11 +154,26 @@ try {
   if (session) {
     const client = createClient(URL, ANON_KEY, { global: { headers: { Authorization: `Bearer ${session.access_token}` } }, auth: { persistSession: false } });
 
-    // Resolver el taller del usuario de prueba (el trigger crea perfil+taller).
-    const { data: wid, error: widErr } = await client.rpc('current_workshop_id');
-    report('RPC current_workshop_id para usuario real', !widErr && !!wid, widErr ? widErr.message : `workshop=${wid}`);
+    // Simular una cuenta "rota" (creada antes del trigger o con trigger que
+    // tragó el error): borrar su fila en profiles con service role.
+    if (admin && userToCleanup) {
+      const { error: delProfErr } = await admin.from('profiles').delete().eq('id', userToCleanup);
+      report('Setup: perfil eliminado (simula cuenta sin fila en profiles)', !delProfErr, delProfErr ? delProfErr.message : 'ok');
+    }
 
-    if (!widErr && wid) {
+    // Self-healing: ensure_workshop debe crear taller + perfil (rol admin).
+    const { data: healed, error: healErr } = await client.rpc('ensure_workshop');
+    const healedOk = !healErr && typeof healed === 'string' && healed.length > 0;
+    if (healedOk) healedWorkshop = healed;
+    report('Self-heal: ensure_workshop crea taller+perfil (workshop_id no null)', healedOk, healErr ? `code=${healErr.code} ${healErr.message}` : `workshop=${healed}`);
+
+    // current_workshop_id ya no puede ser null para un usuario activo.
+    const { data: wid2, error: widErr2 } = await client.rpc('current_workshop_id');
+    const consistent = !widErr2 && typeof wid2 === 'string' && wid2 === healed;
+    report('Self-heal: current_workshop_id ya no devuelve null (y coincide con ensure_workshop)', consistent, widErr2 ? `code=${widErr2.code} ${widErr2.message}` : `workshop=${wid2}`);
+
+    const wid = healedOk ? healed : (typeof wid2 === 'string' && wid2 ? wid2 : null);
+    if (wid) {
       const row = {
         id: FAKE_ID,
         workshop_id: wid,
@@ -171,13 +187,12 @@ try {
         date: new Date().toISOString().split('T')[0],
       };
       const { data: ins, error: insErr } = await client.from('repairs').insert(row).select('id');
-      report('INSERT con usuario real (RLS permite)', !insErr && ins?.length === 1, insErr ? `code=${insErr.code} ${insErr.message}` : `id=${ins?.[0]?.id}`);
+      report('INSERT con usuario real: HTTP 201 + ID confirmado de Supabase', !insErr && ins?.length === 1 && ins[0].id === FAKE_ID, insErr ? `code=${insErr.code} ${insErr.message}` : `id=${ins?.[0]?.id}`);
 
       const { data: sel, error: selErr } = await client.from('repairs').select('*').eq('id', FAKE_ID);
       const found = !selErr && Array.isArray(sel) && sel.length === 1 && sel[0].client_name === row.client_name;
       report('SELECT con usuario real (RLS permite y devuelve la fila)', found, selErr ? `code=${selErr.code} ${selErr.message}` : `filas=${sel?.length}`);
 
-      // Limpieza: borrar el registro de prueba.
       const { error: delErr } = await client.from('repairs').delete().eq('id', FAKE_ID);
       report('Limpieza: DELETE del registro de prueba', !delErr, delErr ? delErr.message : 'ok');
     }
@@ -186,10 +201,15 @@ try {
   report('Roundtrip con usuario real', false, err.message);
 }
 
-// Limpieza del usuario de prueba (si se creó vía Admin API).
+// Limpieza del usuario de prueba (si se creó vía Admin API) y del taller
+// auto-aprovisionado por ensure_workshop (si quedó huérfano tras el cascade).
 if (userToCleanup && admin) {
   const { error } = await admin.auth.admin.deleteUser(userToCleanup);
   console.log(`CLEAN  usuario de prueba ${userToCleanup} ${error ? `(fallo: ${error.message})` : 'eliminado'}`);
+  if (healedWorkshop) {
+    const { error: wErr } = await admin.from('workshops').delete().eq('id', healedWorkshop);
+    console.log(`CLEAN  taller de prueba ${healedWorkshop} ${wErr ? `(fallo: ${wErr.message})` : 'eliminado'}`);
+  }
 }
 
 // ────────────────────────────────────────────────────────────────────────────

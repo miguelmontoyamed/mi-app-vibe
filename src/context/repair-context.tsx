@@ -6,6 +6,7 @@ import {
   assertSupabaseConfigured,
   getSupabaseEnvError,
   isSupabaseConfigured,
+  resolveWorkshopId,
   supabase,
 } from '@/lib/supabase';
 import {
@@ -283,12 +284,11 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
       console.error('[repair-context] fetchRepairs bloqueado: ' + msg);
       return { ok: false, error: msg };
     }
-    const { data: wid } = await supabase.rpc('current_workshop_id');
-    const resolvedWorkshopId = (wid as string | null) ?? null;
+    const resolvedWorkshopId = await resolveWorkshopId();
     if (!resolvedWorkshopId) {
       const msg =
-        'No se pudo resolver el taller (current_workshop_id() devolvió null): ' +
-        'el usuario autenticado no tiene fila válida en public.profiles.';
+        'No se pudo resolver el taller (ensure_workshop()/current_workshop_id() devolvieron null): ' +
+        'revisa que el RPC ensure_workshop esté aplicado en la BD y que haya sesión activa.';
       console.error('[repair-context] fetchRepairs bloqueado: ' + msg);
       return { ok: false, error: msg };
     }
@@ -412,19 +412,17 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
       return { ok: false, error: msg };
     }
 
-    // Resuelve el taller si la hidratación aún no lo dejó listo (race).
+    // Resuelve el taller con auto-aprovisionamiento si la hidratación aún no
+    // lo dejó listo (race). ensure_workshop() repara perfiles sin workshop.
     let wid = workshopId;
     if (!wid) {
-      const { data } = await supabase.rpc('current_workshop_id');
-      if (typeof data === 'string') {
-        wid = data;
-        setWorkshopId(data);
-      }
+      wid = await resolveWorkshopId();
+      if (wid) setWorkshopId(wid);
     }
     if (!wid) {
       const msg =
-        'No se pudo resolver el taller (current_workshop_id() devolvió null). ' +
-        'Tu perfil puede no tener workshop_id: revisa public.profiles.';
+        'No se pudo resolver el taller (ensure_workshop()/current_workshop_id() devolvieron null). ' +
+        'Sin taller no se puede guardar: revisa que el RPC ensure_workshop esté aplicado.';
       console.error('[repair-context] addRepair bloqueado: ' + msg);
       return { ok: false, error: msg };
     }
