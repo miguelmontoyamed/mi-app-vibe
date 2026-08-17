@@ -7,10 +7,32 @@ export type ThemedViewProps = ViewProps & {
   lightColor?: string;
   darkColor?: string;
   type?: ThemeColor;
+  /** MD3 surface tier (jerarquía surfaceContainer) — tiene prioridad sobre `type`. */
+  surface?: 'low' | 'default' | 'high' | 'highest';
 };
 
-export function ThemedView({ style, lightColor, darkColor, type, ...otherProps }: ThemedViewProps) {
+export function ThemedView({
+  style,
+  lightColor,
+  darkColor,
+  type,
+  surface,
+  ...otherProps
+}: ThemedViewProps) {
   const theme = useTheme();
 
-  return <View style={[{ backgroundColor: theme[type ?? 'background'] }, style]} {...otherProps} />;
+  const surfaceColor =
+    surface === 'low'
+      ? theme.surfaceContainerLow
+      : surface === 'high'
+        ? theme.surfaceContainerHigh
+        : surface === 'highest'
+          ? theme.surfaceContainerHighest
+          : surface === 'default'
+            ? theme.surfaceContainer
+            : null;
+
+  return (
+    <View style={[{ backgroundColor: surfaceColor ?? theme[type ?? 'background'] }, style]} {...otherProps} />
+  );
 }

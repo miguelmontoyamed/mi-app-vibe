@@ -45,6 +45,20 @@ body,
   --sar: env(safe-area-inset-right, 0px);
 }
 
+/* Liquid Glass — acabado translúcido para superficies clave (web).
+   Los componentes consumen los tokens `Glass` de theme.ts; estas variables
+   centralizan los valores por si una clase CSS los necesita (blur ≤16px y
+   alpha ≥0.72 para preservar contraste AA). */
+:root {
+  --glass-bg-light: rgba(255, 255, 255, 0.72);
+  --glass-bg-dark: rgba(18, 19, 22, 0.72);
+  --glass-border-light: rgba(255, 255, 255, 0.6);
+  --glass-border-dark: rgba(255, 255, 255, 0.12);
+  --glass-blur: 16px;
+  --glass-shadow-light: rgba(0, 0, 0, 0.06);
+  --glass-shadow-dark: rgba(0, 0, 0, 0.4);
+}
+
 /* Slim, unobtrusive scrollbars (WebKit/Blink). */
 ::-webkit-scrollbar {
   width: 6px;

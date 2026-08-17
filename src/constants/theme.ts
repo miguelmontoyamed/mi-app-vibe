@@ -19,6 +19,15 @@ export const Colors = {
     backgroundSelected: '#E0E1E6',
     textSecondary: '#60646C',
     border: '#D8D8DF',
+    // MD3 surface tiers (jerarquía surfaceContainer). Aditivo: los tokens
+    // existentes (backgroundElement/Selected) se mantienen para no romper
+    // callers; los componentes nuevos consumen esta jerarquía.
+    surfaceContainerLow: '#F7F7F9',
+    surfaceContainer: '#F0F0F3',
+    surfaceContainerHigh: '#E9E9EE',
+    surfaceContainerHighest: '#E0E1E6',
+    onSurface: '#000000',
+    surfaceTint: '#0284c7',
   },
   dark: {
     text: '#ffffff',
@@ -27,6 +36,12 @@ export const Colors = {
     backgroundSelected: '#2E3135',
     textSecondary: '#B0B4BA',
     border: '#3A3A42',
+    surfaceContainerLow: '#1B1C1F',
+    surfaceContainer: '#212225',
+    surfaceContainerHigh: '#292A2E',
+    surfaceContainerHighest: '#2E3135',
+    onSurface: '#ffffff',
+    surfaceTint: '#38bdf8',
   },
 } as const;
 
@@ -131,3 +146,67 @@ export const StatusColors: Record<RepairStatus, { light: StatusStyle; dark: Stat
 export function statusStyle(status: RepairStatus, scheme: 'light' | 'dark'): StatusStyle {
   return StatusColors[status][scheme];
 }
+
+/**
+ * Escala de elevación MD3 (niveles 1-3). Se usan con las props shadow de RN;
+ * en web react-native-web las convierte a box-shadow.
+ */
+export const Elevation = {
+  level1: {
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.18,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  level2: {
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  level3: {
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.24,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+} as const;
+
+/** Escala de forma MD3 (radios de borde). */
+export const Shape = {
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 24,
+} as const;
+
+/** Alphas de state layers MD3 (overlay del color on-surface sobre el fondo). */
+export const StateLayer = {
+  hover: 0.08,
+  focus: 0.1,
+  pressed: 0.12,
+} as const;
+
+/**
+ * Liquid Glass — acabado translúcido para superficies clave (web).
+ * El nativo degrada a superficies sólidas de la jerarquía MD3 (los
+ * componentes lo resuelven con Platform.select). Alpha alto (≥0.72) para
+ * preservar contraste AA: la legibilidad gana sobre la estética (AGENTS.md §3).
+ */
+export const Glass = {
+  light: {
+    background: 'rgba(255, 255, 255, 0.72)',
+    border: 'rgba(255, 255, 255, 0.6)',
+    blur: 16,
+    shadow: 'rgba(0, 0, 0, 0.06)',
+  },
+  dark: {
+    background: 'rgba(18, 19, 22, 0.72)',
+    border: 'rgba(255, 255, 255, 0.12)',
+    blur: 16,
+    shadow: 'rgba(0, 0, 0, 0.4)',
+  },
+} as const;
