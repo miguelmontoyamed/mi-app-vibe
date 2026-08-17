@@ -36,5 +36,11 @@ export default defineConfig({
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
     },
+    {
+      // Motor WebKit = Safari: detecta pantallas en blanco que solo ocurren
+      // en el motor de Safari/iOS (sintaxis no soportada, errores de parse).
+      name: 'webkit',
+      use: { ...devices['Desktop Safari'] },
+    },
   ],
 });
