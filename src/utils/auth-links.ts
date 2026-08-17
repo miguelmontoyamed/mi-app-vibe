@@ -15,6 +15,8 @@
  */
 
 import * as Crypto from 'expo-crypto';
+import * as Linking from 'expo-linking';
+import { Platform } from 'react-native';
 
 /** 10 minutos en milisegundos. El token vence rápido para minimizar exposición. */
 export const INVITE_EXPIRY_MS = 10 * 60 * 1000;
@@ -76,7 +78,18 @@ export function encodeInviteToken(token: InviteToken): string {
  */
 export function decodeInviteToken(encoded: string): InviteToken | null {
   try {
-    const parsed: unknown = JSON.parse(decodeURIComponent(encoded));
+    // En web, `useLocalSearchParams` entrega el valor ya decodificado por
+    // URLSearchParams; en nativo, expo-linking también lo decodifica. En ese
+    // caso `decodeURIComponent` es un no-op y solo lanza si el valor crudo
+    // contiene '%' (p. ej. un taller llamado "Taller 100% Mejor") → usamos el
+    // valor crudo. Así soportamos tanto codificación simple como doble.
+    let raw: string;
+    try {
+      raw = decodeURIComponent(encoded);
+    } catch {
+      raw = encoded;
+    }
+    const parsed: unknown = JSON.parse(raw);
     const t = parsed as Partial<InviteToken>;
     if (
       typeof t.token === 'string' &&
@@ -110,9 +123,21 @@ export function validateInviteToken(token: InviteToken): InviteValidation {
 
 /**
  * Convierte un `InviteToken` en la URL completa que se le entrega al técnico.
- * Usa el dominio base de TechRepair (deep link en mobile, URL web en desktop).
+ * - Web: `window.location.origin` + ruta `/signup` (localhost en dev, dominio
+ *   desplegado en producción). El rewrite de vercel.json sirve el SPA.
+ * - Nativo: deep link del scheme de la app (`miappvibe://signup?invite=...`);
+ *   `createURL` codifica el query param una sola vez (URLSearchParams).
  */
 export function buildInviteUrl(token: InviteToken): string {
   const encoded = encodeInviteToken(token);
-  return `https://techrepair.saas/join?invite=${encoded}`;
+  if (Platform.OS === 'web') {
+    const origin =
+      typeof window !== 'undefined' && window.location?.origin
+        ? window.location.origin
+        : 'https://mi-app-vibe-ten.vercel.app';
+    return `${origin}/signup?invite=${encoded}`;
+  }
+  return Linking.createURL('/signup', {
+    queryParams: { invite: JSON.stringify(token) },
+  });
 }
