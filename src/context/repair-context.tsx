@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { Alert, Platform } from 'react-native';
 
 import { useAuth } from '@/context/auth-context';
@@ -56,7 +56,10 @@ interface RepairContextType {
   hydrated: boolean;
   /** Error visible de carga desde la nube (null cuando todo salió bien). */
   loadError: string | null;
-  addRepair: (repair: Omit<RepairItem, 'id' | 'status' | 'date'>) => Promise<void>;
+  /** Carga las reparaciones del taller desde Supabase (nube). Devuelve { ok, error } con el motivo técnico. */
+  fetchRepairs: () => Promise<{ ok: boolean; error?: string }>;
+  /** Crea la orden en Supabase y devuelve { ok, error }. NO finge éxito si la DB rechaza el INSERT. */
+  addRepair: (repair: Omit<RepairItem, 'id' | 'status' | 'date'>) => Promise<{ ok: boolean; error?: string }>;
   updateRepairStatus: (id: string, status: RepairStatus) => Promise<void>;
   /** Edita campos de una reparación (no el estado ni el motivo de cancelación). */
   updateRepair: (
@@ -208,6 +211,26 @@ function inventoryToRowItem(
   };
 }
 
+/** Serializa un error de Supabase (PostgrestError) para consola con el detalle técnico exacto. */
+function formatDbError(
+  operation: string,
+  error: { code?: string; message?: string; details?: string; hint?: string } | null
+): string {
+  return (
+    `[repair-context] ${operation} rechazado por Supabase: ` +
+    JSON.stringify(
+      {
+        code: error?.code ?? null,
+        message: error?.message ?? null,
+        details: error?.details ?? null,
+        hint: error?.hint ?? null,
+      },
+      null,
+      2
+    )
+  );
+}
+
 export function RepairProvider({ children }: { children: React.ReactNode }) {
   const { currentUser } = useAuth();
   const userId = currentUser?.id ?? null;
@@ -241,8 +264,75 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
     return null;
   };
 
-  // Hydrate desde Supabase (una vez por usuario). Sin Supabase configurado o sin
-  // sesión/taller, el estado queda vacío (solo en memoria, demo local).
+  /**
+   * Carga las reparaciones del taller desde Supabase (nube) y reemplaza el
+   * estado local. Si no hay sesión, no hay taller resuelto o la consulta
+   * falla, devuelve { ok: false, error } con el motivo técnico exacto.
+   */
+  const fetchRepairs = useCallback(async (): Promise<{ ok: boolean; error?: string }> => {
+    if (!isSupabaseConfigured) {
+      const msg = getSupabaseEnvError() ?? 'Supabase no está configurado.';
+      console.error('[repair-context] fetchRepairs bloqueado: ' + msg);
+      return { ok: false, error: msg };
+    }
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError || !sessionData.session?.user) {
+      const msg = sessionError
+        ? `Error de sesión: ${sessionError.message}`
+        : 'Sin sesión activa de Supabase: inicia sesión para cargar los datos de la nube.';
+      console.error('[repair-context] fetchRepairs bloqueado: ' + msg);
+      return { ok: false, error: msg };
+    }
+    const { data: wid } = await supabase.rpc('current_workshop_id');
+    const resolvedWorkshopId = (wid as string | null) ?? null;
+    if (!resolvedWorkshopId) {
+      const msg =
+        'No se pudo resolver el taller (current_workshop_id() devolvió null): ' +
+        'el usuario autenticado no tiene fila válida en public.profiles.';
+      console.error('[repair-context] fetchRepairs bloqueado: ' + msg);
+      return { ok: false, error: msg };
+    }
+    setWorkshopId(resolvedWorkshopId);
+    const { data, error } = await supabase
+      .from('repairs')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (error) {
+      console.error(formatDbError('fetchRepairs (select repairs)', error));
+      return { ok: false, error: `Error al cargar reparaciones: ${error.message}` };
+    }
+    setRepairs(((data ?? []) as RepairRow[]).map(rowToRepair));
+    return { ok: true };
+  }, []);
+
+  /** Carga el inventario del taller desde Supabase (nube). Mismo contrato que fetchRepairs. */
+  const fetchInventory = useCallback(async (): Promise<{ ok: boolean; error?: string }> => {
+    if (!isSupabaseConfigured) {
+      const msg = getSupabaseEnvError() ?? 'Supabase no está configurado.';
+      console.error('[repair-context] fetchInventory bloqueado: ' + msg);
+      return { ok: false, error: msg };
+    }
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError || !sessionData.session?.user) {
+      const msg = sessionError ? `Error de sesión: ${sessionError.message}` : 'Sin sesión activa de Supabase.';
+      console.error('[repair-context] fetchInventory bloqueado: ' + msg);
+      return { ok: false, error: msg };
+    }
+    const { data, error } = await supabase
+      .from('inventory')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (error) {
+      console.error(formatDbError('fetchInventory (select inventory)', error));
+      return { ok: false, error: `Error al cargar inventario: ${error.message}` };
+    }
+    setInventory(((data ?? []) as InventoryRow[]).map(rowToInventory));
+    return { ok: true };
+  }, []);
+
+  // Hidratación desde Supabase (una vez por usuario): sin Supabase configurado
+  // o sin sesión, el estado queda vacío (demo local). Con sesión, llama a
+  // fetchRepairs/fetchInventory (nube) y reporta el motivo técnico si falla.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -252,58 +342,42 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
       setWorkshopId(null);
       setLoadError(null);
       try {
-        if (isSupabaseConfigured && userId) {
-          const { data: { session } } = await supabase.auth.getSession();
-          if (session?.user) {
-            const { data: wid } = await supabase.rpc('current_workshop_id');
-            const resolvedWorkshopId = (wid as string | null) ?? null;
-            if (!cancelled) setWorkshopId(resolvedWorkshopId);
-            if (resolvedWorkshopId) {
-              const [repResult, invResult] = await Promise.all([
-                supabase.from('repairs').select('*').order('created_at', { ascending: false }),
-                supabase.from('inventory').select('*').order('created_at', { ascending: false }),
-              ]);
-              const repairsLoaded = !repResult.error;
-              const inventoryLoaded = !invResult.error;
-              if (!repairsLoaded) {
-                setLoadError('Error al cargar reparaciones: ' + repResult.error.message);
-              }
-              if (!inventoryLoaded) {
-                setLoadError('Error al cargar inventario: ' + invResult.error.message);
-              }
-              // Cada hidratación reemplaza el estado completo: si una consulta
-              // falla, esa lista queda vacía en lugar de heredar datos del
-              // usuario anterior.
-              if (!cancelled) {
-                setRepairs(repairsLoaded ? ((repResult.data ?? []) as RepairRow[]).map(rowToRepair) : []);
-                setInventory(inventoryLoaded ? ((invResult.data ?? []) as InventoryRow[]).map(rowToInventory) : []);
-              }
-            } else {
-              // Usuario demo local sin fila en profiles: datos solo en memoria.
-              if (!cancelled) {
-                setRepairs([]);
-                setInventory([]);
-              }
-            }
-          } else {
-            // Sin sesión Supabase: demo local, datos solo en memoria.
-            if (!cancelled) {
-              setWorkshopId(null);
-              setRepairs([]);
-              setInventory([]);
-            }
-          }
-        } else {
-          // Sin Supabase configurado o sin usuario: demo local.
+        if (!isSupabaseConfigured) {
           if (!cancelled) {
             setWorkshopId(null);
             setRepairs([]);
             setInventory([]);
             setLoadError(getSupabaseEnvError() ?? 'Supabase no está configurado.');
           }
+          return;
+        }
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user) {
+          // Sin sesión Supabase: demo local, datos solo en memoria.
+          if (!cancelled) {
+            setWorkshopId(null);
+            setRepairs([]);
+            setInventory([]);
+          }
+          return;
+        }
+        const [repResult, invResult] = await Promise.all([fetchRepairs(), fetchInventory()]);
+        if (!cancelled) {
+          // Cada hidratación reemplaza el estado completo: si una consulta
+          // falla, esa lista queda vacía en lugar de heredar datos del
+          // usuario anterior, y el motivo técnico queda visible.
+          if (!repResult.ok) {
+            setLoadError(repResult.error ?? 'Error al cargar reparaciones.');
+            setRepairs([]);
+          }
+          if (!invResult.ok) {
+            setLoadError((prev) => prev ?? invResult.error ?? 'Error al cargar inventario.');
+            setInventory([]);
+          }
         }
       } catch (error) {
         if (!cancelled) {
+          console.error('[repair-context] hidratación falló:', error);
           setWorkshopId(null);
           setRepairs([]);
           setInventory([]);
@@ -316,16 +390,44 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [userId]);
+  }, [userId, fetchRepairs, fetchInventory]);
 
   /**
    * Registra una nueva reparación con un ID de orden único, corto y
    * alfanumérico (TRM-XXXX). Si el ID generado ya existe en el estado
    * actual, se reintenta hasta 10 veces antes de fallar.
+   *
+   * El INSERT se ejecuta OBLIGATORIAMENTE contra Supabase y la respuesta se
+   * valida (sin error + fila devuelta por `.select('id')`). Si la DB rechaza
+   * la operación (RLS, sesión, token o conexión), se devuelve { ok: false,
+   * error } con el motivo exacto y el error se imprime en consola: NUNCA se
+   * finge un guardado local.
    */
-  const addRepair = async (newRep: Omit<RepairItem, 'id' | 'status' | 'date'>): Promise<void> => {
-    const blockReason = requireWorkshop();
-    if (blockReason) { notifyError(blockReason); return; }
+  const addRepair = async (
+    newRep: Omit<RepairItem, 'id' | 'status' | 'date'>
+  ): Promise<{ ok: boolean; error?: string }> => {
+    if (!isSupabaseConfigured) {
+      const msg = getSupabaseEnvError() ?? 'Supabase no está configurado.';
+      console.error('[repair-context] addRepair bloqueado: ' + msg);
+      return { ok: false, error: msg };
+    }
+
+    // Resuelve el taller si la hidratación aún no lo dejó listo (race).
+    let wid = workshopId;
+    if (!wid) {
+      const { data } = await supabase.rpc('current_workshop_id');
+      if (typeof data === 'string') {
+        wid = data;
+        setWorkshopId(data);
+      }
+    }
+    if (!wid) {
+      const msg =
+        'No se pudo resolver el taller (current_workshop_id() devolvió null). ' +
+        'Tu perfil puede no tener workshop_id: revisa public.profiles.';
+      console.error('[repair-context] addRepair bloqueado: ' + msg);
+      return { ok: false, error: msg };
+    }
 
     const existingIds = new Set(repairs.map((r) => r.id));
     let id = generateOrderId();
@@ -335,27 +437,45 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
 
     const item: RepairItem = { ...newRep, id, status: 'Pendiente', date: new Date().toISOString().split('T')[0] };
 
-    const { error } = await supabase.from('repairs').insert(repairToRow(item, workshopId!));
+    const { data, error } = await supabase.from('repairs').insert(repairToRow(item, wid)).select('id');
     if (error) {
       if (String(error.code) === '23505') {
+        console.error(formatDbError('addRepair (insert, colisión 23505)', error));
         const retryId = `${ORDER_PREFIX}-${Date.now().toString(36).slice(-4).toUpperCase()}`;
         const retryItem: RepairItem = { ...item, id: retryId };
-        const { error: retryError } = await supabase.from('repairs').insert(repairToRow(retryItem, workshopId!));
-        if (retryError) { notifyError(`No se pudo guardar la reparación: ${retryError.message}`); return; }
+        const { data: retryData, error: retryError } = await supabase
+          .from('repairs')
+          .insert(repairToRow(retryItem, wid))
+          .select('id');
+        if (retryError) {
+          console.error(formatDbError('addRepair (reintento por 23505)', retryError));
+          return { ok: false, error: `No se pudo guardar la reparación: ${retryError.message}` };
+        }
+        if (!retryData || retryData.length !== 1) {
+          const msg = 'No se pudo confirmar la reparación en la base de datos (respuesta vacía tras INSERT).';
+          console.error('[repair-context] ' + msg);
+          return { ok: false, error: msg };
+        }
         setRepairs((prev) => [retryItem, ...prev]);
-        return;
+        return { ok: true };
       }
-      notifyError(`No se pudo guardar la reparación: ${error.message}`);
-      return;
+      console.error(formatDbError('addRepair (insert)', error));
+      return { ok: false, error: `No se pudo guardar la reparación: ${error.message}` };
+    }
+    if (!data || data.length !== 1) {
+      const msg = 'No se pudo confirmar la reparación en la base de datos (respuesta vacía tras INSERT).';
+      console.error('[repair-context] ' + msg);
+      return { ok: false, error: msg };
     }
     setRepairs((prev) => [item, ...prev]);
+    return { ok: true };
   };
 
   const updateRepairStatus = async (id: string, status: RepairStatus): Promise<void> => {
     const blockReason = requireWorkshop();
     if (blockReason) { notifyError(blockReason); return; }
     const { error } = await supabase.from('repairs').update(repairPatchToRow({ status })).eq('id', id);
-    if (error) { notifyError(`No se pudo actualizar el estado: ${error.message}`); return; }
+    if (error) { console.error(formatDbError('updateRepairStatus (update)', error)); notifyError(`No se pudo actualizar el estado: ${error.message}`); return; }
     setRepairs((prev) => prev.map((r) => (r.id === id ? { ...r, status } : r)));
   };
 
@@ -364,7 +484,7 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
     const blockReason = requireWorkshop();
     if (blockReason) { notifyError(blockReason); return; }
     const { error } = await supabase.from('repairs').update(repairPatchToRow(patch)).eq('id', id);
-    if (error) { notifyError(`No se pudo actualizar la reparación: ${error.message}`); return; }
+    if (error) { console.error(formatDbError('updateRepair (update)', error)); notifyError(`No se pudo actualizar la reparación: ${error.message}`); return; }
     setRepairs((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
   };
 
@@ -380,7 +500,7 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
     const blockReason = requireWorkshop();
     if (blockReason) { notifyError(blockReason); return false; }
     const { error } = await supabase.from('repairs').update({ status: 'Cancelado / No Reparado', motivo_cancelacion: cleanMotivo }).eq('id', id);
-    if (error) { notifyError(`No se pudo cancelar la orden: ${error.message}`); return false; }
+    if (error) { console.error(formatDbError('cancelRepair (update)', error)); notifyError(`No se pudo cancelar la orden: ${error.message}`); return false; }
     setRepairs((prev) => prev.map((r) => r.id === id ? { ...r, status: 'Cancelado / No Reparado' as RepairStatus, motivoCancelacion: cleanMotivo } : r));
     return true;
   };
@@ -391,7 +511,7 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
     const blockReason = requireWorkshop();
     if (blockReason) { notifyError(blockReason); return false; }
     const { error } = await supabase.from('repairs').delete().eq('id', id);
-    if (error) { notifyError(`No se pudo eliminar la orden: ${error.message}`); return false; }
+    if (error) { console.error(formatDbError('deleteRepair (delete)', error)); notifyError(`No se pudo eliminar la orden: ${error.message}`); return false; }
     setRepairs((prev) => prev.filter((r) => r.id !== id));
     return true;
   };
@@ -405,7 +525,7 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
     const blockReason = requireWorkshop();
     if (blockReason) { notifyError(blockReason); return; }
     const { error } = await supabase.from('repairs').update({ advance_payment: result.newAdvance, payment_method: method }).eq('id', id);
-    if (error) { notifyError(`No se pudo registrar el pago: ${error.message}`); return; }
+    if (error) { console.error(formatDbError('recordRepairPayment (update)', error)); notifyError(`No se pudo registrar el pago: ${error.message}`); return; }
     setRepairs((prev) => prev.map((r) => r.id === id ? { ...r, advancePayment: result.newAdvance, paymentMethod: method } : r));
   };
 
@@ -413,7 +533,7 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
     const blockReason = requireWorkshop();
     if (blockReason) { notifyError(blockReason); return; }
     const { data, error } = await supabase.from('inventory').insert(inventoryToRowItem(part, workshopId!)).select('id').single();
-    if (error || !data) { notifyError(`No se pudo agregar la pieza: ${error?.message ?? 'respuesta vacía'}`); return; }
+    if (error || !data) { console.error(formatDbError('addInventoryPart (insert)', error)); notifyError(`No se pudo agregar la pieza: ${error?.message ?? 'respuesta vacía'}`); return; }
     const dbId = (data as { id: string }).id;
     setInventory((prev) => [{ ...part, id: dbId }, ...prev]);
   };
@@ -425,7 +545,7 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
     const blockReason = requireWorkshop();
     if (blockReason) { notifyError(blockReason); return; }
     const { error } = await supabase.from('inventory').update({ stock }).eq('id', id);
-    if (error) { notifyError(`No se pudo actualizar el stock: ${error.message}`); return; }
+    if (error) { console.error(formatDbError('updateInventoryStock (update)', error)); notifyError(`No se pudo actualizar el stock: ${error.message}`); return; }
     setInventory((prev) => prev.map((p) => (p.id === id ? { ...p, stock } : p)));
   };
 
@@ -436,6 +556,7 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
         inventory,
         hydrated,
         loadError,
+        fetchRepairs,
         addRepair,
         updateRepairStatus,
         updateRepair,

@@ -117,7 +117,7 @@ export default function ReceiveScreen() {
 
     const advanceNum = advancePayment.trim() ? (parseMoney(advancePayment) ?? 0) : 0;
 
-    await addRepair({
+    const result = await addRepair({
       clientName: clientName.trim(),
       phone: phone.trim(),
       device: device.trim(),
@@ -128,6 +128,15 @@ export default function ReceiveScreen() {
       advancePayment: advanceNum,
       technicianName: currentUser.name,
     });
+
+    // La orden se guardó SOLO si Supabase confirmó el INSERT. Si la DB la
+    // rechazó (RLS, sesión, token o taller sin resolver), se muestra el error
+    // exacto y se conserva el formulario: NO se finge un éxito ni se navega.
+    if (!result.ok) {
+      console.error('[receive] addRepair falló: la orden NO se guardó en la nube.', result.error);
+      notify(`No se pudo guardar la reparación en la nube: ${result.error ?? 'error desconocido'}`);
+      return;
+    }
 
     // Persist non-sensitive receipt fields only.
     // Security: device unlock codes/PINs must never be written to AsyncStorage
