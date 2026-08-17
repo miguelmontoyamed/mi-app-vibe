@@ -93,6 +93,14 @@ export { getRedirectUrl };
  * Devuelve null solo si no hay sesión o ambos RPC fallan.
  */
 export async function resolveWorkshopId(): Promise<string | null> {
+  // Sin sesión no hay taller que asegurar: saltarse el RPC evita el 401/42501
+  // "permission denied" que anon recibe por diseño (sin GRANT en schema.sql) y
+  // silencia el ruido de consola en la web pública (login sin sesión).
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session) return null;
+
   const { data: ensured, error } = await supabase.rpc('ensure_workshop');
   if (!error && typeof ensured === 'string') {
     return ensured;
