@@ -119,17 +119,17 @@ export default function DashboardScreen() {
       {/* Quick Actions — elevación MD3 sobre los state layers de Fase B. */}
       <View style={styles.actionsRow}>
         <Link href="/receive" asChild>
-          <Button label="+ Recibir Equipo" style={[styles.primaryButton, Elevation.level3]} />
+          <Button label="+ Recibir Equipo" style={StyleSheet.flatten([styles.primaryButton, Elevation.level3])} />
         </Link>
         <Link href="/jobs" asChild>
-          <Button label="Ver Trabajos" variant="secondary" style={[styles.actionButton, Elevation.level1]} />
+          <Button label="Ver Trabajos" variant="secondary" style={StyleSheet.flatten([styles.actionButton, Elevation.level1])} />
         </Link>
       </View>
       <Link href="/taller" asChild>
         <Button
           label="🏪 Configurar Mi Taller"
           variant="secondary"
-          style={[styles.tallerButton, Elevation.level1]}
+          style={StyleSheet.flatten([styles.tallerButton, Elevation.level1])}
         />
       </Link>
     </Screen>
