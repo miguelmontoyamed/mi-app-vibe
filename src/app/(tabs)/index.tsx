@@ -2,11 +2,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { Link } from 'expo-router';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 
-import { Button } from '@/components/ui/button';
-import { Screen } from '@/components/ui/screen';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { BREAKPOINTS, KpiAccent, Spacing, statusStyle } from '@/constants/theme';
+import { Button } from '@/components/ui/button';
+import { GlassCard } from '@/components/ui/glass-card';
+import { Screen } from '@/components/ui/screen';
+import { Brand, BREAKPOINTS, Elevation, KpiAccent, Shape, Spacing, statusStyle } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { useRepair, type RepairStatus } from '@/context/repair-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -60,29 +60,48 @@ export default function DashboardScreen() {
 
   return (
     <Screen title="Panel de Control">
-      {/* License Expiring Countdown Banner */}
+      {/* Encabezado de bienvenida (presentacional: lee el nombre del auth actual). */}
+      <View style={styles.welcomeHeader}>
+        <View style={styles.welcomeCopy}>
+          <ThemedText type="subtitle" numberOfLines={1} ellipsizeMode="tail">
+            Hola, {currentUser.name.trim().split(' ')[0]}
+          </ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">
+            {currentUser.role === 'admin' ? 'Resumen de tu taller' : 'Tus trabajos asignados'}
+          </ThemedText>
+        </View>
+        <View style={styles.welcomeChip}>
+          <Ionicons name="sparkles" size={22} color={Brand.primary} />
+        </View>
+      </View>
+
+      {/* License Expiring Countdown Banner — contenedor de error MD3 + glass sutil. */}
       {showLicenseWarning && (
-        <ThemedView style={styles.warningBanner}>
-          <View style={styles.warningRow}>
-            <Ionicons name="alert-circle" size={18} color="#ffffff" />
-            <ThemedText style={styles.warningText}>
-              ¡Atención! Tu licencia de evaluación expira en {license.daysRemaining} días ({license.expiresAt}). Renueva para evitar bloqueos.
+        <GlassCard accent={Brand.danger} elevation={1} style={styles.warningBanner}>
+          <View style={styles.warningIconChip}>
+            <Ionicons name="alert-circle" size={20} color={Brand.danger} />
+          </View>
+          <View style={styles.warningCopy}>
+            <ThemedText type="smallBold" style={{ color: Brand.danger }}>
+              Licencia de evaluación por expirar
+            </ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              ¡Atención! Quedan {license.daysRemaining} días ({license.expiresAt}). Renueva para evitar bloqueos.
             </ThemedText>
           </View>
-        </ThemedView>
+        </GlassCard>
       )}
 
-      {/* Dashboard Summary Cards */}
+      {/* Dashboard Summary Cards — GlassCard con chip de acento por estado. */}
       <View style={styles.cardsGrid}>
         {kpiCards.map((card) => {
           const s = statusStyle(card.status, dark ? 'dark' : 'light');
           return (
-            <ThemedView
+            <GlassCard
               key={card.status}
-              style={[
-                styles.card,
-                { backgroundColor: s.bg, borderColor: card.accent, flexBasis: cardBasis },
-              ]}>
+              accent={card.accent}
+              elevation={1}
+              style={[styles.card, { flexBasis: cardBasis }]}>
               <View style={[styles.cardIcon, { backgroundColor: `${card.accent}1f` }]}>
                 <Ionicons name={card.icon} size={22} color={card.accent} />
               </View>
@@ -92,28 +111,53 @@ export default function DashboardScreen() {
               <ThemedText type="title" style={[styles.cardNumber, { color: s.text }]}>
                 {card.count}
               </ThemedText>
-            </ThemedView>
+            </GlassCard>
           );
         })}
       </View>
 
-      {/* Quick Actions */}
+      {/* Quick Actions — elevación MD3 sobre los state layers de Fase B. */}
       <View style={styles.actionsRow}>
         <Link href="/receive" asChild>
-          <Button label="+ Recibir Equipo" style={styles.primaryButton} />
+          <Button label="+ Recibir Equipo" style={[styles.primaryButton, Elevation.level3]} />
         </Link>
         <Link href="/jobs" asChild>
-          <Button label="Ver Trabajos" variant="secondary" style={styles.actionButton} />
+          <Button label="Ver Trabajos" variant="secondary" style={[styles.actionButton, Elevation.level1]} />
         </Link>
       </View>
       <Link href="/taller" asChild>
-        <Button label="🏪 Configurar Mi Taller" variant="secondary" style={styles.tallerButton} />
+        <Button
+          label="🏪 Configurar Mi Taller"
+          variant="secondary"
+          style={[styles.tallerButton, Elevation.level1]}
+        />
       </Link>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  welcomeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.three,
+    width: '100%',
+  },
+  welcomeCopy: {
+    flex: 1,
+    gap: Spacing.half,
+    minWidth: 0,
+  },
+  welcomeChip: {
+    width: 48,
+    height: 48,
+    borderRadius: Shape.xl,
+    backgroundColor: `${Brand.primary}1f`,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
   cardsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -122,9 +166,6 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   card: {
-    padding: Spacing.three,
-    borderRadius: Spacing.three,
-    borderWidth: 1.5,
     gap: Spacing.two,
     minHeight: 132,
     justifyContent: 'center',
@@ -133,7 +174,7 @@ const styles = StyleSheet.create({
   cardIcon: {
     width: 40,
     height: 40,
-    borderRadius: Spacing.three,
+    borderRadius: Shape.lg,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -162,29 +203,25 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     flex: 1,
-    shadowColor: KpiAccent.progress,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 6,
-    elevation: 6,
   },
   warningBanner: {
-    backgroundColor: '#b91c1c',
-    padding: Spacing.three,
-    borderRadius: Spacing.three,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.three,
     width: '100%',
     marginBottom: Spacing.two,
   },
-  warningRow: {
-    flexDirection: 'row',
+  warningIconChip: {
+    width: 36,
+    height: 36,
+    borderRadius: Shape.lg,
+    backgroundColor: `${Brand.danger}1f`,
     alignItems: 'center',
-    gap: Spacing.two,
+    justifyContent: 'center',
+    flexShrink: 0,
   },
-  warningText: {
-    color: '#ffffff',
-    fontWeight: 'bold',
-    textAlign: 'center',
-    fontSize: 13,
+  warningCopy: {
     flex: 1,
+    gap: Spacing.half,
   },
 });
