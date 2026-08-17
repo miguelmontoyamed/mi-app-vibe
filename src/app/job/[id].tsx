@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Modal, StyleSheet, View } from 'react-native';
+import { Alert, Modal, Platform, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -55,32 +55,43 @@ export default function JobDetailScreen() {
   const handleConfirmCancel = async () => {
     const cleanMotivo = cancelMotivo.trim();
     if (!cleanMotivo) {
-      Alert.alert('Motivo requerido', 'Escribe el motivo por el cual no se realizó el trabajo.');
+      if (Platform.OS === 'web') {
+        window.alert('Motivo requerido\n\nEscribe el motivo por el cual no se realizó el trabajo.');
+      } else {
+        Alert.alert('Motivo requerido', 'Escribe el motivo por el cual no se realizó el trabajo.');
+      }
       return;
     }
     if (await cancelRepair(repair.id, cleanMotivo)) {
       setCancelModalVisible(false);
       setCancelMotivo('');
     } else {
-      Alert.alert('No se pudo cancelar', 'La orden no está en un estado que permita marcarla como no realizada.');
+      if (Platform.OS === 'web') {
+        window.alert('No se pudo cancelar\n\nLa orden no está en un estado que permita marcarla como no realizada.');
+      } else {
+        Alert.alert('No se pudo cancelar', 'La orden no está en un estado que permita marcarla como no realizada.');
+      }
     }
   };
 
   const handleDelete = () => {
+    const confirmDelete = async () => {
+      if (await deleteRepair(repair.id)) {
+        router.replace('/');
+      }
+    };
+    if (Platform.OS === 'web') {
+      if (window.confirm(`¿Eliminar DEFINITIVAMENTE la orden ${repair.id}?\n\nEsta acción no se puede deshacer.`)) {
+        void confirmDelete();
+      }
+      return;
+    }
     Alert.alert(
       'Eliminar Orden',
       `¿Eliminar DEFINITIVAMENTE la orden ${repair.id}?\n\nEsta acción no se puede deshacer.`,
       [
         { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Sí, eliminar',
-          style: 'destructive',
-          onPress: async () => {
-            if (await deleteRepair(repair.id)) {
-              router.replace('/');
-            }
-          },
-        },
+        { text: 'Sí, eliminar', style: 'destructive', onPress: confirmDelete },
       ]
     );
   };
@@ -204,7 +215,7 @@ export default function JobDetailScreen() {
           <ThemedView type="backgroundElement" style={styles.modalCard}>
             <ThemedText type="subtitle">Marcar como No Realizado</ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
-              La orden pasará a estado "{'Cancelado / No Reparado'}" y no se cobrará comisión.
+              La orden pasará a estado “{'Cancelado / No Reparado'}” y no se cobrará comisión.
             </ThemedText>
             <FormInput
               label="Motivo por el cual no se realizó el trabajo"
