@@ -5,8 +5,6 @@ import { Alert, Platform, StyleSheet, View } from 'react-native';
 
 import {
   CommercialBanner,
-  CONTACT_EMAIL,
-  CONTACT_URL,
   CONTACT_WHATSAPP,
 } from '@/components/commercial-banner';
 import { Button } from '@/components/ui/button';
@@ -122,7 +120,7 @@ const paid = repair.advancePayment ?? 0;
   </div>
   <div class="banner">
     <strong>Adquiere la Licencia de Facturación</strong>
-    Contacta a nuestro equipo comercial para adquirir el producto o tu licencia de facturación: WhatsApp ${escapeHtml(CONTACT_WHATSAPP)} · ${escapeHtml(CONTACT_EMAIL)} · ${escapeHtml(CONTACT_URL)}
+    Contacta a nuestro equipo comercial para adquirir el producto o tu licencia de facturación: WhatsApp ${escapeHtml(CONTACT_WHATSAPP)}
   </div>
 </body>
 </html>`;

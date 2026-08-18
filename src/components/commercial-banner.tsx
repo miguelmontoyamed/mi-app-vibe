@@ -5,10 +5,8 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Brand, Spacing } from '@/constants/theme';
 
-/** Canales de contacto comercial de TechRepair Master (uso en banner). */
+/** Canal de contacto comercial de TechRepair Master (uso en banner). */
 export const CONTACT_WHATSAPP = '+57 300 000 0000';
-export const CONTACT_EMAIL = 'ventas@techrepair.com';
-export const CONTACT_URL = 'https://techrepair.com';
 
 /**
  * Banner de contacto comercial y profesional. Reemplaza los textos de prueba
@@ -35,18 +33,6 @@ export function CommercialBanner() {
             <Ionicons name="logo-whatsapp" size={14} color={Brand.whatsapp} />
             <ThemedText type="small" themeColor="textSecondary">
               {CONTACT_WHATSAPP}
-            </ThemedText>
-          </View>
-          <View style={styles.contactItem}>
-            <Ionicons name="mail-outline" size={14} color={Brand.primary} />
-            <ThemedText type="small" themeColor="textSecondary">
-              {CONTACT_EMAIL}
-            </ThemedText>
-          </View>
-          <View style={styles.contactItem}>
-            <Ionicons name="globe-outline" size={14} color={Brand.primary} />
-            <ThemedText type="small" themeColor="textSecondary">
-              {CONTACT_URL}
             </ThemedText>
           </View>
         </View>

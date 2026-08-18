@@ -233,24 +233,6 @@ export default function AdminScreen() {
     }
   };
 
-  const handleSupportEmail = () => {
-    if (!handleSupportValidation()) return;
-    const subject = `Soporte TechRepair - ${supportType}`;
-    const mailto = `mailto:soporte@techrepair.com?subject=${encodeURIComponent(
-      subject
-    )}&body=${encodeURIComponent(buildSupportMessage())}`;
-    if (Platform.OS === 'web') {
-      if (typeof window.alert === 'function') {
-        window.alert(
-          `Correo de soporte preparado:\n\n${buildSupportMessage()}\n\nAbrir: ${mailto}`
-        );
-      }
-      window.open(mailto, '_self');
-    } else {
-      Linking.openURL(mailto).catch(() => {});
-    }
-  };
-
   return (
     <Screen>
       <ThemedView style={styles.header}>
@@ -516,7 +498,7 @@ export default function AdminScreen() {
       <ThemedView type="backgroundElement" style={styles.card}>
         <ThemedText type="subtitle">Soporte y Ayuda</ThemedText>
         <ThemedText type="small" themeColor="textSecondary">
-          Reporte las necesidades del taller; el equipo lo notificará por WhatsApp y correo.
+          Reporte las necesidades del taller; el equipo lo notificará por WhatsApp.
         </ThemedText>
         <View style={styles.rolesRow}>
           {SUPPORT_TYPES.map((type) => {
@@ -563,14 +545,6 @@ export default function AdminScreen() {
             ]}
             onPress={handleSupportWhatsApp}>
             <ThemedText style={styles.buttonText}>Enviar por WhatsApp</ThemedText>
-          </Pressable>
-          <Pressable
-            style={({ pressed }) => [
-              styles.emailButton,
-              pressed && styles.pressed,
-            ]}
-            onPress={handleSupportEmail}>
-            <ThemedText style={styles.buttonText}>Enviar por Correo</ThemedText>
           </Pressable>
         </View>
       </ThemedView>
@@ -669,14 +643,6 @@ const styles = StyleSheet.create({
   whatsappButton: {
     flex: 1,
     backgroundColor: '#25d366',
-    paddingVertical: Spacing.three,
-    borderRadius: Spacing.two,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emailButton: {
-    flex: 1,
-    backgroundColor: '#0284c7',
     paddingVertical: Spacing.three,
     borderRadius: Spacing.two,
     alignItems: 'center',
