@@ -127,6 +127,7 @@ export default function ReceiveScreen() {
       imei: imei.trim() || undefined,
       advancePayment: advanceNum,
       technicianName: currentUser.name,
+      technicianId: currentUser.id,
     });
 
     // La orden se guardó SOLO si Supabase confirmó el INSERT. Si la DB la

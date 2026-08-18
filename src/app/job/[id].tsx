@@ -145,49 +145,49 @@ export default function JobDetailScreen() {
         <View style={styles.divider} />
         <View style={styles.sectionRow}>
           <ThemedText type="smallBold">Cliente:</ThemedText>
-          <ThemedText type="small">{repair.clientName}</ThemedText>
+          <ThemedText type="small" style={styles.sectionValue}>{repair.clientName}</ThemedText>
         </View>
         <View style={styles.sectionRow}>
           <ThemedText type="smallBold">Teléfono:</ThemedText>
-          <ThemedText type="small">📞 {repair.phone}</ThemedText>
+          <ThemedText type="small" style={styles.sectionValue}>📞 {repair.phone}</ThemedText>
         </View>
         <View style={styles.sectionRow}>
           <ThemedText type="smallBold">Fecha:</ThemedText>
-          <ThemedText type="small">📅 {repair.date}</ThemedText>
+          <ThemedText type="small" style={styles.sectionValue}>📅 {repair.date}</ThemedText>
         </View>
         <View style={styles.divider} />
         <View style={styles.sectionRow}>
           <ThemedText type="smallBold">Dispositivo:</ThemedText>
-          <ThemedText type="small">📱 {repair.device}</ThemedText>
+          <ThemedText type="small" style={styles.sectionValue}>📱 {repair.device}</ThemedText>
         </View>
         {repair.imei ? (
           <View style={styles.sectionRow}>
             <ThemedText type="smallBold">IMEI / Serial:</ThemedText>
-            <ThemedText type="small">🔢 {repair.imei}</ThemedText>
+            <ThemedText type="small" style={styles.sectionValue}>🔢 {repair.imei}</ThemedText>
           </View>
         ) : null}
         <View style={styles.sectionRow}>
           <ThemedText type="smallBold">Falla:</ThemedText>
-          <ThemedText type="small">{repair.issue}</ThemedText>
+          <ThemedText type="small" style={styles.sectionValue}>{repair.issue}</ThemedText>
         </View>
         {repair.technicianName ? (
           <View style={styles.sectionRow}>
             <ThemedText type="smallBold">Técnico:</ThemedText>
-            <ThemedText type="small">{repair.technicianName}</ThemedText>
+            <ThemedText type="small" style={styles.sectionValue}>{repair.technicianName}</ThemedText>
           </View>
         ) : null}
         <View style={styles.divider} />
         <View style={styles.sectionRow}>
           <ThemedText type="smallBold">Presupuesto:</ThemedText>
-          <ThemedText type="small">{formatCOP(repair.budget)}</ThemedText>
+          <ThemedText type="small" style={styles.sectionValue}>{formatCOP(repair.budget)}</ThemedText>
         </View>
         <View style={styles.sectionRow}>
           <ThemedText type="smallBold">Abonado:</ThemedText>
-          <ThemedText type="small">{formatCOP(paid)}</ThemedText>
+          <ThemedText type="small" style={styles.sectionValue}>{formatCOP(paid)}</ThemedText>
         </View>
         <View style={styles.sectionRow}>
           <ThemedText type="smallBold">Saldo pendiente:</ThemedText>
-          <ThemedText type="smallBold">
+          <ThemedText type="smallBold" style={styles.sectionValue}>
             {formatCOP(Math.max(0, repair.budget - paid))}
           </ThemedText>
         </View>
@@ -281,6 +281,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: Spacing.three,
+    alignItems: 'flex-start',
+  },
+  sectionValue: {
+    flex: 1,
+    textAlign: 'right',
   },
   dangerZone: {
     gap: Spacing.two,

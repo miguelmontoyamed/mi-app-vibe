@@ -206,6 +206,12 @@ export default function JobsScreen() {
               <ThemedText type="smallBold" style={styles.deviceText}>
                 📱 {item.device}
               </ThemedText>
+              {/* El dueño (admin) necesita saber qué técnico tiene asignado cada trabajo. */}
+              {currentUser.role === 'admin' && item.technicianName ? (
+                <ThemedText type="small" themeColor="textSecondary">
+                  🔧 Técnico asignado: {item.technicianName}
+                </ThemedText>
+              ) : null}
               <ThemedText type="small" themeColor="textSecondary">
                 Falla: {item.issue}
               </ThemedText>
@@ -308,14 +314,16 @@ export default function JobsScreen() {
                   </View>
 
                   <View style={styles.paymentRow}>
-                    <FormInput
-                      label="Monto a pagar (COP)"
-                      placeholder={String(Math.max(0, item.budget - (item.advancePayment ?? 0)))}
-                      keyboardType="numeric"
-                      value={paymentInput}
-                      onChangeText={setPaymentInput}
-                      style={styles.paymentInput}
-                    />
+                    <View style={styles.paymentInputWrap}>
+                      <FormInput
+                        label="Monto a pagar (COP)"
+                        placeholder={String(Math.max(0, item.budget - (item.advancePayment ?? 0)))}
+                        keyboardType="numeric"
+                        value={paymentInput}
+                        onChangeText={setPaymentInput}
+                        style={styles.paymentInput}
+                      />
+                    </View>
                     <Button
                       label="Cobrar"
                       variant="success"
@@ -432,11 +440,13 @@ const styles = StyleSheet.create({
   },
   rowButtons: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: Spacing.two,
     marginTop: Spacing.two,
   },
   rowButton: {
     flex: 1,
+    minWidth: 150,
     paddingVertical: Spacing.two,
   },
   paymentBox: {
@@ -445,11 +455,15 @@ const styles = StyleSheet.create({
   },
   paymentRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: Spacing.two,
     alignItems: 'flex-end',
   },
-  paymentInput: {
+  paymentInputWrap: {
     flex: 1,
+    minWidth: 180,
+  },
+  paymentInput: {
     paddingVertical: Spacing.two,
   },
   paymentBtn: {
