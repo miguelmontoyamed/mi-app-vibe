@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useEffect } from 'react';
-import { Platform, StyleSheet, View } from 'react-native';
+import { Linking, Platform, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/ui/button';
@@ -16,12 +16,20 @@ import { formatCOP } from '@/utils/format';
 /** Precio mensual de la suscripción (Fase 1: paywall sin pasarela real). */
 export const MONTHLY_PRICE_COP = 20000;
 
+/** Llave Bre-B del negocio: único método de pago aceptado (no se tiene Nequi). */
+export const BREB_KEY = '3002011801';
+
+/** Enlace de WhatsApp con mensaje pre-cargado para notificar el pago por Bre-B. */
+export const BREB_WHATSAPP_URL =
+  'https://wa.me/573002011801?text=Hola,%20mi%20taller%20está%20bloqueado.%20Ya%20tengo%20el%20comprobante%20de%20Bre-B%20para%20pagar%20el%20mes.';
+
 /**
- * URL del payment link de Wompi (pasarela elegida para el cobro mensual).
+ * URL del payment link de Wompi (pasarela elegida como opción futura).
  *
- * ESPACIO RESERVADO: aún no existe cuenta/checkout de Wompi. Cuando el link
- * esté disponible, pegar aquí la URL tipo https://checkout.wompi.co/p/<id>
- * y activar handlePay (Linking.openURL + validación del evento de pago).
+ * ESPACIO RESERVADO: aún no existe cuenta/checkout de Wompi. Mientras tanto el
+ * cobro es MANUAL por Bre-B (ver BREB_KEY). Cuando el link esté disponible,
+ * pegar aquí la URL tipo https://checkout.wompi.co/p/<id> y decidir si reemplaza
+ * al flujo manual de WhatsApp.
  */
 export const WOMPI_CHECKOUT_URL: string | null = null;
 
@@ -30,8 +38,8 @@ export const WOMPI_CHECKOUT_URL: string | null = null;
  *
  * Bloqueo total: sin navbar ni tab bar. Se muestra cuando el taller expira
  * (trial de 90 días o suscripción vencidos) y el router impide navegar a la
- * zona protegida. Por ahora el pago es un stub: el botón solo registra en
- * consola hasta que se integre la pasarela Wompi (WOMPI_CHECKOUT_URL).
+ * zona protegida. Pago manual: el usuario transfiere por Bre-B y notifica el
+ * comprobante por WhatsApp (Linking.openURL a BREB_WHATSAPP_URL).
  */
 export default function PaywallScreen() {
   const router = useRouter();
@@ -49,12 +57,10 @@ export default function PaywallScreen() {
   }, [isAuthenticated, subscription.isExpired, router]);
 
   const handlePay = () => {
-    // TODO(Wompi): cuando WOMPI_CHECKOUT_URL esté disponible, abrirlo con
-    // Linking.openURL(WOMPI_CHECKOUT_URL) y tras el pago confirmado marcar
-    // status='active' + subscription_ends_at en la tabla workshops.
-    console.log(
-      `[paywall] Pago mensual solicitado: ${formatCOP(MONTHLY_PRICE_COP)} COP — integrar pasarela Wompi`
-    );
+    // Pago manual Bre-B: abre WhatsApp con el comprobante pre-cargado.
+    Linking.openURL(BREB_WHATSAPP_URL).catch((err) => {
+      console.warn('[paywall] No se pudo abrir WhatsApp:', err);
+    });
   };
 
   return (
@@ -88,16 +94,25 @@ export default function PaywallScreen() {
             </ThemedText>
           </ThemedView>
 
+          {/* Banner crítico (Liquid Glass rojo): único método de pago aceptado. */}
+          <View style={styles.brebWarning}>
+            <Ionicons name="warning" size={20} color={Brand.danger} />
+            <ThemedText type="smallBold" style={styles.brebWarningText}>
+              ⚠️ NO TENGO NEQUI. PAGO ÚNICAMENTE POR BRE-B. MI LLAVE ES:{' '}
+              {BREB_KEY}
+            </ThemedText>
+          </View>
+
           <Button
-            label={`Pagar Mes (${formatCOP(MONTHLY_PRICE_COP)})`}
-            variant="primary"
+            label="Notificar Pago por WhatsApp"
+            variant="whatsapp"
             onPress={handlePay}
             style={styles.payButton}
           />
 
           <ThemedText type="small" themeColor="textSecondary" style={styles.footnote}>
-            Pago procesado de forma segura. Si necesitas ayuda, escríbenos por
-            WhatsApp.
+            Haz la transferencia por Bre-B a la llave indicada y notifica el
+            comprobante por WhatsApp. Si necesitas ayuda, escríbenos.
           </ThemedText>
         </ThemedView>
       </View>
@@ -158,6 +173,28 @@ const styles = StyleSheet.create({
   priceText: {
     color: Brand.primary,
     fontSize: 20,
+  },
+  brebWarning: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'stretch',
+    gap: Spacing.two,
+    paddingVertical: Spacing.three,
+    paddingHorizontal: Spacing.four,
+    borderRadius: Shape.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.45)',
+    backgroundColor: Platform.select({
+      web: 'rgba(239, 68, 68, 0.10)',
+      default: undefined,
+    }),
+  },
+  brebWarningText: {
+    flex: 1,
+    color: Brand.danger,
+    textTransform: 'uppercase',
+    fontSize: 13,
+    lineHeight: 18,
   },
   payButton: {
     alignSelf: 'stretch',
