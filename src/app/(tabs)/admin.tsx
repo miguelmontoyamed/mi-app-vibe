@@ -18,6 +18,7 @@ import { Spacing } from '@/constants/theme';
 import { useAuth, MAX_TECHNICIANS } from '@/context/auth-context';
 import { useRepair } from '@/context/repair-context';
 import { useTheme } from '@/hooks/use-theme';
+import { SUPER_ADMIN_USER_ID } from '@/lib/super-admin';
 import { formatCOP } from '@/utils/format';
 
 const SUPPORT_TYPES = [
@@ -246,6 +247,27 @@ export default function AdminScreen() {
           <ThemedText style={styles.logoutButtonText}>Cerrar sesión</ThemedText>
         </Pressable>
       </ThemedView>
+
+      {/* Panel Super Admin: exclusivo del dueño de la plataforma. */}
+      {currentUser.id === SUPER_ADMIN_USER_ID && (
+        <ThemedView type="backgroundElement" style={styles.card}>
+          <ThemedText type="subtitle">🛡️ Panel Super Admin</ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">
+            Lista global de talleres y activación de 30 días con un clic.
+          </ThemedText>
+          <Pressable
+            style={({ pressed }) => [
+              styles.activateButton,
+              { paddingVertical: Spacing.three, alignSelf: 'flex-start' },
+              pressed && styles.pressed,
+            ]}
+            onPress={() => router.push('/super-admin')}>
+            <ThemedText style={styles.activateButtonText}>
+              Abrir Panel Super Admin
+            </ThemedText>
+          </Pressable>
+        </ThemedView>
+      )}
 
       {/* Invitation Link for Technicians — consolidated for all environments */}
       {currentUser.role === 'admin' && (

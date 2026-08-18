@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Link } from 'expo-router';
-import { StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Linking, Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Button } from '@/components/ui/button';
@@ -9,7 +9,12 @@ import { Screen } from '@/components/ui/screen';
 import { Brand, BREAKPOINTS, Elevation, KpiAccent, Shape, Spacing, statusStyle } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { useRepair, type RepairStatus } from '@/context/repair-context';
+import { useWorkshop } from '@/context/workshop-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+
+/** WhatsApp de renovación cuando el trial está por vencer (<=10 días). */
+const RENEW_WHATSAPP_URL =
+  'https://wa.me/573002011801?text=Hola,%20quiero%20renovar%20mi%20suscripción.';
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
@@ -28,11 +33,27 @@ export default function DashboardScreen() {
   const cardBasis = width >= BREAKPOINTS.tablet ? '23%' : width >= BREAKPOINTS.mobile ? '48%' : '100%';
   const { repairs } = useRepair();
   const { currentUser, license } = useAuth();
+  const { subscription } = useWorkshop();
 
   // Tabs only render when authenticated. Guard keeps typing safe (User | null).
   if (!currentUser) {
     return null;
   }
+
+  // Trial por vencer: status 'trial' y faltan <=10 días para trial_ends_at.
+  const trialDaysLeft =
+    subscription.status === 'trial' && subscription.trialEndsAt
+      ? Math.max(0, Math.ceil((new Date(subscription.trialEndsAt).getTime() - Date.now()) / 86_400_000))
+      : null;
+  const showTrialWarning = trialDaysLeft !== null && trialDaysLeft <= 10;
+
+  const handleRenew = () => {
+    if (Platform.OS === 'web') {
+      window.open(RENEW_WHATSAPP_URL, '_blank');
+    } else {
+      Linking.openURL(RENEW_WHATSAPP_URL).catch(() => {});
+    }
+  };
 
   // Filter repairs depending on role
   const relevantRepairs =
@@ -74,6 +95,29 @@ export default function DashboardScreen() {
           <Ionicons name="sparkles" size={22} color={Brand.primary} />
         </View>
       </View>
+
+      {/* Trial Expiring Banner — aviso de expiración de prueba (10 días). */}
+      {showTrialWarning && (
+        <GlassCard accent={Brand.danger} elevation={1} style={styles.warningBanner}>
+          <View style={styles.warningIconChip}>
+            <Ionicons name="hourglass-outline" size={20} color={Brand.danger} />
+          </View>
+          <View style={styles.warningCopy}>
+            <ThemedText type="smallBold" style={{ color: Brand.danger }}>
+              ⚠️ Faltan {trialDaysLeft} días para que termine tu periodo de prueba.
+            </ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              Renueva ahora para no perder acceso.
+            </ThemedText>
+            <Button
+              label="Renovar ahora"
+              variant="whatsapp"
+              onPress={handleRenew}
+              style={styles.renewButton}
+            />
+          </View>
+        </GlassCard>
+      )}
 
       {/* License Expiring Countdown Banner — contenedor de error MD3 + glass sutil. */}
       {showLicenseWarning && (
@@ -226,5 +270,11 @@ const styles = StyleSheet.create({
   warningCopy: {
     flex: 1,
     gap: Spacing.half,
+  },
+  renewButton: {
+    alignSelf: 'flex-start',
+    marginTop: Spacing.half,
+    paddingVertical: Spacing.two,
+    paddingHorizontal: Spacing.three,
   },
 });

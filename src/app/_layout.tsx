@@ -50,6 +50,7 @@ function RootNavigator() {
         <Stack.Screen name="receipt/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="job/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="taller" options={{ headerShown: false }} />
+        <Stack.Screen name="super-admin" options={{ headerShown: false }} />
       </Stack.Protected>
       <Stack.Protected guard={isAuthenticated}>
         <Stack.Screen name="paywall" options={{ headerShown: false }} />
