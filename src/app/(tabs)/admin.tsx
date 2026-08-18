@@ -17,6 +17,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useAuth, MAX_TECHNICIANS } from '@/context/auth-context';
 import { useRepair } from '@/context/repair-context';
+import { useWorkshop } from '@/context/workshop-context';
 import { useTheme } from '@/hooks/use-theme';
 import { SUPER_ADMIN_USER_ID } from '@/lib/super-admin';
 import { formatCOP } from '@/utils/format';
@@ -35,18 +36,14 @@ export default function AdminScreen() {
     currentUser,
     users,
     logout,
-    license,
-    verifyLicense,
-    renewSubscription,
     generateInviteLink,
     inviteLink,
     createTechnician,
     deleteTechnician,
   } = useAuth();
   const { repairs, inventory } = useRepair();
+  const { subscription } = useWorkshop();
   const router = useRouter();
-
-  const [inputKey, setInputKey] = useState('');
 
   // Technician management form states
   const [techName, setTechName] = useState('');
@@ -103,24 +100,6 @@ export default function AdminScreen() {
     (acc, curr) => acc + curr.stock * curr.price,
     0
   );
-
-  const handleVerifyKey = () => {
-    const success = verifyLicense(inputKey);
-    if (success) {
-      if (Platform.OS === 'web') {
-        window.alert('¡Licencia activada con éxito! Suscripción mensual válida.');
-      } else {
-        Alert.alert('Éxito', '¡Licencia activada con éxito! Suscripción mensual válida.');
-      }
-      setInputKey('');
-    } else {
-      if (Platform.OS === 'web') {
-        window.alert('Clave de licencia inválida o manipulada.');
-      } else {
-        Alert.alert('Error de Seguridad', 'Clave de licencia inválida o manipulada.');
-      }
-    }
-  };
 
   const handleCreateInvite = () => {
     // Límite estricto: no se generan enlaces si el taller ya tiene 5 técnicos.
@@ -200,12 +179,21 @@ export default function AdminScreen() {
     }
   };
 
+  /** Abre WhatsApp para registrar el pago de la suscripción (renovación). */
+  const handlePayWhatsApp = () => {
+    const url =
+      'https://wa.me/573002011801?text=Hola,%20quiero%20renovar%20mi%20suscripción.';
+    if (Platform.OS === 'web') {
+      window.open(url, '_blank');
+    } else {
+      Linking.openURL(url).catch(() => {});
+    }
+  };
+
   const buildSupportMessage = () => {
     return [
       '🚨 NUEVO TICKET DE SOPORTE - TechRepair Master 🚨',
       `Taller/Dueño: ${currentUser.name}`,
-      `Licencia: ${license.licenseKey}`,
-      `Plan: ${license.plan}`,
       `Necesidad: ${supportType} - ${supportMessage.trim()}`,
     ].join('\n');
   };
@@ -444,73 +432,51 @@ export default function AdminScreen() {
         </View>
       </ThemedView>
 
-      {/* Subscription & Anti-Piracy License Card */}
+      {/* Subscription Status Card — estado real de la suscripción del taller */}
       <ThemedView type="backgroundElement" style={styles.card}>
-        <ThemedText type="subtitle">Suscripción Mensual & Antiapiratería</ThemedText>
+        <ThemedText type="subtitle">Suscripción del Taller</ThemedText>
         <View style={styles.licenseInfoRow}>
           <ThemedText type="smallBold">Estado:</ThemedText>
           <View
             style={[
               styles.statusDot,
-              license.isActive
+              subscription.status === 'active'
                 ? { backgroundColor: '#10b981' }
-                : { backgroundColor: '#ef4444' },
+                : subscription.status === 'trial'
+                  ? { backgroundColor: '#f59e0b' }
+                  : { backgroundColor: '#ef4444' },
             ]}
           />
           <ThemedText type="small">
-            {license.isActive ? 'Licencia Activa' : 'Licencia Expirada'}
+            {subscription.status === 'active'
+              ? 'Suscripción Activa'
+              : subscription.status === 'trial'
+                ? `Periodo de Prueba (vence ${new Date(
+                    subscription.trialEndsAt ?? ''
+                  ).toLocaleDateString('es-CO')})`
+                : 'Suscripción Expirada'}
           </ThemedText>
         </View>
 
-        <ThemedText type="small" themeColor="textSecondary">
-          Plan: {license.plan} | Vence: {license.expiresAt} ({license.daysRemaining} días restantes)
-        </ThemedText>
-        <ThemedText type="small" themeColor="textSecondary">
-          Clave actual: {license.licenseKey}
-        </ThemedText>
-
-        <View style={styles.licenseInputRow}>
-          <TextInput
-            style={[
-              styles.input,
-              { color: theme.text, borderColor: theme.backgroundElement, flex: 1 },
-            ]}
-            placeholder="Ingresar nueva clave de activación..."
-            placeholderTextColor="#9ca3af"
-            autoCapitalize="characters"
-            value={inputKey}
-            onChangeText={setInputKey}
-            maxLength={40}
-          />
-          <Pressable
-            style={({ pressed }) => [
-              styles.activateButton,
-              pressed && styles.pressed,
-            ]}
-            onPress={handleVerifyKey}>
-            <ThemedText style={styles.activateButtonText}>Verificar</ThemedText>
-          </Pressable>
-        </View>
+        {subscription.status === 'active' && subscription.subscriptionEndsAt && (
+          <ThemedText type="small" themeColor="textSecondary">
+            Suscripción válida hasta:{' '}
+            {new Date(subscription.subscriptionEndsAt).toLocaleDateString('es-CO')}
+          </ThemedText>
+        )}
 
         <Pressable
           style={({ pressed }) => [
             styles.renewButton,
             pressed && styles.pressed,
           ]}
-          onPress={() => {
-            renewSubscription();
-            if (Platform.OS === 'web') {
-              window.alert('¡Suscripción mensual renovada con éxito!');
-            } else {
-              Alert.alert('Renovación', '¡Suscripción mensual renovada con éxito!');
-            }
-          }}>
+          onPress={handlePayWhatsApp}>
           <ThemedText style={styles.renewButtonText}>
-            Simular Pago Mensual / Renovar ($50.000 COP / mes — Acceso Ilimitado)
+            Registrar Pago ($20.000 COP / mes — Acceso Ilimitado)
           </ThemedText>
         </Pressable>
 
-        {/* Commercial contact banner — replaces trial language */}
+        {/* Commercial contact banner */}
         <View style={styles.bannerWrap}>
           <CommercialBanner />
         </View>
@@ -618,11 +584,6 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-  },
-  licenseInputRow: {
-    flexDirection: 'row',
-    gap: Spacing.two,
-    marginTop: Spacing.one,
   },
   input: {
     borderWidth: 1,

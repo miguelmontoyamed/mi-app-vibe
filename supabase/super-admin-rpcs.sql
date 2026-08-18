@@ -24,7 +24,11 @@ as $$
   order by w.created_at asc;
 $$;
 
--- Solo el dueño puede activar 30 días a cualquier taller.
+-- Solo el dueño puede añadir 30 días acumulables a cualquier taller.
+-- ACUMULACIÓN INTELIGENTE: si el taller ya tiene una fecha de expiración
+-- futura (subscription_ends_at o trial_ends_at mayor que now()), se suman 30
+-- días EXACTOS a esa fecha; si ya expiró por completo, se suman 30 días desde
+-- now(). Así N pagos seguidos = N*30 días acumulados.
 -- OJO: usar IS DISTINCT FROM — con `<>`, un auth.uid() NULL (p. ej. service_role)
 -- hace que la condición sea NULL y el IF se salta la excepción (NULL trap).
 create or replace function public.activate_workshop(p_workshop_id uuid)
@@ -33,14 +37,29 @@ language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  v_base timestamptz;
 begin
   if auth.uid() is distinct from 'ecb17edb-bf94-4b03-a798-28ef60b99720'::uuid then
     raise exception 'Acceso denegado: solo el super admin puede activar talleres';
   end if;
 
+  -- Fecha de vencimiento más lejana vigente (suscripción o trial futura).
+  select greatest(
+    coalesce(subscription_ends_at, '-infinity'::timestamptz),
+    coalesce(trial_ends_at, '-infinity'::timestamptz)
+  ) into v_base
+  from public.workshops
+  where id = p_workshop_id;
+
+  -- Si no hay vencimiento futuro, la base es ahora (caso expirado/nuevo).
+  if v_base <= now() then
+    v_base := now();
+  end if;
+
   update public.workshops
   set status = 'active',
-      subscription_ends_at = now() + interval '30 days'
+      subscription_ends_at = v_base + interval '30 days'
   where id = p_workshop_id;
 end;
 $$;

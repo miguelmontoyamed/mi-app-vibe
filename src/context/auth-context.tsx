@@ -40,14 +40,6 @@ export type LoginResult =
   | { ok: true; user: User }
   | { ok: false; reason: 'invalid' | 'unconfirmed' | 'unknown' };
 
-export interface LicenseInfo {
-  isActive: boolean;
-  licenseKey: string;
-  plan: 'Licencia Inicial' | 'Mensual - Pro' | 'Anual';
-  expiresAt: string;
-  daysRemaining: number;
-}
-
 export interface InviteLink {
   /** Token criptográfico (16 chars, uppercase, sin guiones). */
   token: string;
@@ -72,7 +64,6 @@ interface AuthContextType {
   hydrated: boolean;
   /** Miembros del taller: filas de `public.profiles` (role technician/admin). */
   users: User[];
-  license: LicenseInfo;
   inviteLink: InviteLink | null;
   /** Error visible de hidratación (env faltante), o null. */
   loadError: string | null;
@@ -108,8 +99,6 @@ interface AuthContextType {
   /** Elimina (soft delete) un técnico. Devuelve false si no existe o es el
    *  usuario actual. */
   deleteTechnician: (id: string) => Promise<boolean>;
-  verifyLicense: (key: string) => boolean;
-  renewSubscription: () => void;
   /** Registra a un técnico invitado por enlace. Crea la cuenta REAL
    *  (role='technician' + workshop_id del taller del admin) y requiere
    *  confirmar el correo. Devuelve `pendingVerification: true` cuando hay
@@ -132,24 +121,6 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 /** Límite estricto de técnicos por taller/entorno (requisito de licenciamiento). */
 export const MAX_TECHNICIANS = 5;
-
-const EVAL_DURATION_DAYS = 90;
-const EVAL_EXPIRES_AT = new Date(Date.now() + EVAL_DURATION_DAYS * 24 * 60 * 60 * 1000)
-  .toISOString()
-  .split('T')[0];
-
-// Computed at module scope (not during render) to satisfy React purity rules.
-const DEFAULT_LICENSE: LicenseInfo = {
-  isActive: true,
-  licenseKey: 'EVAL-90DAYS-ACTIVE',
-  plan: 'Licencia Inicial',
-  expiresAt: EVAL_EXPIRES_AT,
-  daysRemaining: EVAL_DURATION_DAYS,
-};
-
-// Structural check for Pro license keys. NOTE: this is a client-side simulation —
-// a production build must validate license keys against a server.
-const PRO_LICENSE_REGEX = /^TR-PRO-[A-Z0-9-]{12,}$/;
 
 /** Fila de `public.profiles` (PostgreSQL). No contiene email: vive en
  *  `auth.users` y no es consultable desde el cliente. */
@@ -217,10 +188,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [inviteLink, setInviteLink] = useState<InviteLink | null>(null);
-
-  // Default Licencia Inicial (90 días de evaluación). Para probar UI se puede
-  // bajar a 9 días para disparar el contador.
-  const [license, setLicense] = useState<LicenseInfo>(DEFAULT_LICENSE);
 
   const [hydrated, setHydrated] = useState(false);
   /** Error visible de hidratación (env faltante), o null. */
@@ -381,32 +348,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await supabaseSignOut();
     }
     setCurrentUser(null);
-  };
-
-  const verifyLicense = (key: string): boolean => {
-    const normalized = key.trim().toUpperCase();
-    if (PRO_LICENSE_REGEX.test(normalized)) {
-      setLicense((prev) => ({
-        ...prev,
-        isActive: true,
-        licenseKey: normalized,
-        plan: 'Mensual - Pro',
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        daysRemaining: 30,
-      }));
-      return true;
-    }
-    return false;
-  };
-
-  const renewSubscription = () => {
-    setLicense((prev) => ({
-      ...prev,
-      isActive: true,
-      plan: 'Mensual - Pro',
-      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      daysRemaining: 30,
-    }));
   };
 
   /**
@@ -604,7 +545,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isAuthenticated: currentUser !== null,
         hydrated,
         users,
-        license,
         inviteLink,
         loadError,
         login,
@@ -614,8 +554,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         resendRegistration,
         createTechnician,
         deleteTechnician,
-        verifyLicense,
-        renewSubscription,
         registerInvitedTechnician,
         generateInviteLink,
         validateInviteLink,

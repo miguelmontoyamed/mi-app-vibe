@@ -32,7 +32,7 @@ export default function DashboardScreen() {
   const { width } = useWindowDimensions();
   const cardBasis = width >= BREAKPOINTS.tablet ? '23%' : width >= BREAKPOINTS.mobile ? '48%' : '100%';
   const { repairs } = useRepair();
-  const { currentUser, license } = useAuth();
+  const { currentUser } = useAuth();
   const { subscription } = useWorkshop();
 
   // Tabs only render when authenticated. Guard keeps typing safe (User | null).
@@ -69,8 +69,6 @@ export default function DashboardScreen() {
   const inProgressCount = relevantRepairs.filter((r) => r.status === 'En Proceso').length;
   const readyCount = relevantRepairs.filter((r) => r.status === 'Listo').length;
   const deliveredCount = relevantRepairs.filter((r) => r.status === 'Entregado').length;
-
-  const showLicenseWarning = license.plan === 'Licencia Inicial' && license.daysRemaining <= 10;
 
   const kpiCards: KpiCard[] = [
     { label: 'Pendientes', count: pendingCount, status: 'Pendiente', icon: 'hourglass-outline', accent: KpiAccent.pending },
@@ -115,23 +113,6 @@ export default function DashboardScreen() {
               onPress={handleRenew}
               style={styles.renewButton}
             />
-          </View>
-        </GlassCard>
-      )}
-
-      {/* License Expiring Countdown Banner — contenedor de error MD3 + glass sutil. */}
-      {showLicenseWarning && (
-        <GlassCard accent={Brand.danger} elevation={1} style={styles.warningBanner}>
-          <View style={styles.warningIconChip}>
-            <Ionicons name="alert-circle" size={20} color={Brand.danger} />
-          </View>
-          <View style={styles.warningCopy}>
-            <ThemedText type="smallBold" style={{ color: Brand.danger }}>
-              Licencia de evaluación por expirar
-            </ThemedText>
-            <ThemedText type="small" themeColor="textSecondary">
-              ¡Atención! Quedan {license.daysRemaining} días ({license.expiresAt}). Renueva para evitar bloqueos.
-            </ThemedText>
           </View>
         </GlassCard>
       )}

@@ -30,9 +30,11 @@ function shortDate(iso: string | null): string {
 /**
  * Panel Super Admin — exclusivo del dueño de la plataforma.
  *
- * Lista todos los talleres (vía RPC SECURITY DEFINER) y permite activar 30
- * días a cualquiera con un clic. El guard filtra por SUPER_ADMIN_USER_ID:
- * cualquier otra cuenta autenticada es redirigida a la zona protegida.
+ * Lista todos los talleres (vía RPC SECURITY DEFINER) y permite añadir 30 días
+ * acumulables a cualquiera con un clic: si el taller tiene una fecha de
+ * expiración futura se suman 30 días exactos a esa fecha; si ya expiró, 30
+ * días desde hoy. El guard filtra por SUPER_ADMIN_USER_ID: cualquier otra
+ * cuenta autenticada es redirigida a la zona protegida.
  */
 export default function SuperAdminScreen() {
   const { currentUser } = useAuth();
@@ -86,24 +88,11 @@ export default function SuperAdminScreen() {
     const { ok, error } = await activateWorkshop(ws.id);
     setActivatingId(null);
     if (ok) {
-      notify(`Taller "${ws.name}" activado por 30 días.`);
+      notify(`Taller "${ws.name}": +30 días añadidos a su suscripción.`);
       refresh();
     } else {
       notify(`No se pudo activar: ${error ?? 'error desconocido'}`);
     }
-  };
-
-  const isExpiredOrTrial = (ws: SuperAdminWorkshop): boolean => {
-    if (ws.status === 'active') return false;
-    if (ws.status === 'expired') return true;
-    // trial: expirado si trial_ends_at ya pasó, o a punto de vencer (<=7 días)
-    if (ws.trial_ends_at) {
-      const end = new Date(ws.trial_ends_at).getTime();
-      if (Number.isFinite(end)) {
-        return Date.now() > end || end - Date.now() <= 7 * 24 * 60 * 60 * 1000;
-      }
-    }
-    return false;
   };
 
   const statusLabel = (ws: SuperAdminWorkshop): { text: string; color: string } => {
@@ -117,7 +106,7 @@ export default function SuperAdminScreen() {
       <ThemedView style={styles.header}>
         <ThemedText type="title">Panel Super Admin</ThemedText>
         <ThemedText themeColor="textSecondary">
-          Lista global de talleres — activación de 30 días con un clic
+          Lista global de talleres — cada clic añade 30 días acumulables a la suscripción
         </ThemedText>
       </ThemedView>
 
@@ -141,7 +130,6 @@ export default function SuperAdminScreen() {
       ) : (
         workshops.map((ws) => {
           const status = statusLabel(ws);
-          const canActivate = isExpiredOrTrial(ws);
           return (
             <ThemedView key={ws.id} type="backgroundElement" style={styles.card}>
               <View style={styles.cardHeader}>
@@ -169,8 +157,7 @@ export default function SuperAdminScreen() {
                 </ThemedText>
               </View>
 
-              {canActivate ? (
-                <Pressable
+              <Pressable
                   style={({ pressed }) => [
                     styles.activateButton,
                     pressed && styles.pressed,
@@ -179,14 +166,9 @@ export default function SuperAdminScreen() {
                   disabled={activatingId === ws.id}
                   onPress={() => handleActivate(ws)}>
                   <ThemedText style={styles.activateButtonText}>
-                    {activatingId === ws.id ? 'Activando…' : 'Activar 30 días'}
+                    {activatingId === ws.id ? 'Añadiendo…' : 'Añadir 30 días'}
                   </ThemedText>
                 </Pressable>
-              ) : (
-                <ThemedText type="small" themeColor="textSecondary" style={styles.activeNote}>
-                  Suscripción activa — sin acción requerida
-                </ThemedText>
-              )}
             </ThemedView>
           );
         })
@@ -263,9 +245,6 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.6,
-  },
-  activeNote: {
-    fontStyle: 'italic',
   },
   pressed: {
     opacity: 0.85,

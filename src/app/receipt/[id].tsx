@@ -31,7 +31,7 @@ function escapeHtml(value: string): string {
 
 export default function ReceiptScreen() {
   const router = useRouter();
-  const { currentUser, license } = useAuth();
+  const { currentUser } = useAuth();
   const { repairs } = useRepair();
   const { profile } = useWorkshop();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -116,7 +116,6 @@ const paid = repair.advancePayment ?? 0;
   <div class="divider"></div>
   <div class="footer">
     <div class="row"><strong>Atendido por:</strong><span>${escapeHtml(attendedBy)}</span></div>
-    <div class="row"><strong>Licencia:</strong><span>${escapeHtml(license.plan)}</span></div>
   </div>
   <div class="banner">
     <strong>Adquiere la Licencia de Facturación</strong>
@@ -267,10 +266,6 @@ const paid = repair.advancePayment ?? 0;
           <View style={styles.sectionRow}>
             <ThemedText type="smallBold">Atendido por:</ThemedText>
             <ThemedText type="small">{currentUser?.name || repair.technicianName || '-'}</ThemedText>
-          </View>
-          <View style={styles.sectionRow}>
-            <ThemedText type="smallBold">Licencia:</ThemedText>
-            <ThemedText type="small">{license.plan}</ThemedText>
           </View>
           <View style={styles.bannerWrap}>
             <CommercialBanner />

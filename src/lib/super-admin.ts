@@ -4,9 +4,10 @@ import { supabase } from '@/lib/supabase';
  * Super Admin — acceso exclusivo del dueño de la plataforma.
  *
  * La RLS de `workshops` solo permite a cada taller leer/actualizar su propia
- * fila. Para que el dueño pueda listar TODOS los talleres y activar 30 días a
- * cualquiera, se crearon dos RPC `SECURITY DEFINER` (supabase/super-admin-rpcs.sql)
- * que validan `auth.uid()` contra este uid y ejecutan como el owner de la BD.
+ * fila. Para que el dueño pueda listar TODOS los talleres y añadir 30 días
+ * acumulables a cualquiera, se crearon dos RPC `SECURITY DEFINER`
+ * (supabase/super-admin-rpcs.sql) que validan `auth.uid()` contra este uid y
+ * ejecutan como el owner de la BD.
  */
 
 /** UID del dueño de la plataforma (miguelmontoyamed@gmail.com). */
@@ -35,8 +36,11 @@ export async function listAllWorkshops(): Promise<{
 }
 
 /**
- * Activa 30 días a un taller: status='active' + subscription_ends_at = now+30d.
- * Solo el uid del dueño puede ejecutarla (la RPC lo valida server-side).
+ * Añade 30 días a un taller con acumulación inteligente: si el taller ya tiene
+ * una fecha de expiración futura (subscription_ends_at o trial_ends_at), se
+ * suman 30 días EXACTOS a esa fecha; si ya expiró, se suman 30 días desde
+ * now(). Así N pagos seguidos = N*30 días acumulados. Solo el uid del dueño
+ * puede ejecutarla (la RPC lo valida server-side).
  */
 export async function activateWorkshop(
   workshopId: string
