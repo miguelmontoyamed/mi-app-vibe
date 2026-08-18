@@ -64,10 +64,48 @@ begin
 end;
 $$;
 
+-- Solo el dueño puede listar todos los perfiles con su correo.
+-- `profiles` NO tiene email (vive en `auth.users`): se hace JOIN con SECURITY
+-- DEFINER para exponerlo solo al dueño (auth.uid() validado).
+create or replace function public.list_all_profiles()
+returns table (
+  profile_id uuid,
+  full_name text,
+  email text,
+  role text,
+  workshop_id uuid,
+  workshop_name text,
+  workshop_status text,
+  trial_ends_at timestamptz,
+  subscription_ends_at timestamptz
+)
+language sql
+security definer
+set search_path = public
+as $$
+  select p.id as profile_id,
+         p.full_name,
+         u.email,
+         p.role,
+         p.workshop_id,
+         w.name as workshop_name,
+         w.status as workshop_status,
+         w.trial_ends_at,
+         w.subscription_ends_at
+  from public.profiles p
+  join auth.users u on u.id = p.id
+  left join public.workshops w on w.id = p.workshop_id
+  where auth.uid() = 'ecb17edb-bf94-4b03-a798-28ef60b99720'::uuid
+  order by p.created_at asc;
+$$;
+
 -- Rechazar anónimos; solo usuarios autenticados (y la función valida el uid).
 revoke execute on function public.list_all_workshops() from anon;
 revoke execute on function public.list_all_workshops() from public;
 revoke execute on function public.activate_workshop(uuid) from anon;
 revoke execute on function public.activate_workshop(uuid) from public;
+revoke execute on function public.list_all_profiles() from anon;
+revoke execute on function public.list_all_profiles() from public;
 grant execute on function public.list_all_workshops() to authenticated;
 grant execute on function public.activate_workshop(uuid) to authenticated;
+grant execute on function public.list_all_profiles() to authenticated;

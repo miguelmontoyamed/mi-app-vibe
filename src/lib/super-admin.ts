@@ -23,6 +23,22 @@ export interface SuperAdminWorkshop {
   created_at: string | null;
 }
 
+/**
+ * Perfil con correo (JOIN a `auth.users`, solo accesible vía RPC SECURITY
+ * DEFINER). Se usa para localizar por email a quien pagó y añadirle días.
+ */
+export interface SuperAdminProfile {
+  profile_id: string;
+  full_name: string | null;
+  email: string;
+  role: string;
+  workshop_id: string | null;
+  workshop_name: string | null;
+  workshop_status: string | null;
+  trial_ends_at: string | null;
+  subscription_ends_at: string | null;
+}
+
 /** Lista todos los talleres (solo para el uid del dueño; si no, RPC falla). */
 export async function listAllWorkshops(): Promise<{
   data: SuperAdminWorkshop[] | null;
@@ -31,6 +47,21 @@ export async function listAllWorkshops(): Promise<{
   const { data, error } = await supabase.rpc('list_all_workshops');
   return {
     data: (data as SuperAdminWorkshop[] | null) ?? null,
+    error: error?.message ?? null,
+  };
+}
+
+/**
+ * Lista todos los perfiles con su correo (JOIN a auth.users, solo para el uid
+ * del dueño). Permite localizar por email a quien pagó y añadirle días.
+ */
+export async function listAllProfiles(): Promise<{
+  data: SuperAdminProfile[] | null;
+  error: string | null;
+}> {
+  const { data, error } = await supabase.rpc('list_all_profiles');
+  return {
+    data: (data as SuperAdminProfile[] | null) ?? null,
     error: error?.message ?? null,
   };
 }
