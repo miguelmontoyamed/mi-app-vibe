@@ -27,6 +27,21 @@ export interface WorkshopProfile {
   phone: string;
 }
 
+/**
+ * Estado de suscripción del taller (monetización Fase 1).
+ * Fila de `public.workshops`: status + trial_ends_at + subscription_ends_at.
+ */
+export interface WorkshopSubscription {
+  /** 'trial' | 'active' | 'expired' según la BD (null si no se pudo leer). */
+  status: 'trial' | 'active' | 'expired' | null;
+  /** ISO del fin del trial gratuito (90 días), o null si se desconoce. */
+  trialEndsAt: string | null;
+  /** ISO del fin de la suscripción paga, o null si no hay suscripción. */
+  subscriptionEndsAt: string | null;
+  /** True cuando el taller está bloqueado (trial/subscripción vencidos). */
+  isExpired: boolean;
+}
+
 interface WorkshopContextType {
   /** Perfil guardado, o null si el taller aún no lo ha configurado. */
   profile: WorkshopProfile | null;
@@ -34,6 +49,8 @@ interface WorkshopContextType {
   hydrated: boolean;
   /** Error visible de hidratación (env faltante o lectura fallida), o null. */
   loadError: string | null;
+  /** Estado de suscripción del taller (trial activo / vencido / pagado). */
+  subscription: WorkshopSubscription;
   /** Persiste el perfil del taller (fuente única para el membrete del recibo). */
   saveProfile: (profile: WorkshopProfile) => Promise<void>;
 }
@@ -45,6 +62,47 @@ interface WorkshopProfileRow {
   nit: string;
   address: string | null;
   phone: string | null;
+}
+
+/** Fila de `public.workshops` con las columnas de monetización. */
+interface WorkshopRow {
+  status: 'trial' | 'active' | 'expired' | null;
+  trial_ends_at: string | null;
+  subscription_ends_at: string | null;
+}
+
+/** Estado inicial: sin datos → no bloquear (demo local sin Supabase). */
+const DEFAULT_SUBSCRIPTION: WorkshopSubscription = {
+  status: null,
+  trialEndsAt: null,
+  subscriptionEndsAt: null,
+  isExpired: false,
+};
+
+/**
+ * Decide si el taller está bloqueado:
+ * - status 'expired' → bloqueado siempre.
+ * - subscription_ends_at futuro → activo (pagó), aunque el trial haya vencido.
+ * - Sin suscripción y trial_ends_at pasado → bloqueado.
+ * - Cualquier dato faltante → no bloquear (defensivo: nunca encerrar al
+ *   usuario por un error de lectura, eso lo haría inaccesible).
+ */
+function computeIsExpired(row: WorkshopRow | null): boolean {
+  if (!row) return false;
+  if (row.status === 'expired') return true;
+  const now = Date.now();
+
+  if (row.subscription_ends_at) {
+    const subEnd = new Date(row.subscription_ends_at).getTime();
+    if (Number.isFinite(subEnd)) return now > subEnd;
+  }
+
+  if (row.trial_ends_at) {
+    const trialEnd = new Date(row.trial_ends_at).getTime();
+    if (Number.isFinite(trialEnd)) return now > trialEnd;
+  }
+
+  return false;
 }
 
 const WorkshopContext = createContext<WorkshopContextType | undefined>(undefined);
@@ -60,6 +118,8 @@ export function WorkshopProvider({ children }: { children: React.ReactNode }) {
   const [loadError, setLoadError] = useState<string | null>(null);
   /** Workshop id resuelto vía `resolveWorkshopId()` (ensure_workshop, SECURITY DEFINER). */
   const [workshopId, setWorkshopId] = useState<string | null>(null);
+  /** Suscripción del taller (trial/subscripción) leída de `public.workshops`. */
+  const [subscription, setSubscription] = useState<WorkshopSubscription>(DEFAULT_SUBSCRIPTION);
 
   /** Muestra un error visible en web (window.alert) o nativo (Alert.alert). */
   const notifyError = (message: string) => {
@@ -79,6 +139,7 @@ export function WorkshopProvider({ children }: { children: React.ReactNode }) {
       setHydrated(false);
       setWorkshopId(null);
       setProfile(null);
+      setSubscription(DEFAULT_SUBSCRIPTION);
       setLoadError(null);
       try {
         if (isSupabaseConfigured && userId) {
@@ -87,6 +148,22 @@ export function WorkshopProvider({ children }: { children: React.ReactNode }) {
             const wid = await resolveWorkshopId();
             if (wid) {
               setWorkshopId(wid);
+              // Estado de monetización del taller (status/trial/subscripción).
+              // El error NO bloquea: si la columna aún no existe (script SQL
+              // pendiente) o falla la lectura, el taller sigue operando.
+              const { data: wsRow } = await supabase
+                .from('workshops')
+                .select('status, trial_ends_at, subscription_ends_at')
+                .eq('id', wid)
+                .maybeSingle();
+              if (!cancelled && wsRow) {
+                setSubscription({
+                  status: (wsRow.status ?? null) as WorkshopSubscription['status'],
+                  trialEndsAt: wsRow.trial_ends_at ?? null,
+                  subscriptionEndsAt: wsRow.subscription_ends_at ?? null,
+                  isExpired: computeIsExpired(wsRow as WorkshopRow),
+                });
+              }
               const { data, error } = await supabase
                 .from('workshop_profiles')
                 .select('*')
@@ -166,7 +243,7 @@ export function WorkshopProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <WorkshopContext.Provider value={{ profile, hydrated, loadError, saveProfile }}>
+    <WorkshopContext.Provider value={{ profile, hydrated, loadError, subscription, saveProfile }}>
       {children}
     </WorkshopContext.Provider>
   );
