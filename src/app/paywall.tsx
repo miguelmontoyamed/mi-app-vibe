@@ -17,12 +17,21 @@ import { formatCOP } from '@/utils/format';
 export const MONTHLY_PRICE_COP = 20000;
 
 /**
+ * URL del payment link de Wompi (pasarela elegida para el cobro mensual).
+ *
+ * ESPACIO RESERVADO: aún no existe cuenta/checkout de Wompi. Cuando el link
+ * esté disponible, pegar aquí la URL tipo https://checkout.wompi.co/p/<id>
+ * y activar handlePay (Linking.openURL + validación del evento de pago).
+ */
+export const WOMPI_CHECKOUT_URL: string | null = null;
+
+/**
  * Paywall de monetización (Liquid Glass + MD3).
  *
  * Bloqueo total: sin navbar ni tab bar. Se muestra cuando el taller expira
  * (trial de 90 días o suscripción vencidos) y el router impide navegar a la
  * zona protegida. Por ahora el pago es un stub: el botón solo registra en
- * consola hasta que se integre la pasarela.
+ * consola hasta que se integre la pasarela Wompi (WOMPI_CHECKOUT_URL).
  */
 export default function PaywallScreen() {
   const router = useRouter();
@@ -40,9 +49,11 @@ export default function PaywallScreen() {
   }, [isAuthenticated, subscription.isExpired, router]);
 
   const handlePay = () => {
-    // TODO(Fase 2): integrar pasarela de pagos (Stripe/PayU) aquí.
+    // TODO(Wompi): cuando WOMPI_CHECKOUT_URL esté disponible, abrirlo con
+    // Linking.openURL(WOMPI_CHECKOUT_URL) y tras el pago confirmado marcar
+    // status='active' + subscription_ends_at en la tabla workshops.
     console.log(
-      `[paywall] Pago mensual solicitado: ${formatCOP(MONTHLY_PRICE_COP)} COP — integrar pasarela`
+      `[paywall] Pago mensual solicitado: ${formatCOP(MONTHLY_PRICE_COP)} COP — integrar pasarela Wompi`
     );
   };
 
