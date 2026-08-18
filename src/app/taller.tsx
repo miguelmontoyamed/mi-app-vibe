@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Platform, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/ui/button';
@@ -8,6 +8,7 @@ import { Screen } from '@/components/ui/screen';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Brand, Spacing } from '@/constants/theme';
+import { useAuth } from '@/context/auth-context';
 import { useWorkshop } from '@/context/workshop-context';
 import { formatNit, NIT_BASE_LENGTH, nitCheckDigit, normalizeNit } from '@/utils/nit';
 
@@ -28,7 +29,16 @@ interface FieldErrors {
  */
 export default function TallerScreen() {
   const router = useRouter();
+  const { currentUser } = useAuth();
   const { profile, saveProfile } = useWorkshop();
+
+  // Permiso exclusivo del dueño (admin): los técnicos no pueden configurar
+  // el perfil del taller ni por URL directa. Se redirige a la zona protegida.
+  useEffect(() => {
+    if (currentUser && currentUser.role !== 'admin') {
+      router.replace('/(tabs)');
+    }
+  }, [currentUser, router]);
 
   const [name, setName] = useState(profile?.name ?? '');
   // Solo los 9 dígitos base: si el perfil previo guardó 10 (base + DV), se
@@ -74,6 +84,12 @@ export default function TallerScreen() {
     }
     router.back();
   };
+
+  // Los hooks ya se ejecutaron arriba (orden estable): para un técnico el
+  // useEffect ya disparó la redirección, así que no se pinta nada.
+  if (currentUser && currentUser.role !== 'admin') {
+    return null;
+  }
 
   return (
     <Screen title="Mi Taller">

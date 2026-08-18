@@ -125,13 +125,16 @@ export default function DashboardScreen() {
           <Button label="Ver Trabajos" variant="secondary" style={StyleSheet.flatten([styles.actionButton, Elevation.level1])} />
         </Link>
       </View>
-      <Link href="/taller" asChild>
-        <Button
-          label="🏪 Configurar Mi Taller"
-          variant="secondary"
-          style={StyleSheet.flatten([styles.tallerButton, Elevation.level1])}
-        />
-      </Link>
+      {/* Configurar taller: permiso exclusivo del dueño (admin). */}
+      {currentUser.role === 'admin' && (
+        <Link href="/taller" asChild>
+          <Button
+            label="🏪 Configurar Mi Taller"
+            variant="secondary"
+            style={StyleSheet.flatten([styles.tallerButton, Elevation.level1])}
+          />
+        </Link>
+      )}
     </Screen>
   );
 }
