@@ -22,6 +22,7 @@ import { ThemedText } from './themed-text';
 import { ThemedView } from './themed-view';
 
 import { BREAKPOINTS, Colors, Glass, Spacing } from '@/constants/theme';
+import { useAuth } from '@/context/auth-context';
 
 /** Width of the desktop sidebar navigation. */
 const SIDEBAR_WIDTH = 220;
@@ -42,6 +43,8 @@ const bottomBarWebStyle = {
 export default function AppTabs() {
   const { width } = useWindowDimensions();
   const isDesktop = width >= BREAKPOINTS.tablet;
+  const { currentUser } = useAuth();
+  const isAdmin = currentUser?.role === 'admin';
   const slotStyle: ViewStyle = isDesktop ? styles.slotDesktop : styles.slotMobile;
 
   return (
@@ -76,11 +79,14 @@ export default function AppTabs() {
               Inventario
             </TabButton>
           </TabTrigger>
-          <TabTrigger name="admin" href="/admin" asChild>
-            <TabButton bottom={!isDesktop} icon={{ ios: 'gearshape.fill', web: 'settings' }}>
-              Admin & Licencia
-            </TabButton>
-          </TabTrigger>
+          {/* RBAC: el tab Admin solo se muestra al dueño (admin). */}
+          {isAdmin && (
+            <TabTrigger name="admin" href="/admin" asChild>
+              <TabButton bottom={!isDesktop} icon={{ ios: 'gearshape.fill', web: 'settings' }}>
+                Admin & Licencia
+              </TabButton>
+            </TabTrigger>
+          )}
         </CustomTabList>
       </TabList>
     </Tabs>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Alert,
   Linking,
@@ -56,8 +56,21 @@ export default function AdminScreen() {
   const [supportType, setSupportType] = useState(SUPPORT_TYPES[0]);
   const [supportMessage, setSupportMessage] = useState('');
 
+  // Guard de ruta (rol): el tab Admin es exclusivo del dueño. Un técnico que
+  // entre por URL directa es redirigido a la zona protegida.
+  useEffect(() => {
+    if (currentUser && currentUser.role !== 'admin') {
+      router.replace('/(tabs)');
+    }
+  }, [currentUser, router]);
+
   // Tabs only render when authenticated. Guard keeps typing safe (User | null).
   if (!currentUser) {
+    return null;
+  }
+
+  // RBAC: solo el dueño (admin) accede a la administración del taller.
+  if (currentUser.role !== 'admin') {
     return null;
   }
 

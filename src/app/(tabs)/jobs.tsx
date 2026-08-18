@@ -17,10 +17,11 @@ import { StatusBadge } from '@/components/ui/status-badge';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Brand, BREAKPOINTS, KpiAccent, Spacing } from '@/constants/theme';
+import { useAuth } from '@/context/auth-context';
 import { RepairStatus, useRepair } from '@/context/repair-context';
 import { useTheme } from '@/hooks/use-theme';
 import { formatCOP, parseCOPInput } from '@/utils/format';
-import { PAYMENT_METHODS, type PaymentMethod } from '@/utils/repair-logic';
+import { PAYMENT_METHODS, type PaymentMethod, visibleRepairs } from '@/utils/repair-logic';
 
 const STATUS_FILTERS: (RepairStatus | 'Todos')[] = [
   'Todos',
@@ -44,6 +45,7 @@ export default function JobsScreen() {
   const { width } = useWindowDimensions();
   const isTablet = width >= BREAKPOINTS.mobile;
   const router = useRouter();
+  const { currentUser } = useAuth();
   const { repairs, updateRepairStatus, recordRepairPayment } = useRepair();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -51,6 +53,11 @@ export default function JobsScreen() {
   const [payingId, setPayingId] = useState<string | null>(null);
   const [paymentInput, setPaymentInput] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('Efectivo');
+
+  // Los tabs solo se renderizan autenticados; el guard mantiene el tipado seguro.
+  if (!currentUser) {
+    return null;
+  }
 
   /**
    * Filtrado multicriterio en memoria, memoizado para que sea fluido al
@@ -60,7 +67,8 @@ export default function JobsScreen() {
   const filteredRepairs = useMemo(() => {
     const query = normalizeSearch(searchQuery);
     const hasQuery = query.length > 0;
-    return repairs.filter((item) => {
+    // RBAC: un técnico solo ve las órdenes asignadas a su nombre/ID; el admin todas.
+    return visibleRepairs(repairs, currentUser).filter((item) => {
       const matchesStatus =
         selectedFilter === 'Todos' || item.status === selectedFilter;
       if (!matchesStatus) {
@@ -76,7 +84,7 @@ export default function JobsScreen() {
         normalizeSearch(item.imei ?? '').includes(query)
       );
     });
-  }, [repairs, searchQuery, selectedFilter]);
+  }, [repairs, currentUser, searchQuery, selectedFilter]);
 
   const handleSendWhatsApp = (item: {
     clientName: string;

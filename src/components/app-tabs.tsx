@@ -26,6 +26,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Brand, Spacing } from '@/constants/theme';
+import { useAuth } from '@/context/auth-context';
 import { useTheme } from '@/hooks/use-theme';
 
 /** Geometría de la barra: 6 (top) + 24 (icono) + 2 (gap) + 12 (label) + 6 (bottom) = 50px. */
@@ -104,12 +105,16 @@ function TabItem({ focused, label, accessibilityLabel, icon, color, onPress }: T
 function MobileTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const { currentUser } = useAuth();
+  const isAdmin = currentUser?.role === 'admin';
 
   const barWidth = useSharedValue(0);
   const activeIndex = useSharedValue(state.index);
   const translateX = useSharedValue(0);
 
-  const tabCount = state.routes.length;
+  // RBAC: el tab Admin se omite de la barra para los técnicos.
+  const visibleRoutes = state.routes.filter((r) => r.name !== 'admin' || isAdmin);
+  const tabCount = visibleRoutes.length;
 
   // Desliza la píldora al tab activo con spring cuando cambia el índice.
   useAnimatedReaction(
@@ -156,7 +161,7 @@ function MobileTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
         },
       ]}>
       <Animated.View style={[styles.indicator, indicatorStyle]} />
-      {state.routes.map((route, index) => {
+      {visibleRoutes.map((route, index) => {
         const { options } = descriptors[route.key];
         const isFocused = state.index === index;
         const label = options.title ?? route.name;
@@ -195,6 +200,9 @@ function MobileTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
 
 /** Navegador de tabs estable (JS) con barra inferior custom para móvil. */
 export default function AppTabs() {
+  const { currentUser } = useAuth();
+  const isAdmin = currentUser?.role === 'admin';
+
   return (
     <Tabs
       screenOptions={{ headerShown: false }}
@@ -246,6 +254,7 @@ export default function AppTabs() {
       />
       <Tabs.Screen
         name="admin"
+        redirect={!isAdmin}
         options={{
           title: 'Admin',
           tabBarAccessibilityLabel: 'Admin & Licencia',

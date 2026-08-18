@@ -7,6 +7,7 @@ import { Screen } from '@/components/ui/screen';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Brand, BREAKPOINTS, Spacing } from '@/constants/theme';
+import { useAuth } from '@/context/auth-context';
 import { useRepair } from '@/context/repair-context';
 import { formatCOP } from '@/utils/format';
 
@@ -30,6 +31,9 @@ function notify(message: string) {
 
 export default function InventoryScreen() {
   const { inventory, addInventoryPart, updateInventoryStock } = useRepair();
+  const { currentUser } = useAuth();
+  // RBAC: el inventario es de solo lectura para el técnico (crear/ajustar = admin).
+  const isAdmin = currentUser?.role === 'admin';
   const { width } = useWindowDimensions();
   const isTablet = width >= BREAKPOINTS.mobile;
 
@@ -94,7 +98,8 @@ export default function InventoryScreen() {
 
       {/* Tablet+: form left (40%), search + list right (60%). Mobile: stacked. */}
       <View style={[styles.mainRow, isTablet && styles.mainRowTablet]}>
-        {/* Add Part Form */}
+        {/* Add Part Form — solo el dueño (admin) puede crear piezas. */}
+        {isAdmin && (
         <ThemedView
           type="backgroundElement"
           style={[styles.formCard, isTablet && styles.formCardTablet]}>
@@ -149,6 +154,7 @@ export default function InventoryScreen() {
             <Button label="+ Agregar" onPress={handleAddPart} style={styles.addButton} />
           </View>
         </ThemedView>
+        )}
 
         <View style={[styles.listColumn, isTablet && styles.listColumnTablet]}>
           {/* Search Bar */}
@@ -184,6 +190,8 @@ export default function InventoryScreen() {
                       style={[styles.stockText, item.stock <= 2 && { color: Brand.danger }]}>
                       Stock: {item.stock}
                     </ThemedText>
+                    {/* Ajuste de stock: solo el dueño (admin); el técnico solo consulta. */}
+                    {isAdmin && (
                     <View style={styles.stockButtons}>
                       <Pressable
                         style={({ pressed }) => [styles.stockBtn, pressed && styles.pressed]}
@@ -196,6 +204,7 @@ export default function InventoryScreen() {
                         <ThemedText style={styles.stockBtnText}>+</ThemedText>
                       </Pressable>
                     </View>
+                    )}
                   </View>
                 </ThemedView>
               ))

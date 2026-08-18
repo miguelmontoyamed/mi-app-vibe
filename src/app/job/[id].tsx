@@ -13,7 +13,7 @@ import { useAuth } from '@/context/auth-context';
 import { useRepair } from '@/context/repair-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { formatCOP } from '@/utils/format';
-import { canCancel } from '@/utils/repair-logic';
+import { canCancel, isAssignedToTechnician } from '@/utils/repair-logic';
 
 export default function JobDetailScreen() {
   const router = useRouter();
@@ -27,7 +27,15 @@ export default function JobDetailScreen() {
 
   const repair = repairs.find((r) => r.id === id);
 
-  if (!repair) {
+  // RBAC (defensa en profundidad): un técnico solo puede ver las órdenes
+  // asignadas a su nombre/ID, incluso navegando por URL directa.
+  const canViewRepair =
+    currentUser?.role === 'admin' ||
+    (currentUser != null && repair != null
+      ? isAssignedToTechnician(repair, currentUser.id, currentUser.name)
+      : false);
+
+  if (!repair || !canViewRepair) {
     return (
       <Screen title="Detalle de Orden">
         <ThemedView type="backgroundElement" style={styles.empty}>

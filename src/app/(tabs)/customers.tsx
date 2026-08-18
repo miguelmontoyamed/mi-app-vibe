@@ -9,9 +9,11 @@ import { StatusBadge } from '@/components/ui/status-badge';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Brand, BREAKPOINTS, Spacing } from '@/constants/theme';
+import { useAuth } from '@/context/auth-context';
 import { useRepair, type RepairItem } from '@/context/repair-context';
 import { useTheme } from '@/hooks/use-theme';
 import { formatCOP } from '@/utils/format';
+import { visibleRepairs } from '@/utils/repair-logic';
 
 type CustomerGroup = {
   key: string;
@@ -24,15 +26,22 @@ export default function CustomersScreen() {
   const theme = useTheme();
   const router = useRouter();
   const { repairs } = useRepair();
+  const { currentUser } = useAuth();
   const { width } = useWindowDimensions();
   const isTablet = width >= BREAKPOINTS.mobile;
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
+  // Los tabs solo se renderizan autenticados; el guard mantiene el tipado seguro.
+  if (!currentUser) {
+    return null;
+  }
+
   // Group repairs by (phone | name) so a returning client shows their full history.
   const customers = useMemo<CustomerGroup[]>(() => {
     const map = new Map<string, CustomerGroup>();
-    for (const r of repairs) {
+    // RBAC: el técnico solo ve clientes de sus órdenes asignadas; el admin todos.
+    for (const r of visibleRepairs(repairs, currentUser)) {
       const key = `${(r.phone ?? '').trim().toLowerCase()}|${r.clientName.trim().toLowerCase()}` || r.id;
       const existing = map.get(key);
       if (existing) {
@@ -50,7 +59,7 @@ export default function CustomersScreen() {
     return Array.from(map.values()).sort(
       (a, b) => b.repairs.length - a.repairs.length
     );
-  }, [repairs]);
+  }, [repairs, currentUser]);
 
   const filtered = customers.filter(
     (c) =>
