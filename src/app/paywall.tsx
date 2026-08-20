@@ -169,10 +169,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.four,
     borderRadius: Shape.lg,
     marginTop: Spacing.one,
+    overflow: 'hidden',
   },
   priceText: {
     color: Brand.primary,
     fontSize: 20,
+    lineHeight: 24,
   },
   brebWarning: {
     flexDirection: 'row',
@@ -188,6 +190,7 @@ const styles = StyleSheet.create({
       web: 'rgba(239, 68, 68, 0.10)',
       default: undefined,
     }),
+    overflow: 'hidden',
   },
   brebWarningText: {
     flex: 1,

@@ -342,6 +342,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.two,
     borderRadius: 999,
     flexShrink: 0,
+    overflow: 'hidden',
   },
   datesRow: {
     flexDirection: 'row',

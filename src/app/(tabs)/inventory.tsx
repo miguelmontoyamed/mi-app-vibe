@@ -311,11 +311,13 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'hidden',
   },
   stockBtnText: {
     color: Brand.onBrand,
     fontWeight: 'bold',
     fontSize: 16,
+    lineHeight: 16,
   },
   pressed: {
     opacity: 0.7,

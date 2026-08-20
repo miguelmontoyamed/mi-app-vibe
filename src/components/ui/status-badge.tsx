@@ -32,12 +32,15 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.half,
     borderRadius: Spacing.two,
     borderWidth: 1,
+    overflow: 'hidden',
   },
   icon: {
     fontSize: 14,
+    lineHeight: 14,
   },
   label: {
     fontSize: 12,
     fontWeight: '700',
+    lineHeight: 14,
   },
 });

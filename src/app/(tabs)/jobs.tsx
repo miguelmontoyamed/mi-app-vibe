@@ -393,9 +393,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.four,
     paddingVertical: Spacing.two,
     borderRadius: Spacing.five,
+    overflow: 'hidden',
   },
   filterChipText: {
     fontWeight: '600',
+    lineHeight: 18,
   },
   listContainer: {
     gap: Spacing.three,
@@ -479,9 +481,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.one,
     borderRadius: Spacing.five,
+    overflow: 'hidden',
   },
   methodChipText: {
     fontSize: 12,
+    lineHeight: 14,
   },
   whatsappBtn: {
     marginTop: Spacing.one,
@@ -502,6 +506,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.two,
     paddingVertical: 4,
     borderRadius: Spacing.two,
+    overflow: 'hidden',
   },
   actionBtnActive: {
     backgroundColor: Brand.primary,
@@ -513,5 +518,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: Brand.onBrand,
     fontWeight: '600',
+    lineHeight: 13,
   },
 });

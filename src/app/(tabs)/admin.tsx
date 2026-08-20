@@ -559,10 +559,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two,
     borderRadius: Spacing.three,
+    overflow: 'hidden',
   },
   roleButtonText: {
     fontWeight: '600',
     fontSize: 12,
+    lineHeight: 14,
   },
   financesGrid: {
     flexDirection: 'row',

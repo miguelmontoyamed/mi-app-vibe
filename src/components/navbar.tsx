@@ -178,11 +178,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
+    overflow: 'hidden',
   },
   avatarInitial: {
     color: Brand.onBrand,
     fontWeight: '700',
     fontSize: 15,
+    lineHeight: 16,
   },
   avatarText: {
     alignItems: 'flex-end',

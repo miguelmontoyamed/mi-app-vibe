@@ -325,11 +325,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.one,
     borderRadius: Spacing.five,
+    overflow: 'hidden',
   },
   chipText: {
     color: Brand.onBrand,
     fontSize: 12,
     fontWeight: '600',
+    lineHeight: 16,
   },
   rowInputs: {
     flexDirection: 'row',
