@@ -12,9 +12,10 @@ import { Screen } from '@/components/ui/screen';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Brand, Spacing, statusStyle } from '@/constants/theme';
+import { Brand, Shape, Spacing, statusStyle } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { useRepair } from '@/context/repair-context';
+import { useTheme } from '@/hooks/use-theme';
 import { useWorkshop } from '@/context/workshop-context';
 import { formatCOP } from '@/utils/format';
 import { formatNit } from '@/utils/nit';
@@ -31,6 +32,7 @@ function escapeHtml(value: string): string {
 
 export default function ReceiptScreen() {
   const router = useRouter();
+  const theme = useTheme();
   const { currentUser } = useAuth();
   const { repairs } = useRepair();
   const { profile } = useWorkshop();
@@ -82,14 +84,14 @@ const partsCost = repair.partsCost ?? 0;
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #111827; padding-left: 32px; padding-right: 32px; padding-top: 24px; }
-  h1 { font-size: 24px; color: #0284c7; text-align: center; margin-bottom: 4px; }
+  h1 { font-size: 24px; color: ${Brand.primary}; text-align: center; margin-bottom: 4px; }
   .membrete { text-align: center; color: #374151; font-size: 12px; line-height: 1.5; margin-bottom: 8px; }
   .divider { border-top: 1px solid #d1d5db; margin: 14px 0; }
-  h2 { font-size: 13px; color: #0284c7; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+  h2 { font-size: 13px; color: ${Brand.primary}; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
   .row { display: flex; justify-content: space-between; gap: 16px; font-size: 13px; line-height: 1.7; }
   .estado { display: inline-block; padding: 2px 8px; border: 1px solid ${estado.border}; border-radius: 4px; background: ${estado.bg}; color: ${estado.text}; font-weight: 600; }
-  .banner { margin-top: 14px; padding: 12px 14px; border: 1px solid rgba(2, 132, 199, 0.5); border-radius: 8px; background: #f0f7fc; font-size: 11px; color: #334155; line-height: 1.6; }
-  .banner strong { color: #0284c7; display: block; margin-bottom: 2px; }
+  .banner { margin-top: 14px; padding: 12px 14px; border: 1px solid ${Brand.primary}80; border-radius: 8px; background: #f0f7fc; font-size: 11px; color: #334155; line-height: 1.6; }
+  .banner strong { color: ${Brand.primary}; display: block; margin-bottom: 2px; }
   .footer { margin-top: 14px; font-size: 12px; color: #374151; line-height: 1.7; }
 </style>
 </head>
@@ -225,7 +227,7 @@ const partsCost = repair.partsCost ?? 0;
               Servicio Técnico de Celulares y Electrónica
             </ThemedText>
           )}
-          <View style={styles.divider} />
+          <View style={[styles.divider, { backgroundColor: theme.border }]} />
         </View>
 
         <View style={styles.section}>
@@ -243,7 +245,7 @@ const partsCost = repair.partsCost ?? 0;
           </View>
         </View>
 
-        <View style={styles.divider} />
+        <View style={[styles.divider, { backgroundColor: theme.border }]} />
 
         <View style={styles.section}>
           <ThemedText type="subtitle" style={styles.sectionTitle}>CLIENTE</ThemedText>
@@ -257,7 +259,7 @@ const partsCost = repair.partsCost ?? 0;
           </View>
         </View>
 
-        <View style={styles.divider} />
+        <View style={[styles.divider, { backgroundColor: theme.border }]} />
 
         <View style={styles.section}>
           <ThemedText type="subtitle" style={styles.sectionTitle}>EQUIPO / SERVICIO</ThemedText>
@@ -281,7 +283,7 @@ const partsCost = repair.partsCost ?? 0;
           </View>
         </View>
 
-        <View style={styles.divider} />
+        <View style={[styles.divider, { backgroundColor: theme.border }]} />
 
         <View style={styles.section}>
           <ThemedText type="subtitle" style={styles.sectionTitle}>VALOR A PAGAR</ThemedText>
@@ -303,7 +305,7 @@ const partsCost = repair.partsCost ?? 0;
           )}
         </View>
 
-        <View style={styles.divider} />
+        <View style={[styles.divider, { backgroundColor: theme.border }]} />
 
         <View style={styles.footer}>
           <View style={styles.sectionRow}>
@@ -344,12 +346,16 @@ const styles = StyleSheet.create({
   },
   receipt: {
     padding: Spacing.four,
-    borderRadius: Spacing.three,
+    borderRadius: Shape.lg,
     gap: Spacing.two,
     width: '100%',
+    flexGrow: 0,
+    flexShrink: 0,
+    alignSelf: 'stretch',
+    height: 'auto',
   },
   header: {
-    gap: 2,
+    gap: Spacing.half,
     alignItems: 'center',
   },
   brand: {
@@ -372,7 +378,6 @@ const styles = StyleSheet.create({
   },
   divider: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: '#9ca3af',
     marginVertical: Spacing.two,
   },
   footer: {
@@ -387,7 +392,7 @@ const styles = StyleSheet.create({
   },
   empty: {
     padding: Spacing.four,
-    borderRadius: Spacing.three,
+    borderRadius: Shape.lg,
     alignItems: 'center',
     gap: Spacing.three,
     width: '100%',

@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router';
 import { Screen } from '@/components/ui/screen';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Brand, Spacing } from '@/constants/theme';
+import { Brand, Shape, Spacing, TouchTarget } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { useTheme } from '@/hooks/use-theme';
 import {
@@ -147,7 +147,7 @@ export default function SuperAdminScreen() {
       <TextInput
         style={[styles.searchInput, { color: theme.text, borderColor: theme.backgroundElement }]}
         placeholder="Buscar por correo o nombre…"
-        placeholderTextColor="#9ca3af"
+        placeholderTextColor={theme.textSecondary}
         autoCapitalize="none"
         autoCorrect={false}
         value={searchQuery}
@@ -291,11 +291,14 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
     padding: Spacing.three,
     width: '100%',
+    borderRadius: Shape.lg,
   },
   retryButton: {
     alignSelf: 'flex-start',
     backgroundColor: Brand.primary,
-    borderRadius: 8,
+    borderRadius: Shape.sm,
+    minHeight: TouchTarget.min,
+    justifyContent: 'center',
     paddingVertical: Spacing.two,
     paddingHorizontal: Spacing.three,
   },
@@ -311,9 +314,10 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     borderWidth: 1,
-    borderRadius: 12,
+    borderRadius: Shape.md,
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.three,
+    minHeight: TouchTarget.min,
     fontSize: 14,
     backgroundColor: 'transparent',
     width: '100%',
@@ -325,6 +329,11 @@ const styles = StyleSheet.create({
   card: {
     gap: Spacing.two,
     width: '100%',
+    borderRadius: Shape.lg,
+    flexGrow: 0,
+    flexShrink: 0,
+    alignSelf: 'stretch',
+    height: 'auto',
   },
   cardHeader: {
     flexDirection: 'row',
@@ -340,7 +349,7 @@ const styles = StyleSheet.create({
   statusPill: {
     paddingVertical: Spacing.one,
     paddingHorizontal: Spacing.two,
-    borderRadius: 999,
+    borderRadius: Shape.full,
     flexShrink: 0,
     overflow: 'hidden',
   },
@@ -352,8 +361,10 @@ const styles = StyleSheet.create({
   },
   activateButton: {
     alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: Brand.success,
-    borderRadius: 10,
+    borderRadius: Shape.sm,
+    minHeight: TouchTarget.min,
     paddingVertical: Spacing.three,
     paddingHorizontal: Spacing.four,
   },
@@ -369,6 +380,6 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
   pressed: {
-    opacity: 0.85,
+    opacity: 0.7,
   },
 });

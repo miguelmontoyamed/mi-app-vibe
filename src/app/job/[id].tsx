@@ -8,15 +8,17 @@ import { Button } from '@/components/ui/button';
 import { FormInput } from '@/components/ui/form-input';
 import { Screen } from '@/components/ui/screen';
 import { StatusBadge } from '@/components/ui/status-badge';
-import { Brand, Spacing, statusStyle } from '@/constants/theme';
+import { Shape, Spacing, statusStyle } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { useRepair } from '@/context/repair-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useTheme } from '@/hooks/use-theme';
 import { formatCOP } from '@/utils/format';
 import { canCancel, isAssignedToTechnician, profitForRepair } from '@/utils/repair-logic';
 
 export default function JobDetailScreen() {
   const router = useRouter();
+  const theme = useTheme();
   const { currentUser } = useAuth();
   const { repairs, cancelRepair, deleteRepair, updateRepair } = useRepair();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -167,7 +169,7 @@ export default function JobDetailScreen() {
           <ThemedText type="subtitle">{repair.id}</ThemedText>
           <StatusBadge status={repair.status} />
         </View>
-        <View style={styles.divider} />
+        <View style={[styles.divider, { backgroundColor: theme.border }]} />
         <View style={styles.sectionRow}>
           <ThemedText type="smallBold">Cliente:</ThemedText>
           <ThemedText type="small" style={styles.sectionValue}>{repair.clientName}</ThemedText>
@@ -180,7 +182,7 @@ export default function JobDetailScreen() {
           <ThemedText type="smallBold">Fecha:</ThemedText>
           <ThemedText type="small" style={styles.sectionValue}>📅 {repair.date}</ThemedText>
         </View>
-        <View style={styles.divider} />
+        <View style={[styles.divider, { backgroundColor: theme.border }]} />
         <View style={styles.sectionRow}>
           <ThemedText type="smallBold">Dispositivo:</ThemedText>
           <ThemedText type="small" style={styles.sectionValue}>📱 {repair.device}</ThemedText>
@@ -201,7 +203,7 @@ export default function JobDetailScreen() {
             <ThemedText type="small" style={styles.sectionValue}>{repair.technicianName}</ThemedText>
           </View>
         ) : null}
-        <View style={styles.divider} />
+        <View style={[styles.divider, { backgroundColor: theme.border }]} />
         <View style={styles.sectionRow}>
           <ThemedText type="smallBold">Presupuesto:</ThemedText>
           <ThemedText type="small" style={styles.sectionValue}>{formatCOP(repair.budget)}</ThemedText>
@@ -330,14 +332,18 @@ const styles = StyleSheet.create({
   },
   cancelBox: {
     borderWidth: 1,
-    borderRadius: Spacing.three,
+    borderRadius: Shape.lg,
     padding: Spacing.three,
     gap: Spacing.one,
   },
   card: {
-    borderRadius: Spacing.three,
+    borderRadius: Shape.lg,
     padding: Spacing.three,
     gap: Spacing.two,
+    flexGrow: 0,
+    flexShrink: 0,
+    alignSelf: 'stretch',
+    height: 'auto',
   },
   rowBetween: {
     flexDirection: 'row',
@@ -347,7 +353,6 @@ const styles = StyleSheet.create({
   },
   divider: {
     height: 1,
-    backgroundColor: Brand.secondary,
     opacity: 0.15,
   },
   sectionRow: {
@@ -370,7 +375,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   empty: {
-    borderRadius: Spacing.three,
+    borderRadius: Shape.lg,
     padding: Spacing.four,
     gap: Spacing.two,
     alignItems: 'center',
@@ -381,7 +386,7 @@ const styles = StyleSheet.create({
     padding: Spacing.four,
   },
   modalCard: {
-    borderRadius: Spacing.three,
+    borderRadius: Shape.lg,
     padding: Spacing.four,
     gap: Spacing.three,
     maxWidth: 480,

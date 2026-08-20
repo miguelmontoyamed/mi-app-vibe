@@ -7,8 +7,9 @@ import { FormInput } from '@/components/ui/form-input';
 import { Screen } from '@/components/ui/screen';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Brand, Spacing } from '@/constants/theme';
+import { Brand, Shape, Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
+import { useTheme } from '@/hooks/use-theme';
 import { isGoogleConfigured, useGoogleSignIn } from '@/lib/google-auth';
 import { supabaseSignInWithGoogleRedirect } from '@/lib/supabase-auth';
 import { decodeInviteToken, validateInviteToken } from '@/utils/auth-links';
@@ -25,6 +26,7 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 export default function SignUpScreen() {
   const router = useRouter();
+  const theme = useTheme();
   const params = useLocalSearchParams<{ invite?: string }>();
   const { registerOwner, registerInvitedTechnician, signInWithGoogle, resendRegistration } = useAuth();
   const {
@@ -179,7 +181,7 @@ export default function SignUpScreen() {
   if (pendingVerification) {
     return (
       <Screen contentContainerStyle={styles.screen}>
-        <ThemedView style={styles.card}>
+        <ThemedView style={[styles.card, { borderColor: theme.border }]}>
           <ThemedText type="subtitle" style={styles.brand}>
             Verifica tu correo
           </ThemedText>
@@ -210,7 +212,7 @@ export default function SignUpScreen() {
 
   return (
     <Screen contentContainerStyle={styles.screen}>
-      <ThemedView style={styles.card}>
+      <ThemedView style={[styles.card, { borderColor: theme.border }]}>
         {/* Encabezado contextual: taller propio o invitación de técnico */}
         {inviteData?.expired ? (
           <ThemedView style={styles.inviteBannerExpired}>
@@ -275,11 +277,11 @@ export default function SignUpScreen() {
         />
 
         <View style={styles.divider}>
-          <ThemedView style={styles.line} />
+          <ThemedView style={[styles.line, { backgroundColor: theme.border }]} />
           <ThemedText type="small" themeColor="textSecondary">
             o
           </ThemedText>
-          <ThemedView style={styles.line} />
+          <ThemedView style={[styles.line, { backgroundColor: theme.border }]} />
         </View>
 
         <Button
@@ -314,10 +316,9 @@ const styles = StyleSheet.create({
   },
   card: {
     padding: Spacing.five,
-    borderRadius: Spacing.five,
+    borderRadius: Shape.lg,
     gap: Spacing.three,
     borderWidth: 1,
-    borderColor: Brand.primary,
     maxWidth: 400,
     alignSelf: 'center',
     width: '100%',
@@ -343,7 +344,6 @@ const styles = StyleSheet.create({
   line: {
     flex: 1,
     height: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(0,0,0,0.2)',
   },
   loginLink: {
     flexDirection: 'row',
@@ -356,20 +356,20 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   inviteBanner: {
-    backgroundColor: 'rgba(16, 185, 129, 0.10)',
+    backgroundColor: `${Brand.success}1a`,
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.40)',
-    borderRadius: Spacing.three,
+    borderColor: `${Brand.success}66`,
+    borderRadius: Shape.lg,
     padding: Spacing.three,
     marginBottom: Spacing.two,
     alignItems: 'center',
     gap: Spacing.one,
   },
   inviteBannerExpired: {
-    backgroundColor: 'rgba(239, 68, 68, 0.10)',
+    backgroundColor: `${Brand.danger}1a`,
     borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.40)',
-    borderRadius: Spacing.three,
+    borderColor: `${Brand.danger}66`,
+    borderRadius: Shape.lg,
     padding: Spacing.three,
     marginBottom: Spacing.two,
     alignItems: 'center',

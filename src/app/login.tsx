@@ -7,8 +7,9 @@ import { FormInput } from '@/components/ui/form-input';
 import { Screen } from '@/components/ui/screen';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Brand, Spacing } from '@/constants/theme';
+import { Brand, Shape, Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
+import { useTheme } from '@/hooks/use-theme';
 import { isGoogleConfigured, useGoogleSignIn } from '@/lib/google-auth';
 import { supabaseSignInWithGoogleRedirect } from '@/lib/supabase-auth';
 
@@ -22,6 +23,7 @@ const notify = (title: string, message: string) => {
 
 export default function LoginScreen() {
   const router = useRouter();
+  const theme = useTheme();
   const { login, signInWithGoogle, resendRegistration } = useAuth();
   const {
     prompt: promptGoogle,
@@ -109,7 +111,7 @@ export default function LoginScreen() {
   if (pendingVerification) {
     return (
       <Screen contentContainerStyle={styles.screen}>
-        <ThemedView style={styles.card}>
+        <ThemedView style={[styles.card, { borderColor: theme.border }]}>
           <ThemedText type="subtitle" style={styles.brand}>
             Verifica tu correo
           </ThemedText>
@@ -127,11 +129,11 @@ export default function LoginScreen() {
           />
 
           <View style={styles.divider}>
-            <ThemedView style={styles.line} />
+            <ThemedView style={[styles.line, { backgroundColor: theme.border }]} />
             <ThemedText type="small" themeColor="textSecondary">
               ¿Ya verificaste tu correo?
             </ThemedText>
-            <ThemedView style={styles.line} />
+            <ThemedView style={[styles.line, { backgroundColor: theme.border }]} />
           </View>
 
           <Button
@@ -147,7 +149,7 @@ export default function LoginScreen() {
 
   return (
     <Screen contentContainerStyle={styles.screen}>
-      <ThemedView style={styles.card}>
+      <ThemedView style={[styles.card, { borderColor: theme.border }]}>
         <ThemedText type="subtitle" style={styles.brand}>
           TechRepair Master
         </ThemedText>
@@ -190,11 +192,11 @@ export default function LoginScreen() {
         ) : null}
 
         <View style={styles.divider}>
-          <ThemedView style={styles.line} />
+          <ThemedView style={[styles.line, { backgroundColor: theme.border }]} />
           <ThemedText type="small" themeColor="textSecondary">
             ¿No tienes cuenta?
           </ThemedText>
-          <ThemedView style={styles.line} />
+          <ThemedView style={[styles.line, { backgroundColor: theme.border }]} />
         </View>
 
         <Link href="/signup" asChild>
@@ -212,10 +214,9 @@ const styles = StyleSheet.create({
   },
   card: {
     padding: Spacing.five,
-    borderRadius: Spacing.five,
+    borderRadius: Shape.lg,
     gap: Spacing.three,
     borderWidth: 1,
-    borderColor: Brand.primary,
     maxWidth: 400,
     alignSelf: 'center',
     width: '100%',
@@ -241,7 +242,6 @@ const styles = StyleSheet.create({
   line: {
     flex: 1,
     height: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(0,0,0,0.2)',
   },
   googleError: {
     color: Brand.danger,
