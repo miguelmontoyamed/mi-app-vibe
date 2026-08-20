@@ -199,6 +199,8 @@ const styles = StyleSheet.create({
     borderRadius: Spacing.three,
     alignItems: 'center',
     width: '100%',
+    flexGrow: 0,
+    flexShrink: 0,
   },
   centerText: {
     textAlign: 'center',
@@ -207,6 +209,8 @@ const styles = StyleSheet.create({
     padding: Spacing.three,
     borderRadius: Spacing.three,
     gap: Spacing.two,
+    flexGrow: 0,
+    flexShrink: 0,
   },
   cardHeader: {
     flexDirection: 'row',

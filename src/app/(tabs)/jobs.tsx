@@ -412,6 +412,8 @@ const styles = StyleSheet.create({
     borderRadius: Spacing.three,
     alignItems: 'center',
     flexBasis: '100%',
+    flexGrow: 0,
+    flexShrink: 0,
   },
   centerText: {
     textAlign: 'center',
@@ -420,6 +422,8 @@ const styles = StyleSheet.create({
     padding: Spacing.four,
     borderRadius: Spacing.four,
     gap: Spacing.two,
+    flexGrow: 0,
+    flexShrink: 0,
   },
   repairCardTop: {
     flexDirection: 'row',
