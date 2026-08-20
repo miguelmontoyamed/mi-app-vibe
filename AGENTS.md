@@ -1,5 +1,15 @@
 # AGENTS.md — Reglas Maestras de TechRepair Master
 
+## PROTOCOLO DE MEMORIA (Memory Bank)
+1. **ANTES DE COMENZAR:** leer obligatoriamente `memory-bank/activeContext.md`
+   y `memory-bank/systemPatterns.md` para situarse en la tarea activa y respetar
+   las invariantes del sistema.
+2. **REGLA $0 USD:** todo código generado debe ser nativo para
+   React Native/Web + Supabase Free Tier. No sugerir librerías ni servicios de pago.
+3. **TIPADO ESTRICTO:** cero uso de `any` en TypeScript.
+4. **AL FINALIZAR TAREA:** actualizar `memory-bank/activeContext.md` y
+   `memory-bank/progress.md` reflejando el nuevo estado antes de hacer commit.
+
 ## 1. Contexto y Stack
 - **Proyecto:** TechRepair Master (`mi-app-vibe`)
 - **Stack:** React Native (Expo SDK 57, `expo-router`), React Native Web, TypeScript (~6.0.3), Supabase (Auth, DB, RLS, Storage), Vercel.
