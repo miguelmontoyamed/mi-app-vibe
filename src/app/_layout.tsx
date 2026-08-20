@@ -8,6 +8,7 @@ import { useColorScheme } from 'react-native';
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { AuthProvider, useAuth } from '@/context/auth-context';
+import { BillingProvider } from '@/context/billing-context';
 import { RepairProvider } from '@/context/repair-context';
 import { WorkshopProvider, useWorkshop } from '@/context/workshop-context';
 
@@ -69,8 +70,10 @@ export default function TabLayout() {
         <AuthProvider>
         <RepairProvider>
           <WorkshopProvider>
+            <BillingProvider>
             <RootNavigator />
             <AnimatedSplashOverlay />
+            </BillingProvider>
           </WorkshopProvider>
         </RepairProvider>
       </AuthProvider>

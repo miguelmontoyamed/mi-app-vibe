@@ -113,6 +113,31 @@ create table if not exists public.workshop_profiles (
   updated_at timestamptz not null default now()
 );
 
+-- ------------------------------------------------------------------
+-- 7) Cierres de mes (monthly_closures)
+--    Snapshot inmutable por taller y periodo ('YYYY-MM') con los totales
+--    del mes al momento de cerrarlo (cuando empieza un mes nuevo, el mes
+--    anterior se cierra y se conserva aquí para verificación futura).
+--    `period` es el mes de la orden (columna `date` de repairs).
+--    Solo se escribe vía RPC `ensure_month_closure()` (SECURITY DEFINER);
+--    el cliente solo puede LEER su propio taller (RLS).
+-- ------------------------------------------------------------------
+create table if not exists public.monthly_closures (
+  id uuid primary key default gen_random_uuid(),
+  workshop_id uuid not null references public.workshops(id) on delete cascade,
+  period text not null check (period ~ '^\d{4}-\d{2}$'),
+  -- Suma de presupuestos de las órdenes ENTREGADAS del mes (ingreso realizado).
+  revenue numeric not null default 0,
+  -- Suma de costos de repuestos de las órdenes entregadas del mes.
+  parts_cost numeric not null default 0,
+  delivered_count int not null default 0,
+  cancelled_count int not null default 0,
+  -- Total de órdenes creadas en el mes (todas las estados).
+  total_count int not null default 0,
+  closed_at timestamptz not null default now(),
+  unique (workshop_id, period)
+);
+
 -- ============================================================
 -- MIGRACIONES IDEMPOTENTES (si ya existía una versión anterior)
 -- ============================================================
@@ -255,6 +280,66 @@ revoke execute on function public.ensure_workshop() from public, anon, authentic
 grant execute on function public.ensure_workshop() to authenticated, service_role;
 
 -- ============================================================
+-- CIERRE DE MES (monthly_closures)
+-- ============================================================
+-- Snapshot idempotente: al llamarlo (normalmente al cargar la app con sesión),
+-- cierra TODOS los meses anteriores al actual que aún no tengan cierre y
+-- tengan al menos una orden. Devuelve el periodo abierto ('YYYY-MM') para que
+-- el cliente sepa que la facturación ya arrancó en el mes nuevo.
+-- SECURITY DEFINER: el cliente no tiene políticas INSERT sobre monthly_closures;
+-- solo puede LEER su propio taller (política SELECT por workshop_id).
+create or replace function public.ensure_month_closure()
+returns text
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  uid uuid := auth.uid();
+  wid uuid;
+  current_period text := to_char(now(), 'YYYY-MM');
+  m record;
+begin
+  -- Sin sesión: nada que cerrar.
+  if uid is null then
+    return null;
+  end if;
+
+  select workshop_id into wid from public.profiles where id = uid;
+  if wid is null then
+    return null;
+  end if;
+
+  -- Cierra meses vencidos sin cierre que tengan órdenes (idempotente).
+  for m in
+    select distinct to_char(date, 'YYYY-MM') as period
+      from public.repairs
+     where workshop_id = wid
+       and date < date_trunc('month', now())::date
+  loop
+    insert into public.monthly_closures
+      (workshop_id, period, revenue, parts_cost, delivered_count, cancelled_count, total_count)
+    select wid,
+           m.period,
+           coalesce(sum(budget) filter (where status = 'Entregado'), 0),
+           coalesce(sum(parts_cost) filter (where status = 'Entregado'), 0),
+           count(*) filter (where status = 'Entregado'),
+           count(*) filter (where status = 'Cancelado / No Reparado'),
+           count(*)
+      from public.repairs
+     where workshop_id = wid
+       and to_char(date, 'YYYY-MM') = m.period
+    on conflict (workshop_id, period) do nothing;
+  end loop;
+
+  return current_period;
+end;
+$$;
+
+revoke execute on function public.ensure_month_closure() from public, anon, authenticated;
+grant execute on function public.ensure_month_closure() to authenticated, service_role;
+
+-- ============================================================
 -- TRIGGER: al registrarse una cuenta nueva se crea su taller y su perfil.
 -- ============================================================
 create or replace function public.handle_new_user()
@@ -365,6 +450,7 @@ alter table public.clients           enable row level security;
 alter table public.repairs           enable row level security;
 alter table public.inventory         enable row level security;
 alter table public.workshop_profiles enable row level security;
+alter table public.monthly_closures  enable row level security;
 
 -- ---- Workshops: solo dueño/admin del taller ----
 drop policy if exists "workshops_owner_all" on public.workshops;
@@ -444,6 +530,12 @@ create policy "workshop_profiles_workshop_all" on public.workshop_profiles
   using (workshop_id = current_workshop_id())
   with check (workshop_id = current_workshop_id());
 
+-- ---- Monthly closures: SOLO LECTURA por taller (la escritura es vía RPC
+--      ensure_month_closure(), SECURITY DEFINER) ----
+drop policy if exists "monthly_closures_workshop_read" on public.monthly_closures;
+create policy "monthly_closures_workshop_read" on public.monthly_closures
+  for select using (workshop_id = current_workshop_id());
+
 -- ============================================================
 -- ÍNDICES DE RENDIMIENTO
 -- ============================================================
@@ -454,6 +546,7 @@ create index if not exists idx_repairs_status      on public.repairs (status);
 create index if not exists idx_repairs_date        on public.repairs (date desc);
 create index if not exists idx_inventory_workshop  on public.inventory (workshop_id);
 create index if not exists idx_clients_workshop    on public.clients (workshop_id);
+create index if not exists idx_monthly_closures_workshop_period on public.monthly_closures (workshop_id, period desc);
 -- workshop_profiles.workshop_id ya es UNIQUE (índice implícito).
 
 -- ============================================================

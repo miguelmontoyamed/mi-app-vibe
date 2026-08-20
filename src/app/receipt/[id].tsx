@@ -1,5 +1,3 @@
-import * as Print from 'expo-print';
-import * as Sharing from 'expo-sharing';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Alert, Platform, StyleSheet, View } from 'react-native';
 
@@ -19,6 +17,8 @@ import { useTheme } from '@/hooks/use-theme';
 import { useWorkshop } from '@/context/workshop-context';
 import { formatCOP } from '@/utils/format';
 import { formatNit } from '@/utils/nit';
+import { shareReceiptPdf } from '@/utils/receipt-pdf';
+import type { ReceiptPdfData } from '@/utils/receipt-pdf-types';
 
 /** Escape básico para insertar valores del dominio dentro del HTML del PDF. */
 function escapeHtml(value: string): string {
@@ -56,6 +56,28 @@ if (!repair) {
 
 const paid = repair.advancePayment ?? 0;
 const partsCost = repair.partsCost ?? 0;
+
+  /** Datos estructurados del recibo, compartidos por ambas plataformas. */
+  const pdfData: ReceiptPdfData = {
+    brand: profile?.name || 'TechRepair Master',
+    nit: profile?.nit,
+    address: profile?.address,
+    phone: profile?.phone,
+    orderId: repair.id,
+    date: repair.date,
+    status: repair.status,
+    clientName: repair.clientName,
+    clientPhone: repair.phone,
+    device: repair.device,
+    imei: repair.imei,
+    issue: repair.issue,
+    technicianName: repair.technicianName || 'General',
+    budget: repair.budget,
+    partsCost,
+    paid,
+    attendedBy: currentUser?.name || repair.technicianName || '-',
+    whatsappContact: CONTACT_WHATSAPP,
+  };
 
   /**
    * HTML autocontenido del recibo para el PDF nativo (expo-print). Mantiene el
@@ -134,63 +156,41 @@ const partsCost = repair.partsCost ?? 0;
    * Impresión / PDF universal:
    * - Web: impresión estándar del navegador (aprovecha el CSS print de
    *   `#receiptArea` en global.css).
-   * - iOS/Android: genera el PDF con `printToFileAsync` desde el HTML del
-   *   recibo y lo pasa a `shareAsync` para abrir el menú nativo del sistema
-   *   (guardar en archivos, WhatsApp, correo, etc.).
+   * - iOS/Android: genera el PDF con `shareReceiptPdf` (expo-print +
+   *   expo-sharing) y abre el menú nativo del sistema (guardar en archivos,
+   *   WhatsApp, correo, etc.).
    */
   const handlePrint = async () => {
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
       window.print();
       return;
     }
-    try {
-      const { uri } = await Print.printToFileAsync({ html: buildReceiptHtml() });
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, {
-          mimeType: 'application/pdf',
-          dialogTitle: 'Compartir recibo TechRepair Master',
-          UTI: 'com.adobe.pdf',
-        });
-      } else {
-        Alert.alert('Recibo generado', 'No hay apps de compartir disponibles en este dispositivo.');
-      }
-    } catch (error) {
-      console.error('Error generando el PDF del recibo:', error);
+    const result = await shareReceiptPdf(pdfData, buildReceiptHtml());
+    if (result === 'unavailable') {
+      Alert.alert('Recibo generado', 'No hay apps de compartir disponibles en este dispositivo.');
+    } else if (result === 'error') {
       Alert.alert('Error', 'No se pudo generar el PDF del recibo. Intenta de nuevo.');
     }
+    // 'shared' / 'downloaded' / 'cancelled' no requieren alerta.
   };
 
+  /**
+   * Compartir el PDF por WhatsApp:
+   * - Nativo: `shareReceiptPdf` (expo-print + expo-sharing) abre el share
+   *   sheet nativo donde WhatsApp aparece como opción.
+   * - Web: jspdf genera el PDF y la Web Share API lo comparte (móvil) o se
+   *   descarga (escritorio) para adjuntarlo en WhatsApp Web.
+   */
   const handleShareWhatsApp = async () => {
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      // Web: no hay share nativo con archivos en todos los navegadores; se
-      // abre WhatsApp con el resumen del recibo para pegar/enviar el PDF.
-      const message = encodeURIComponent(
-        `*${profile?.name ?? 'TechRepair Master'}*\n` +
-          `Recibo #${repair.id} — ${repair.status}\n` +
-          `Cliente: ${repair.clientName}\n` +
-          `Equipo: ${repair.device}\n` +
-          `Total: ${formatCOP(repair.budget)}` +
-          (partsCost > 0 ? `\nRepuesto: ${formatCOP(partsCost)}` : '') +
-          (paid > 0 ? `\nAbonado: ${formatCOP(paid)}` : '')
-      );
-      window.open(`https://wa.me/?text=${message}`, '_blank');
-      return;
-    }
-    try {
-      const { uri } = await Print.printToFileAsync({ html: buildReceiptHtml() });
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, {
-          mimeType: 'application/pdf',
-          dialogTitle: 'Compartir recibo por WhatsApp',
-          UTI: 'com.adobe.pdf',
-        });
-      } else {
-        Alert.alert('Recibo generado', 'No hay apps de compartir disponibles en este dispositivo.');
-      }
-    } catch (error) {
-      console.error('Error generando el PDF del recibo:', error);
+    const result = await shareReceiptPdf(pdfData, buildReceiptHtml());
+    if (result === 'downloaded') {
+      Alert.alert('PDF descargado', 'Adjunta el PDF en WhatsApp Web o correo para enviarlo.');
+    } else if (result === 'unavailable') {
+      Alert.alert('Recibo generado', 'No hay apps de compartir disponibles en este dispositivo.');
+    } else if (result === 'error') {
       Alert.alert('Error', 'No se pudo generar el PDF del recibo. Intenta de nuevo.');
     }
+    // 'shared' / 'cancelled' no requieren alerta.
   };
 
   return (
@@ -321,7 +321,7 @@ const partsCost = repair.partsCost ?? 0;
       {/* Platform hint below printable area */}
       {Platform.OS === 'web' ? (
         <ThemedText type="small" themeColor="textSecondary" style={styles.hint}>
-          💡 Usa &ldquo;Imprimir / Guardar PDF&rdquo; y elige &ldquo;Guardar como PDF&rdquo; para descargar el recibo. Desde el celular puedes compartir el PDF directo por WhatsApp.
+          💡 &ldquo;Compartir por WhatsApp&rdquo; genera el PDF del recibo: en el celular abre el menú de compartir del sistema (WhatsApp, correo, archivos). En el PC se descarga el PDF para adjuntarlo donde quieras. También puedes usar &ldquo;Imprimir / Guardar PDF&rdquo; y elegir &ldquo;Guardar como PDF&rdquo;.
         </ThemedText>
       ) : (
         <ThemedText type="small" themeColor="textSecondary" style={styles.hint}>
