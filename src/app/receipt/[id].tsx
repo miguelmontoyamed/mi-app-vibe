@@ -38,7 +38,7 @@ export default function ReceiptScreen() {
 
   const repair = repairs.find((r) => r.id === id);
 
-  if (!repair) {
+if (!repair) {
     return (
       <Screen title="Recibo">
         <ThemedView type="backgroundElement" style={styles.empty}>
@@ -53,6 +53,7 @@ export default function ReceiptScreen() {
   }
 
 const paid = repair.advancePayment ?? 0;
+const partsCost = repair.partsCost ?? 0;
 
   /**
    * HTML autocontenido del recibo para el PDF nativo (expo-print). Mantiene el
@@ -65,6 +66,7 @@ const paid = repair.advancePayment ?? 0;
     const addressLine = profile?.address ? `${escapeHtml(profile.address)}<br/>` : '';
     const phoneLine = profile ? `Tel: ${escapeHtml(profile.phone)}` : '';
     const paidRow = paid > 0 ? `<div class="row"><strong>Abonado:</strong><span>− ${formatCOP(paid)}</span></div>` : '';
+    const partsRow = partsCost > 0 ? `<div class="row"><strong>Repuesto:</strong><span>− ${formatCOP(partsCost)}</span></div>` : '';
     const imeiRow = repair.imei
       ? `<div class="row"><strong>IMEI / Serial:</strong><span>${escapeHtml(repair.imei)}</span></div>`
       : '';
@@ -112,6 +114,7 @@ const paid = repair.advancePayment ?? 0;
   <div class="divider"></div>
   <h2>Valor a pagar</h2>
   <div class="row"><strong>Total reparación:</strong><span>${formatCOP(repair.budget)}</span></div>
+  ${partsRow}
   ${paidRow}
   <div class="divider"></div>
   <div class="footer">
@@ -155,12 +158,46 @@ const paid = repair.advancePayment ?? 0;
     }
   };
 
+  const handleShareWhatsApp = async () => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      // Web: no hay share nativo con archivos en todos los navegadores; se
+      // abre WhatsApp con el resumen del recibo para pegar/enviar el PDF.
+      const message = encodeURIComponent(
+        `*${profile?.name ?? 'TechRepair Master'}*\n` +
+          `Recibo #${repair.id} — ${repair.status}\n` +
+          `Cliente: ${repair.clientName}\n` +
+          `Equipo: ${repair.device}\n` +
+          `Total: ${formatCOP(repair.budget)}` +
+          (partsCost > 0 ? `\nRepuesto: ${formatCOP(partsCost)}` : '') +
+          (paid > 0 ? `\nAbonado: ${formatCOP(paid)}` : '')
+      );
+      window.open(`https://wa.me/?text=${message}`, '_blank');
+      return;
+    }
+    try {
+      const { uri } = await Print.printToFileAsync({ html: buildReceiptHtml() });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, {
+          mimeType: 'application/pdf',
+          dialogTitle: 'Compartir recibo por WhatsApp',
+          UTI: 'com.adobe.pdf',
+        });
+      } else {
+        Alert.alert('Recibo generado', 'No hay apps de compartir disponibles en este dispositivo.');
+      }
+    } catch (error) {
+      console.error('Error generando el PDF del recibo:', error);
+      Alert.alert('Error', 'No se pudo generar el PDF del recibo. Intenta de nuevo.');
+    }
+  };
+
   return (
     <Screen title="Recibo">
       {/* Non-printable actions */}
       <View style={styles.actions}>
         <Button label="← Volver" variant="secondary" onPress={() => router.back()} style={styles.actionBtn} />
         <Button label="🖨️ Imprimir / Guardar PDF" variant="primary" onPress={handlePrint} style={styles.actionBtn} />
+        <Button label="📲 Compartir por WhatsApp" variant="primary" onPress={handleShareWhatsApp} style={styles.actionBtn} />
       </View>
 
       {/* Printable area — global.css hides everything outside this during print */}
@@ -252,6 +289,12 @@ const paid = repair.advancePayment ?? 0;
             <ThemedText type="smallBold">Total reparación:</ThemedText>
             <ThemedText type="smallBold">{formatCOP(repair.budget)}</ThemedText>
           </View>
+          {partsCost > 0 && (
+            <View style={styles.sectionRow}>
+              <ThemedText type="small">Repuesto:</ThemedText>
+              <ThemedText type="small">− {formatCOP(partsCost)}</ThemedText>
+            </View>
+          )}
           {paid > 0 && (
             <View style={styles.sectionRow}>
               <ThemedText type="small">Abonado:</ThemedText>
@@ -276,12 +319,12 @@ const paid = repair.advancePayment ?? 0;
       {/* Platform hint below printable area */}
       {Platform.OS === 'web' ? (
         <ThemedText type="small" themeColor="textSecondary" style={styles.hint}>
-          💡 Usa &ldquo;Imprimir / Guardar PDF&rdquo; y elige &ldquo;Guardar como PDF&rdquo; para descargar el recibo.
+          💡 Usa &ldquo;Imprimir / Guardar PDF&rdquo; y elige &ldquo;Guardar como PDF&rdquo; para descargar el recibo. Desde el celular puedes compartir el PDF directo por WhatsApp.
         </ThemedText>
       ) : (
         <ThemedText type="small" themeColor="textSecondary" style={styles.hint}>
-          💡 Al generar el PDF se abrirá el menú nativo para guardarlo o compartirlo
-          (archivos, WhatsApp, correo).
+          💡 Al compartir el PDF se abrirá el menú nativo para enviarlo por
+          WhatsApp, correo o guardarlo en archivos.
         </ThemedText>
       )}
     </Screen>
@@ -291,6 +334,7 @@ const paid = repair.advancePayment ?? 0;
 const styles = StyleSheet.create({
   actions: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: Spacing.two,
     width: '100%',
   },

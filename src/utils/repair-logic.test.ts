@@ -4,12 +4,14 @@ import { describe, it } from 'node:test';
 import {
   CANCELLATION_REASONS,
   PAYMENT_METHODS,
+  accumulatedProfit,
   applyPayment,
   commissionForRepair,
   hasActiveRepairs,
   isAssignedToTechnician,
   isValidCancellation,
   canCancel,
+  profitForRepair,
   type RepairLike,
   type ViewUser,
   visibleRepairs,
@@ -49,9 +51,43 @@ describe('commissionForRepair', () => {
   it('calcula el % de un trabajo Entregado redondeado a COP entero', () => {
     assert.equal(commissionForRepair(testRepair({ status: 'Entregado', budget: 480000 }), 0.3), 144000);
   });
+  it('calcula el % sobre la UTILIDAD (presupuesto − repuesto)', () => {
+    const withParts = testRepair({ status: 'Entregado', budget: 480000, partsCost: 80000 });
+    assert.equal(commissionForRepair(withParts, 0.3), 120000);
+  });
   it('devuelve 0 si el trabajo NO está Entregado', () => {
     assert.equal(commissionForRepair(testRepair({ status: 'Listo', budget: 480000 }), 0.3), 0);
     assert.equal(commissionForRepair(testRepair({ status: 'Cancelado / No Reparado', budget: 480000 }), 0.3), 0);
+  });
+  it('ignora tasas inválidas (NaN) devolviendo 0', () => {
+    assert.equal(commissionForRepair(testRepair({ status: 'Entregado', budget: 480000 }), NaN), 0);
+  });
+});
+
+describe('profitForRepair (utilidad = presupuesto − repuesto)', () => {
+  it('sin repuesto la utilidad es el presupuesto completo', () => {
+    assert.equal(profitForRepair(testRepair({ budget: 480000 })), 480000);
+  });
+  it('resta el valor del repuesto', () => {
+    assert.equal(profitForRepair(testRepair({ budget: 480000, partsCost: 80000 })), 400000);
+  });
+  it('nunca es negativa aunque el repuesto supere el presupuesto', () => {
+    assert.equal(profitForRepair(testRepair({ budget: 50000, partsCost: 120000 })), 0);
+  });
+});
+
+describe('accumulatedProfit (lo que generó cada técnico)', () => {
+  const repairs = [
+    testRepair({ id: 'a', status: 'Entregado', budget: 480000, partsCost: 80000, technicianId: 't2', technicianName: 'Luis' }),
+    testRepair({ id: 'b', status: 'Entregado', budget: 200000, technicianId: 't2', technicianName: 'Luis' }),
+    testRepair({ id: 'c', status: 'En Proceso', budget: 300000, technicianId: 't2', technicianName: 'Luis' }),
+    testRepair({ id: 'd', status: 'Entregado', budget: 400000, technicianId: 't3', technicianName: 'Sofia' }),
+  ];
+  it('suma solo los trabajos ENTREGADOS del técnico', () => {
+    assert.equal(accumulatedProfit(repairs, 't2', 'Luis'), 400000 + 200000);
+  });
+  it('no mezcla trabajos de otros técnicos', () => {
+    assert.equal(accumulatedProfit(repairs, 't3', 'Sofia'), 400000);
   });
 });
 

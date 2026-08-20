@@ -13,17 +13,19 @@ import { useAuth } from '@/context/auth-context';
 import { useRepair } from '@/context/repair-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { formatCOP } from '@/utils/format';
-import { canCancel, isAssignedToTechnician } from '@/utils/repair-logic';
+import { canCancel, isAssignedToTechnician, profitForRepair } from '@/utils/repair-logic';
 
 export default function JobDetailScreen() {
   const router = useRouter();
   const { currentUser } = useAuth();
-  const { repairs, cancelRepair, deleteRepair } = useRepair();
+  const { repairs, cancelRepair, deleteRepair, updateRepair } = useRepair();
   const { id } = useLocalSearchParams<{ id: string }>();
   const scheme = useColorScheme();
 
   const [cancelModalVisible, setCancelModalVisible] = useState(false);
   const [cancelMotivo, setCancelMotivo] = useState('');
+  const [partsModalVisible, setPartsModalVisible] = useState(false);
+  const [partsInput, setPartsInput] = useState('');
 
   const repair = repairs.find((r) => r.id === id);
 
@@ -52,8 +54,31 @@ export default function JobDetailScreen() {
   const isOwner = currentUser?.role === 'admin';
   const isCancelled = repair.status === 'Cancelado / No Reparado';
   const paid = repair.advancePayment ?? 0;
+  const partsCost = repair.partsCost ?? 0;
+  const profit = profitForRepair(repair);
   const canCancelRepair = canCancel(repair.status);
   const cancelStyle = statusStyle(repair.status, scheme === 'dark' ? 'dark' : 'light');
+
+  const openPartsModal = () => {
+    setPartsInput(partsCost > 0 ? String(partsCost) : '');
+    setPartsModalVisible(true);
+  };
+
+  const handleSaveParts = async () => {
+    const trimmed = partsInput.trim();
+    const value = trimmed ? parseFloat(trimmed) : 0;
+    if (!Number.isFinite(value) || value < 0) {
+      if (Platform.OS === 'web') {
+        window.alert('Valor inválido\n\nIngrese un valor numérico mayor o igual a 0.');
+      } else {
+        Alert.alert('Valor inválido', 'Ingrese un valor numérico mayor o igual a 0.');
+      }
+      return;
+    }
+    await updateRepair(repair.id, { partsCost: value });
+    setPartsModalVisible(false);
+    setPartsInput('');
+  };
 
   const openCancelModal = () => {
     setCancelMotivo('');
@@ -191,6 +216,26 @@ export default function JobDetailScreen() {
             {formatCOP(Math.max(0, repair.budget - paid))}
           </ThemedText>
         </View>
+        {partsCost > 0 && (
+          <View style={styles.sectionRow}>
+            <ThemedText type="smallBold">Repuesto:</ThemedText>
+            <ThemedText type="small" style={styles.sectionValue}>
+              − {formatCOP(partsCost)}
+            </ThemedText>
+          </View>
+        )}
+        <View style={styles.sectionRow}>
+          <ThemedText type="smallBold">Utilidad:</ThemedText>
+          <ThemedText type="small" style={styles.sectionValue}>
+            {formatCOP(profit)}
+          </ThemedText>
+        </View>
+        <Button
+          label={partsCost > 0 ? '✏️ Editar valor de repuesto' : '➕ Agregar valor de repuesto'}
+          variant="secondary"
+          onPress={openPartsModal}
+          style={styles.partsBtn}
+        />
       </ThemedView>
 
       {/* Dangerous actions */}
@@ -241,6 +286,34 @@ export default function JobDetailScreen() {
           </ThemedView>
         </View>
       </Modal>
+
+      {/* Parts cost edit modal (admin y técnico asignado) */}
+      <Modal
+        visible={partsModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPartsModalVisible(false)}>
+        <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
+          <ThemedView type="backgroundElement" style={styles.modalCard}>
+            <ThemedText type="subtitle">Valor del repuesto</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              Se resta del presupuesto para calcular la utilidad y la comisión
+              del técnico. Déjalo en 0 si no se usó repuesto.
+            </ThemedText>
+            <FormInput
+              label="Valor del repuesto (COP)"
+              placeholder="Ej. 45000"
+              keyboardType="numeric"
+              value={partsInput}
+              onChangeText={(t) => setPartsInput(t.replace(/[^0-9.]/g, ''))}
+            />
+            <View style={styles.modalActions}>
+              <Button label="Cancelar" variant="secondary" onPress={() => setPartsModalVisible(false)} style={styles.modalBtn} />
+              <Button label="Guardar" variant="primary" onPress={handleSaveParts} style={styles.modalBtn} />
+            </View>
+          </ThemedView>
+        </View>
+      </Modal>
     </Screen>
   );
 }
@@ -286,6 +359,9 @@ const styles = StyleSheet.create({
   sectionValue: {
     flex: 1,
     textAlign: 'right',
+  },
+  partsBtn: {
+    marginTop: Spacing.one,
   },
   dangerZone: {
     gap: Spacing.two,

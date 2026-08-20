@@ -55,6 +55,8 @@ export interface RepairLike {
   id: string;
   status: RepairStatus;
   budget: number;
+  /** Valor del repuesto usado (COP). 0 = sin repuestos. */
+  partsCost?: number;
   advancePayment?: number;
   technicianId?: string;
   technicianName?: string;
@@ -108,8 +110,18 @@ export function visibleRepairs<T extends RepairLike>(
 }
 
 /**
- * Commission for a single repair: percentage of the budget, accrued only when
- * the job is delivered ('Entregado'). Rounded to whole COP.
+ * Utilidad del taller para una reparación: presupuesto menos el valor del
+ * repuesto usado. Nunca negativa (un repuesto no puede superar el cobro).
+ */
+export function profitForRepair(repair: RepairLike): number {
+  const parts = Number.isFinite(repair.partsCost) ? (repair.partsCost ?? 0) : 0;
+  return Math.max(0, repair.budget - parts);
+}
+
+/**
+ * Commission for a single repair: percentage of the UTILITY (budget minus
+ * parts cost), accrued only when the job is delivered ('Entregado'). Rounded
+ * to whole COP.
  */
 export function commissionForRepair(
   repair: RepairLike,
@@ -119,7 +131,7 @@ export function commissionForRepair(
     return 0;
   }
   const safeRate = Number.isFinite(rate) ? rate : 0;
-  return Math.round(repair.budget * safeRate);
+  return Math.round(profitForRepair(repair) * safeRate);
 }
 
 /** Sum of commissions across repairs delivered to a technician. */
@@ -132,6 +144,24 @@ export function accumulatedCommission(
   return repairs
     .filter((r) => isAssignedToTechnician(r, technicianId, technicianName))
     .reduce((sum, r) => sum + commissionForRepair(r, rate), 0);
+}
+
+/**
+ * Utilidad total generada por un técnico: suma de (presupuesto − repuesto)
+ * de sus trabajos ENTREGADOS. No depende del porcentaje de comisión.
+ */
+export function accumulatedProfit(
+  repairs: readonly RepairLike[],
+  technicianId: string,
+  technicianName: string
+): number {
+  return repairs
+    .filter(
+      (r) =>
+        isAssignedToTechnician(r, technicianId, technicianName) &&
+        r.status === 'Entregado'
+    )
+    .reduce((sum, r) => sum + profitForRepair(r), 0);
 }
 
 /**

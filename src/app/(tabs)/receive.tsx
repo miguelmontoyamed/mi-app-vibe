@@ -62,6 +62,7 @@ export default function ReceiveScreen() {
   const [imei, setImei] = useState('');
   const [advancePayment, setAdvancePayment] = useState('');
   const [budget, setBudget] = useState('');
+  const [partsCost, setPartsCost] = useState('');
 
   // Load saved receipt data when the form initializes.
   // NOTE: unlockCode (device PIN) is intentionally NOT persisted — see handleSave.
@@ -79,6 +80,7 @@ export default function ReceiveScreen() {
           setImei(data.imei || '');
           setAdvancePayment(data.advancePayment != null ? String(data.advancePayment) : '');
           setBudget(data.budget != null ? String(data.budget) : '');
+          setPartsCost(data.partsCost != null ? String(data.partsCost) : '');
         }
       } catch (error) {
         console.error('Error loading saved data:', error);
@@ -116,6 +118,7 @@ export default function ReceiveScreen() {
     }
 
     const advanceNum = advancePayment.trim() ? (parseMoney(advancePayment) ?? 0) : 0;
+    const partsNum = partsCost.trim() ? (parseMoney(partsCost) ?? 0) : 0;
 
     const result = await addRepair({
       clientName: clientName.trim(),
@@ -123,6 +126,7 @@ export default function ReceiveScreen() {
       device: device.trim(),
       issue: issue.trim(),
       budget: budgetNum,
+      partsCost: partsNum,
       unlockCode: unlockCode.trim() || 'No especificado',
       imei: imei.trim() || undefined,
       advancePayment: advanceNum,
@@ -153,6 +157,7 @@ export default function ReceiveScreen() {
           imei: imei.trim(),
           advancePayment: advanceNum,
           budget: budgetNum,
+          partsCost: partsNum,
         })
       );
     } catch (error) {
@@ -170,6 +175,7 @@ export default function ReceiveScreen() {
     setImei('');
     setAdvancePayment('');
     setBudget('');
+    setPartsCost('');
 
     // Navigate to jobs list
     router.push('/jobs');
@@ -279,6 +285,15 @@ export default function ReceiveScreen() {
           keyboardType="numeric"
           value={budget}
           onChangeText={setBudget}
+          maxLength={MAX_LENGTHS.money}
+        />
+
+        <FormInput
+          label="Valor del Repuesto (opcional)"
+          placeholder="Ej. 45000"
+          keyboardType="numeric"
+          value={partsCost}
+          onChangeText={setPartsCost}
           maxLength={MAX_LENGTHS.money}
         />
 

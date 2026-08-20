@@ -15,12 +15,13 @@ import { Screen } from '@/components/ui/screen';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
-import { useAuth, MAX_TECHNICIANS } from '@/context/auth-context';
+import { useAuth, MAX_TECHNICIANS, type User } from '@/context/auth-context';
 import { useRepair } from '@/context/repair-context';
 import { useWorkshop } from '@/context/workshop-context';
 import { useTheme } from '@/hooks/use-theme';
 import { SUPER_ADMIN_USER_ID } from '@/lib/super-admin';
 import { formatCOP } from '@/utils/format';
+import { accumulatedCommission, accumulatedProfit } from '@/utils/repair-logic';
 
 const SUPPORT_TYPES = [
   'Problema con inventario',
@@ -40,6 +41,7 @@ export default function AdminScreen() {
     inviteLink,
     createTechnician,
     deleteTechnician,
+    updateTechnicianCommission,
   } = useAuth();
   const { repairs, inventory } = useRepair();
   const { subscription } = useWorkshop();
@@ -49,6 +51,9 @@ export default function AdminScreen() {
   const [techName, setTechName] = useState('');
   const [techEmail, setTechEmail] = useState('');
   const [techCommission, setTechCommission] = useState('');
+  // Inline commission editing state (per technician row)
+  const [editingCommissionId, setEditingCommissionId] = useState<string | null>(null);
+  const [commissionInput, setCommissionInput] = useState('');
 
   // Support ticket state
   const [supportType, setSupportType] = useState(SUPPORT_TYPES[0]);
@@ -100,6 +105,39 @@ export default function AdminScreen() {
     (acc, curr) => acc + curr.stock * curr.price,
     0
   );
+
+  // Utilidad neta: ingresos cobrados menos el valor de repuestos usados en
+  // esas órdenes. Refleja lo que realmente queda en caja.
+  const partsCostCollected = repairs
+    .filter((r) => r.status === 'Entregado' || r.status === 'Listo')
+    .reduce((acc, curr) => acc + (curr.partsCost ?? 0), 0);
+  const netProfit = totalRevenue - partsCostCollected;
+
+  const startEditCommission = (u: User) => {
+    setEditingCommissionId(u.id);
+    setCommissionInput(String(Math.round((u.commissionRate ?? 0) * 100)));
+  };
+
+  const cancelEditCommission = () => {
+    setEditingCommissionId(null);
+    setCommissionInput('');
+  };
+
+  const handleSaveCommission = async (u: User) => {
+    const rate = parseFloat(commissionInput);
+    if (!Number.isFinite(rate) || rate < 0 || rate > 100) {
+      notify('Ingrese un porcentaje válido entre 0 y 100.');
+      return;
+    }
+    const ok = await updateTechnicianCommission(u.id, rate / 100);
+    if (!ok) {
+      notify('No se pudo actualizar la comisión. Solo el dueño puede editarla.');
+      return;
+    }
+    setEditingCommissionId(null);
+    setCommissionInput('');
+    notify(`Comisión de ${u.name} actualizada a ${rate}%.`);
+  };
 
   const handleCreateInvite = () => {
     // Límite estricto: no se generan enlaces si el taller ya tiene 5 técnicos.
@@ -333,25 +371,96 @@ export default function AdminScreen() {
           ) : (
             users
               .filter((u) => u.role === 'technician')
-              .map((u) => (
-                <View key={u.id} style={styles.techRow}>
-                  <View style={styles.techInfo}>
-                    <ThemedText type="smallBold">{u.name}</ThemedText>
-                    <ThemedText type="small" themeColor="textSecondary">
-                      Comisión:{' '}
-                      {Math.round((u.commissionRate ?? 0) * 100) + '%'}
-                    </ThemedText>
+              .map((u) => {
+                const generated = accumulatedProfit(repairs, u.id, u.name);
+                const earned = accumulatedCommission(
+                  repairs,
+                  u.id,
+                  u.name,
+                  u.commissionRate ?? 0
+                );
+                const isEditing = editingCommissionId === u.id;
+                const ratePct = Math.round((u.commissionRate ?? 0) * 100);
+                return (
+                  <View key={u.id} style={styles.techRow}>
+                    <View style={styles.techInfo}>
+                      <ThemedText type="smallBold">{u.name}</ThemedText>
+                      {isEditing ? (
+                        <View style={styles.commissionEditRow}>
+                          <TextInput
+                            style={[
+                              styles.commissionInput,
+                              {
+                                color: theme.text,
+                                borderColor: theme.backgroundElement,
+                              },
+                            ]}
+                            placeholder="%"
+                            placeholderTextColor="#9ca3af"
+                            keyboardType="number-pad"
+                            value={commissionInput}
+                            onChangeText={(t) =>
+                              setCommissionInput(t.replace(/[^0-9]/g, ''))
+                            }
+                            maxLength={3}
+                          />
+                          <Pressable
+                            style={({ pressed }) => [
+                              styles.saveButton,
+                              pressed && styles.pressed,
+                            ]}
+                            onPress={() => handleSaveCommission(u)}>
+                            <ThemedText style={styles.saveButtonText}>
+                              Guardar
+                            </ThemedText>
+                          </Pressable>
+                          <Pressable onPress={cancelEditCommission}>
+                            <ThemedText
+                              type="small"
+                              themeColor="textSecondary">
+                              Cancelar
+                            </ThemedText>
+                          </Pressable>
+                        </View>
+                      ) : (
+                        <>
+                          <ThemedText type="small" themeColor="textSecondary">
+                            Comisión: {ratePct}% · Generado (entregado):{' '}
+                            {formatCOP(generated)}
+                          </ThemedText>
+                          <ThemedText type="small" themeColor="textSecondary">
+                            Ganancia ({ratePct}%): {formatCOP(earned)}
+                          </ThemedText>
+                        </>
+                      )}
+                    </View>
+                    <View style={styles.techActions}>
+                      {!isEditing && (
+                        <Pressable
+                          style={({ pressed }) => [
+                            styles.editButton,
+                            pressed && styles.pressed,
+                          ]}
+                          onPress={() => startEditCommission(u)}>
+                          <ThemedText style={styles.editButtonText}>
+                            Editar %
+                          </ThemedText>
+                        </Pressable>
+                      )}
+                      <Pressable
+                        style={({ pressed }) => [
+                          styles.deleteButton,
+                          pressed && styles.pressed,
+                        ]}
+                        onPress={() => handleDeleteTechnician(u)}>
+                        <ThemedText style={styles.deleteButtonText}>
+                          Eliminar
+                        </ThemedText>
+                      </Pressable>
+                    </View>
                   </View>
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.deleteButton,
-                      pressed && styles.pressed,
-                    ]}
-                    onPress={() => handleDeleteTechnician(u)}>
-                    <ThemedText style={styles.deleteButtonText}>Eliminar</ThemedText>
-                  </Pressable>
-                </View>
-              ))
+                );
+              })
           )}
 
           <View style={styles.techForm}>
@@ -413,6 +522,14 @@ export default function AdminScreen() {
             </ThemedText>
             <ThemedText type="title" style={{ color: '#10b981' }}>
               {formatCOP(totalRevenue)}
+            </ThemedText>
+          </View>
+          <View style={styles.financeBox}>
+            <ThemedText type="small" themeColor="textSecondary">
+              Utilidad Neta (menos repuestos)
+            </ThemedText>
+            <ThemedText type="title" style={{ color: '#10b981' }}>
+              {formatCOP(netProfit)}
             </ThemedText>
           </View>
           <View style={styles.financeBox}>
@@ -697,6 +814,49 @@ const styles = StyleSheet.create({
   techInfo: {
     flex: 1,
     gap: Spacing.one,
+  },
+  techActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  commissionEditRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    marginTop: Spacing.one,
+  },
+  commissionInput: {
+    borderWidth: 1,
+    borderRadius: Spacing.two,
+    paddingHorizontal: Spacing.two,
+    paddingVertical: Spacing.one,
+    fontSize: 14,
+    width: 72,
+    textAlign: 'center',
+    backgroundColor: 'transparent',
+  },
+  editButton: {
+    backgroundColor: 'rgba(2, 132, 199, 0.1)',
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.one,
+    borderRadius: Spacing.two,
+  },
+  editButtonText: {
+    color: '#0284c7',
+    fontWeight: '600',
+    fontSize: 12,
+  },
+  saveButton: {
+    backgroundColor: '#10b981',
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.one,
+    borderRadius: Spacing.two,
+  },
+  saveButtonText: {
+    color: '#ffffff',
+    fontWeight: '600',
+    fontSize: 12,
   },
   deleteButton: {
     backgroundColor: 'rgba(239, 68, 68, 0.1)',

@@ -28,6 +28,8 @@ export interface RepairItem {
   device: string;
   issue: string;
   budget: number;
+  /** Valor del repuesto usado (COP). 0 = sin repuestos. Se resta del presupuesto para la utilidad. */
+  partsCost?: number;
   unlockCode?: string;
   imei?: string;
   /** Importe ya cobrado al cliente (anticipo + pagos parciales). */
@@ -91,6 +93,7 @@ interface RepairRow {
   device: string;
   issue: string | null;
   budget: number | null;
+  parts_cost: number | null;
   advance_payment: number | null;
   payment_method: PaymentMethod | null;
   unlock_code: string | null;
@@ -125,6 +128,7 @@ function repairToRow(item: RepairItem, workshopId: string): RepairRow {
     device: item.device,
     issue: item.issue || null,
     budget: item.budget,
+    parts_cost: item.partsCost ?? 0,
     advance_payment: item.advancePayment ?? 0,
     payment_method: item.paymentMethod ?? null,
     unlock_code: item.unlockCode ?? null,
@@ -145,6 +149,7 @@ function repairPatchToRow(patch: RepairPatch): Record<string, unknown> {
   if (patch.device !== undefined) row.device = patch.device;
   if (patch.issue !== undefined) row.issue = patch.issue;
   if (patch.budget !== undefined) row.budget = patch.budget;
+  if (patch.partsCost !== undefined) row.parts_cost = patch.partsCost;
   if (patch.unlockCode !== undefined) row.unlock_code = patch.unlockCode;
   if (patch.imei !== undefined) row.imei = patch.imei;
   if (patch.advancePayment !== undefined) row.advance_payment = patch.advancePayment;
@@ -165,6 +170,7 @@ function rowToRepair(row: RepairRow): RepairItem {
     device: row.device,
     issue: row.issue ?? '',
     budget: Number(row.budget ?? 0),
+    partsCost: row.parts_cost != null ? Number(row.parts_cost) : 0,
     unlockCode: row.unlock_code ?? undefined,
     imei: row.imei ?? undefined,
     advancePayment: row.advance_payment != null ? Number(row.advance_payment) : undefined,

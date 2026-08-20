@@ -99,6 +99,9 @@ interface AuthContextType {
   /** Elimina (soft delete) un técnico. Devuelve false si no existe o es el
    *  usuario actual. */
   deleteTechnician: (id: string) => Promise<boolean>;
+  /** Actualiza el % de comisión de un técnico (fracción, 0.30 = 30%). Solo el
+   *  dueño. Devuelve false si no es admin o es el propio usuario. */
+  updateTechnicianCommission: (id: string, commissionRate: number) => Promise<boolean>;
   /** Registra a un técnico invitado por enlace. Crea la cuenta REAL
    *  (role='technician' + workshop_id del taller del admin) y requiere
    *  confirmar el correo. Devuelve `pendingVerification: true` cuando hay
@@ -430,6 +433,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   /**
+   * Updates a technician's commission rate (fraction 0.30 = 30%). Owner-only
+   * action: the RLS policy `profiles_admin_manage_technicians` already allows
+   * the admin to UPDATE any technician row of their workshop (not their own).
+   * Returns true on success.
+   */
+  const updateTechnicianCommission = async (
+    id: string,
+    commissionRate: number
+  ): Promise<boolean> => {
+    if (currentUser?.role !== 'admin' || currentUser.id === id) {
+      return false;
+    }
+    const safeRate = Number.isFinite(commissionRate)
+      ? Math.min(1, Math.max(0, commissionRate))
+      : 0;
+    const { error } = await supabase
+      .from('profiles')
+      .update({ commission_rate: safeRate })
+      .eq('id', id);
+    if (error) {
+      console.error('Error updating technician commission:', error);
+      return false;
+    }
+    setUsers((prev) =>
+      prev.map((u) => (u.id === id ? { ...u, commissionRate: safeRate } : u))
+    );
+    return true;
+  };
+
+  /**
    * Registro de técnico invitado por enlace (deep link ?invite=...).
    * Crea la cuenta REAL con role='technician' y workshop_id del taller del
    * admin (el trigger `handle_new_user` resuelve el taller y crea el perfil).
@@ -553,8 +586,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         registerOwner,
         resendRegistration,
         createTechnician,
-        deleteTechnician,
-        registerInvitedTechnician,
+deleteTechnician,
+  updateTechnicianCommission,
+  registerInvitedTechnician,
         generateInviteLink,
         validateInviteLink,
       }}>
