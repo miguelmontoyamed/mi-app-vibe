@@ -51,6 +51,11 @@
   existe en `auth.users`; `resolveWorkshopId()` cierra la sesión obsoleta.
 - `expo-print` en web solo llama a `window.print()` (no genera PDF); por eso el
   PDF web se construye con `jspdf` y se comparte con Web Share API.
+- `metro.config.js` redirige `jspdf` a `dist/jspdf.es.min.js` (build ESM) en
+  todas las plataformas: el SSR estático de Expo corre en Node y resolvería la
+  build `node` que usa `require(["html2canvas"], t)` (AMD no transformable por
+  Metro, rompía `expo export -p web`). jspdf solo se importa desde
+  `src/utils/receipt-pdf.web.ts`, así que el redirect es inocuo en nativo.
 - `monthly_closures` es SOLO lectura por RLS: la escritura ocurre vía RPC
   `ensure_month_closure()` (SECURITY DEFINER), nunca desde el cliente.
 - El glass se aplica con moderación; en plataformas nativas se degrada a sólido.

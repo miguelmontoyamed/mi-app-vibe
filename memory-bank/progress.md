@@ -49,6 +49,7 @@
 ## Historial Reciente
 | Fecha | Cambio |
 |-------|--------|
+| 2026-08-20 | Fix deploy web: `metro.config.js` redirige jspdf a la build ESM (el SSR estático resolvía la build node con require AMD que rompía `expo export -p web`) |
 | 2026-08-20 | Cierres de mes: tabla `monthly_closures` + RPC `ensure_month_closure` + `BillingProvider` (auto-cierre al abrir la app); migración aplicada en vivo |
 | 2026-08-20 | Compartir recibo PDF por WhatsApp en web (jspdf + Web Share API + fallback descarga) y nativo (expo-print + sharing) con tests |
 | 2026-08-20 | Sync del Memory Bank con el estado real (búsqueda e impresión verificadas en código) |
