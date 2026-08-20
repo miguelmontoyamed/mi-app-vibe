@@ -16,7 +16,7 @@ import { Screen } from '@/components/ui/screen';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Brand, BREAKPOINTS, KpiAccent, Spacing } from '@/constants/theme';
+import { Brand, BREAKPOINTS, KpiAccent, Shape, Spacing, TouchTarget } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { RepairStatus, useRepair } from '@/context/repair-context';
 import { useTheme } from '@/hooks/use-theme';
@@ -335,7 +335,7 @@ export default function JobsScreen() {
               )}
 
               {/* Status Update Actions */}
-              <View style={styles.statusActions}>
+              <View style={[styles.statusActions, { borderTopColor: theme.border }]}>
                 <ThemedText type="small" themeColor="textSecondary">
                   Cambiar estado:
                 </ThemedText>
@@ -392,7 +392,9 @@ const styles = StyleSheet.create({
   filterChip: {
     paddingHorizontal: Spacing.four,
     paddingVertical: Spacing.two,
-    borderRadius: Spacing.five,
+    minHeight: TouchTarget.min,
+    justifyContent: 'center',
+    borderRadius: Shape.full,
     overflow: 'hidden',
   },
   filterChipText: {
@@ -409,7 +411,7 @@ const styles = StyleSheet.create({
   },
   emptyContainer: {
     padding: Spacing.six,
-    borderRadius: Spacing.three,
+    borderRadius: Shape.lg,
     alignItems: 'center',
     flexGrow: 0,
     flexShrink: 0,
@@ -419,7 +421,7 @@ const styles = StyleSheet.create({
   },
   repairCard: {
     padding: Spacing.four,
-    borderRadius: Spacing.four,
+    borderRadius: Shape.xl,
     gap: Spacing.two,
     flexGrow: 0,
     flexShrink: 0,
@@ -436,14 +438,14 @@ const styles = StyleSheet.create({
   },
   clientInfo: {
     flex: 1,
-    gap: 2,
+    gap: Spacing.half,
   },
   deviceText: {
     marginTop: Spacing.one,
   },
   repairCardFooter: {
     marginTop: Spacing.one,
-    gap: 2,
+    gap: Spacing.half,
   },
   balanceText: {
     color: KpiAccent.pending,
@@ -488,7 +490,9 @@ const styles = StyleSheet.create({
   methodChip: {
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.one,
-    borderRadius: Spacing.five,
+    minHeight: TouchTarget.min,
+    justifyContent: 'center',
+    borderRadius: Shape.full,
     overflow: 'hidden',
   },
   methodChipText: {
@@ -502,7 +506,6 @@ const styles = StyleSheet.create({
     marginTop: Spacing.two,
     paddingTop: Spacing.two,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#4b5563',
     gap: Spacing.one,
   },
   actionButtonsRow: {
@@ -512,8 +515,10 @@ const styles = StyleSheet.create({
   },
   actionBtn: {
     paddingHorizontal: Spacing.two,
-    paddingVertical: 4,
-    borderRadius: Spacing.two,
+    paddingVertical: Spacing.xs,
+    minHeight: TouchTarget.min,
+    justifyContent: 'center',
+    borderRadius: Shape.sm,
     overflow: 'hidden',
   },
   actionBtnActive: {

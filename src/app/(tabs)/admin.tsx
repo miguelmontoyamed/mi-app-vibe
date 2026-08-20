@@ -14,7 +14,7 @@ import { CommercialBanner } from '@/components/commercial-banner';
 import { Screen } from '@/components/ui/screen';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { Brand, Shape, Spacing, TouchTarget } from '@/constants/theme';
 import { useAuth, MAX_TECHNICIANS, type User } from '@/context/auth-context';
 import { useRepair } from '@/context/repair-context';
 import { useWorkshop } from '@/context/workshop-context';
@@ -321,7 +321,7 @@ export default function AdminScreen() {
           {inviteLink ? (
             <View style={styles.linkDisplayBox}>
               <View style={styles.inviteHeader}>
-                <ThemedText type="smallBold" style={{ color: '#10b981' }}>
+                <ThemedText type="smallBold" style={{ color: Brand.success }}>
                   Enlace generado — vence en 10 min
                 </ThemedText>
                 <ThemedText type="small" themeColor="textSecondary">
@@ -382,7 +382,7 @@ export default function AdminScreen() {
                 const isEditing = editingCommissionId === u.id;
                 const ratePct = Math.round((u.commissionRate ?? 0) * 100);
                 return (
-                  <View key={u.id} style={styles.techRow}>
+                  <View key={u.id} style={[styles.techRow, { borderBottomColor: theme.border }]}>
                     <View style={styles.techInfo}>
                       <ThemedText type="smallBold">{u.name}</ThemedText>
                       {isEditing ? (
@@ -396,7 +396,7 @@ export default function AdminScreen() {
                               },
                             ]}
                             placeholder="%"
-                            placeholderTextColor="#9ca3af"
+                            placeholderTextColor={theme.textSecondary}
                             keyboardType="number-pad"
                             value={commissionInput}
                             onChangeText={(t) =>
@@ -470,7 +470,7 @@ export default function AdminScreen() {
                 { color: theme.text, borderColor: theme.backgroundElement },
               ]}
               placeholder="Nombre"
-              placeholderTextColor="#9ca3af"
+              placeholderTextColor={theme.textSecondary}
               value={techName}
               onChangeText={setTechName}
               maxLength={80}
@@ -481,7 +481,7 @@ export default function AdminScreen() {
                 { color: theme.text, borderColor: theme.backgroundElement },
               ]}
               placeholder="Correo"
-              placeholderTextColor="#9ca3af"
+              placeholderTextColor={theme.textSecondary}
               keyboardType="email-address"
               autoCapitalize="none"
               value={techEmail}
@@ -494,7 +494,7 @@ export default function AdminScreen() {
                 { color: theme.text, borderColor: theme.backgroundElement },
               ]}
               placeholder="Comisión % (Ej: 30)"
-              placeholderTextColor="#9ca3af"
+              placeholderTextColor={theme.textSecondary}
               keyboardType="number-pad"
               value={techCommission}
               onChangeText={(t) => setTechCommission(t.replace(/[^0-9]/g, ''))}
@@ -516,32 +516,32 @@ export default function AdminScreen() {
       <ThemedView type="backgroundElement" style={styles.card}>
         <ThemedText type="subtitle">Control de Ingresos</ThemedText>
         <View style={styles.financesGrid}>
-          <View style={styles.financeBox}>
+          <View style={[styles.financeBox, { backgroundColor: theme.surfaceContainerHigh }]}>
             <ThemedText type="small" themeColor="textSecondary">
               Ingresos Cobrados (Listo/Entregado)
             </ThemedText>
-            <ThemedText type="title" style={{ color: '#10b981' }}>
+            <ThemedText type="title" style={{ color: Brand.success }}>
               {formatCOP(totalRevenue)}
             </ThemedText>
           </View>
-          <View style={styles.financeBox}>
+          <View style={[styles.financeBox, { backgroundColor: theme.surfaceContainerHigh }]}>
             <ThemedText type="small" themeColor="textSecondary">
               Utilidad Neta (menos repuestos)
             </ThemedText>
-            <ThemedText type="title" style={{ color: '#10b981' }}>
+            <ThemedText type="title" style={{ color: Brand.success }}>
               {formatCOP(netProfit)}
             </ThemedText>
           </View>
-          <View style={styles.financeBox}>
+          <View style={[styles.financeBox, { backgroundColor: theme.surfaceContainerHigh }]}>
             <ThemedText type="small" themeColor="textSecondary">
               En Trámite (Pendiente/Proceso)
             </ThemedText>
-            <ThemedText type="title" style={{ color: '#f59e0b' }}>
+            <ThemedText type="title" style={{ color: Brand.warning }}>
               {formatCOP(pendingRevenue)}
             </ThemedText>
           </View>
         </View>
-        <View style={[styles.financeBox, { marginTop: Spacing.two }]}>
+        <View style={[styles.financeBox, { marginTop: Spacing.two, backgroundColor: theme.surfaceContainerHigh }]}>
           <ThemedText type="small" themeColor="textSecondary">
             Valor Total de Inventario en Piezas
           </ThemedText>
@@ -558,10 +558,10 @@ export default function AdminScreen() {
             style={[
               styles.statusDot,
               subscription.status === 'active'
-                ? { backgroundColor: '#10b981' }
+                ? { backgroundColor: Brand.success }
                 : subscription.status === 'trial'
-                  ? { backgroundColor: '#f59e0b' }
-                  : { backgroundColor: '#ef4444' },
+                  ? { backgroundColor: Brand.warning }
+                  : { backgroundColor: Brand.danger },
             ]}
           />
           <ThemedText type="small">
@@ -615,13 +615,13 @@ export default function AdminScreen() {
                 style={[
                   styles.roleButton,
                   isSelected
-                    ? { backgroundColor: '#0284c7' }
+                    ? { backgroundColor: Brand.primary }
                     : { backgroundColor: theme.backgroundElement },
                 ]}>
                 <ThemedText
                   style={[
                     styles.roleButtonText,
-                    isSelected && { color: '#ffffff' },
+                    isSelected && { color: Brand.onBrand },
                   ]}>
                   {type}
                 </ThemedText>
@@ -635,7 +635,7 @@ export default function AdminScreen() {
             { color: theme.text, borderColor: theme.backgroundElement },
           ]}
           placeholder="Describa su necesidad o sugerencia..."
-          placeholderTextColor="#9ca3af"
+          placeholderTextColor={theme.textSecondary}
           multiline
           numberOfLines={4}
           value={supportMessage}
@@ -664,7 +664,7 @@ const styles = StyleSheet.create({
   },
   card: {
     padding: Spacing.four,
-    borderRadius: Spacing.four,
+    borderRadius: Shape.xl,
     gap: Spacing.three,
   },
   rolesRow: {
@@ -675,7 +675,10 @@ const styles = StyleSheet.create({
   roleButton: {
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two,
-    borderRadius: Spacing.three,
+    minHeight: TouchTarget.min,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: Shape.lg,
     overflow: 'hidden',
   },
   roleButtonText: {
@@ -690,8 +693,7 @@ const styles = StyleSheet.create({
   financeBox: {
     flex: 1,
     padding: Spacing.three,
-    borderRadius: Spacing.three,
-    backgroundColor: 'rgba(0,0,0,0.03)',
+    borderRadius: Shape.lg,
     gap: Spacing.one,
   },
   licenseInfoRow: {
@@ -702,36 +704,39 @@ const styles = StyleSheet.create({
   statusDot: {
     width: 10,
     height: 10,
-    borderRadius: 5,
+    borderRadius: Shape.full,
   },
   input: {
     borderWidth: 1,
-    borderRadius: Spacing.two,
+    borderRadius: Shape.sm,
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two,
     fontSize: 14,
     backgroundColor: 'transparent',
   },
   activateButton: {
-    backgroundColor: '#0284c7',
+    backgroundColor: Brand.primary,
     paddingHorizontal: Spacing.four,
+    minHeight: TouchTarget.min,
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: Spacing.two,
+    borderRadius: Shape.sm,
   },
   activateButtonText: {
-    color: '#ffffff',
+    color: Brand.onBrand,
     fontWeight: '600',
   },
   renewButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: Brand.success,
     paddingVertical: Spacing.three,
-    borderRadius: Spacing.three,
+    minHeight: TouchTarget.min,
+    justifyContent: 'center',
     alignItems: 'center',
+    borderRadius: Shape.lg,
     marginTop: Spacing.two,
   },
   renewButtonText: {
-    color: '#ffffff',
+    color: Brand.onBrand,
     fontWeight: 'bold',
   },
   bannerWrap: {
@@ -744,32 +749,34 @@ const styles = StyleSheet.create({
   },
   whatsappButton: {
     flex: 1,
-    backgroundColor: '#25d366',
+    backgroundColor: Brand.whatsapp,
     paddingVertical: Spacing.three,
-    borderRadius: Spacing.two,
+    minHeight: TouchTarget.min,
+    borderRadius: Shape.sm,
     alignItems: 'center',
     justifyContent: 'center',
   },
   primaryButton: {
-    backgroundColor: '#0284c7',
+    backgroundColor: Brand.primary,
     paddingVertical: Spacing.three,
-    borderRadius: Spacing.two,
+    minHeight: TouchTarget.min,
+    borderRadius: Shape.sm,
     alignItems: 'center',
     justifyContent: 'center',
   },
   buttonText: {
-    color: '#ffffff',
+    color: Brand.onBrand,
     fontWeight: '600',
   },
   pressed: {
-    opacity: 0.8,
+    opacity: 0.7,
   },
   linkDisplayBox: {
-    backgroundColor: 'rgba(16, 185, 129, 0.08)',
+    backgroundColor: `${Brand.success}14`,
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.3)',
+    borderColor: `${Brand.success}4d`,
     padding: Spacing.three,
-    borderRadius: Spacing.two,
+    borderRadius: Shape.sm,
     marginTop: Spacing.one,
   },
   inviteHeader: {
@@ -779,27 +786,31 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
   },
   copyButton: {
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    backgroundColor: `${Brand.success}26`,
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two,
-    borderRadius: Spacing.two,
+    minHeight: TouchTarget.min,
+    justifyContent: 'center',
+    borderRadius: Shape.sm,
     alignSelf: 'flex-start',
   },
   copyButtonText: {
-    color: '#10b981',
+    color: Brand.success,
     fontWeight: '600',
     fontSize: 12,
   },
   logoutButton: {
-    backgroundColor: '#ef4444',
+    backgroundColor: Brand.danger,
     alignSelf: 'flex-start',
     paddingHorizontal: Spacing.four,
     paddingVertical: Spacing.two,
-    borderRadius: Spacing.three,
+    minHeight: TouchTarget.min,
+    justifyContent: 'center',
+    borderRadius: Shape.lg,
     marginTop: Spacing.two,
   },
   logoutButtonText: {
-    color: '#ffffff',
+    color: Brand.onBrand,
     fontWeight: '700',
   },
   techRow: {
@@ -809,7 +820,6 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
     paddingVertical: Spacing.one,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.06)',
   },
   techInfo: {
     flex: 1,
@@ -828,7 +838,7 @@ const styles = StyleSheet.create({
   },
   commissionInput: {
     borderWidth: 1,
-    borderRadius: Spacing.two,
+    borderRadius: Shape.sm,
     paddingHorizontal: Spacing.two,
     paddingVertical: Spacing.one,
     fontSize: 14,
@@ -837,35 +847,41 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   editButton: {
-    backgroundColor: 'rgba(2, 132, 199, 0.1)',
+    backgroundColor: `${Brand.primary}1a`,
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.one,
-    borderRadius: Spacing.two,
+    minHeight: TouchTarget.min,
+    justifyContent: 'center',
+    borderRadius: Shape.sm,
   },
   editButtonText: {
-    color: '#0284c7',
+    color: Brand.primary,
     fontWeight: '600',
     fontSize: 12,
   },
   saveButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: Brand.success,
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.one,
-    borderRadius: Spacing.two,
+    minHeight: TouchTarget.min,
+    justifyContent: 'center',
+    borderRadius: Shape.sm,
   },
   saveButtonText: {
-    color: '#ffffff',
+    color: Brand.onBrand,
     fontWeight: '600',
     fontSize: 12,
   },
   deleteButton: {
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    backgroundColor: `${Brand.danger}1a`,
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.one,
-    borderRadius: Spacing.two,
+    minHeight: TouchTarget.min,
+    justifyContent: 'center',
+    borderRadius: Shape.sm,
   },
   deleteButtonText: {
-    color: '#ef4444',
+    color: Brand.danger,
     fontWeight: '600',
     fontSize: 12,
   },

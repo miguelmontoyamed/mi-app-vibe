@@ -7,7 +7,7 @@ import { FormInput } from '@/components/ui/form-input';
 import { Screen } from '@/components/ui/screen';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Brand, Spacing } from '@/constants/theme';
+import { Brand, Shape, Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { useWorkshop } from '@/context/workshop-context';
 import { formatNit, NIT_BASE_LENGTH, nitCheckDigit, normalizeNit } from '@/utils/nit';
@@ -195,7 +195,7 @@ export default function TallerScreen() {
 const styles = StyleSheet.create({
   card: {
     padding: Spacing.four,
-    borderRadius: Spacing.four,
+    borderRadius: Shape.lg,
     gap: Spacing.three,
     width: '100%',
   },

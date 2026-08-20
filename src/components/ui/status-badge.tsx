@@ -1,7 +1,7 @@
 import { StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Spacing, statusStyle } from '@/constants/theme';
+import { Shape, Spacing, statusStyle } from '@/constants/theme';
 import type { RepairStatus } from '@/context/repair-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
@@ -27,10 +27,10 @@ const styles = StyleSheet.create({
   badge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.one,
-    paddingHorizontal: Spacing.two,
-    paddingVertical: Spacing.half,
-    borderRadius: Spacing.two,
+    gap: Spacing.xs,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: Shape.full,
     borderWidth: 1,
     overflow: 'hidden',
   },

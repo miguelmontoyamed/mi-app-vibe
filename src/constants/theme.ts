@@ -1,5 +1,12 @@
 /**
- * Design tokens shared by the whole app.
+ * Design tokens centralizados — Sistema "Impeccable Design" (ver
+ * .opencode/skills/impeccable-design.md).
+ *
+ * FUENTE ÚNICA DE VERDAD: `src/constants/tokens.ts`. Esta capa deriva y
+ * re-exporta sus tokens para mantener compatibilidad con los callers
+ * existentes (Brand, Colors, Shape, Glass, Spacing...). Los componentes
+ * NUNCA hardcodean valores visuales: importan estos tokens.
+ *
  * Base colors are defined for light and dark mode; semantic tokens (Brand,
  * StatusColors) keep brand/status colors consistent across screens and themes
  * so nothing hardcodes a light-only pastel that breaks in dark mode.
@@ -11,37 +18,41 @@ import { Platform } from 'react-native';
 
 import type { RepairStatus } from '@/context/repair-context';
 
+import { tokens } from './tokens';
+
+export { tokens };
+
 export const Colors = {
   light: {
-    text: '#000000',
-    background: '#ffffff',
-    backgroundElement: '#F0F0F3',
-    backgroundSelected: '#E0E1E6',
-    textSecondary: '#60646C',
-    border: '#D8D8DF',
-    // MD3 surface tiers (jerarquía surfaceContainer). Aditivo: los tokens
-    // existentes (backgroundElement/Selected) se mantienen para no romper
-    // callers; los componentes nuevos consumen esta jerarquía.
-    surfaceContainerLow: '#F7F7F9',
-    surfaceContainer: '#F0F0F3',
-    surfaceContainerHigh: '#E9E9EE',
-    surfaceContainerHighest: '#E0E1E6',
-    onSurface: '#000000',
-    surfaceTint: '#0284c7',
+    text: tokens.colors.text.primaryLight,
+    background: tokens.colors.background.light,
+    // Cards / superficies elevadas: surface token (blanco sobre bg slate-50).
+    backgroundElement: tokens.colors.surface.light,
+    // Estados seleccionados: paso neutro desde surface (sin hex hardcodeado).
+    backgroundSelected: '#eef1f6',
+    textSecondary: tokens.colors.text.secondaryLight,
+    border: tokens.colors.border.light,
+    // Jerarquía MD3 surfaceContainer derivada de surface + pasos neutros.
+    surfaceContainerLow: tokens.colors.surface.light,
+    surfaceContainer: tokens.colors.surface.light,
+    surfaceContainerHigh: '#f1f5f9',
+    surfaceContainerHighest: '#e2e8f0',
+    onSurface: tokens.colors.text.primaryLight,
+    surfaceTint: tokens.colors.primary.default,
   },
   dark: {
-    text: '#ffffff',
-    background: '#000000',
-    backgroundElement: '#212225',
-    backgroundSelected: '#2E3135',
-    textSecondary: '#B0B4BA',
-    border: '#3A3A42',
-    surfaceContainerLow: '#1B1C1F',
-    surfaceContainer: '#212225',
-    surfaceContainerHigh: '#292A2E',
-    surfaceContainerHighest: '#2E3135',
-    onSurface: '#ffffff',
-    surfaceTint: '#38bdf8',
+    text: tokens.colors.text.primaryDark,
+    background: tokens.colors.background.dark,
+    backgroundElement: tokens.colors.surface.dark,
+    backgroundSelected: '#28323f',
+    textSecondary: tokens.colors.text.secondaryDark,
+    border: tokens.colors.border.dark,
+    surfaceContainerLow: tokens.colors.surface.dark,
+    surfaceContainer: tokens.colors.surface.dark,
+    surfaceContainerHigh: '#243244',
+    surfaceContainerHighest: '#2c3a4e',
+    onSurface: tokens.colors.text.primaryDark,
+    surfaceTint: tokens.colors.primary.light,
   },
 } as const;
 
@@ -72,7 +83,22 @@ export const Fonts = Platform.select({
   },
 });
 
+/**
+ * Escala de espaciado 4/8px (Impeccable Design, sección 2).
+ * Escala canónica: xs=4, sm=8, md=12, lg=16, xl=24, xxl(2xl)=32, xxxl(3xl)=48.
+ * Los alias legacy (half/one/two/three/four/five/six) se conservan para no
+ * romper callers existentes.
+ */
 export const Spacing = {
+  // Escala canónica del skill (derivada de tokens.spacing)
+  xs: tokens.spacing.xs,
+  sm: tokens.spacing.sm,
+  md: tokens.spacing.md,
+  lg: tokens.spacing.lg,
+  xl: tokens.spacing.xl,
+  xxl: tokens.spacing['2xl'],
+  xxxl: tokens.spacing['3xl'],
+  // Alias legacy (retrocompatibilidad)
   half: 2,
   one: 4,
   two: 8,
@@ -82,31 +108,54 @@ export const Spacing = {
   six: 64,
 } as const;
 
+/**
+ * Escala tipográfica (Impeccable Design, sección 3):
+ * - title: 20-24px, Semibold/Bold → encabezados principales y secciones.
+ * - headline: 16-18px, Medium/Semibold → clientes, folios TRM, montos clave.
+ * - body: 14-15px, Regular → descripciones, fallas técnicas, explicativos.
+ * - label: 11-13px, Medium → badges, fechas secundarias, metadatos.
+ */
+export const Typography = {
+  title: { fontSize: 22, lineHeight: 28, fontWeight: '700', letterSpacing: 0.2 },
+  headline: { fontSize: 17, lineHeight: 24, fontWeight: '600', letterSpacing: 0.1 },
+  body: { fontSize: 14, lineHeight: 20, fontWeight: '400', letterSpacing: 0.2 },
+  label: { fontSize: 12, lineHeight: 16, fontWeight: '500', letterSpacing: 0.3 },
+} as const;
+
+export type TypographyVariant = keyof typeof Typography;
+
 export const BREAKPOINTS = { mobile: 768, tablet: 1024 } as const;
 
 /** Altura de la barra de navegación inferior móvil, reservada como clearance al final del contenido scrolleable. */
 export const BottomTabInset = 50;
+
+/** Altura mínima de objetivo táctil (Impeccable Design, sección 5): 44px. */
+export const TouchTarget = { min: 44 } as const;
+
 export const MaxContentWidth = 1200;
 export const TabletContentWidth = 900;
 
-/** Brand / semantic palette (theme-independent). */
+/** Brand / semantic palette (theme-independent) — derivada de tokens.colors. */
 export const Brand = {
-  primary: '#0284c7',
-  primaryPressed: '#0369a1',
-  secondary: '#334155',
-  success: '#10b981',
-  warning: '#f59e0b',
-  danger: '#ef4444',
+  primary: tokens.colors.primary.default,
+  primaryPressed: tokens.colors.primary.dark,
+  secondary: tokens.colors.secondary.default,
+  success: tokens.colors.status.success,
+  warning: tokens.colors.status.pending,
+  danger: tokens.colors.status.error,
   whatsapp: '#16a34a',
   onBrand: '#ffffff',
 } as const;
 
-/** Distinct accent colors for the dashboard KPI cards. */
+/**
+ * Distinct accent colors for the dashboard KPI cards — consume el mismo
+ * semáforo semántico de tokens.colors.status que los badges de estado.
+ */
 export const KpiAccent = {
-  pending: '#f97316', // Orange — Pendientes
-  progress: '#3b82f6', // Blue — En Proceso
-  ready: '#10b981', // Green — Listos para Entrega
-  delivered: '#64748b', // Slate — Entregados
+  pending: tokens.colors.status.pending, // Pendientes
+  progress: tokens.colors.status.inProgress, // En Proceso
+  ready: tokens.colors.status.ready, // Listos para Entrega
+  delivered: tokens.colors.status.delivered, // Entregados
 } as const;
 
 export interface StatusStyle {
@@ -175,12 +224,13 @@ export const Elevation = {
   },
 } as const;
 
-/** Escala de forma MD3 (radios de borde). */
+/** Escala de forma MD3 (radios de borde) — derivada de tokens.radius. */
 export const Shape = {
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 24,
+  sm: tokens.radius.sm,
+  md: tokens.radius.md,
+  lg: tokens.radius.lg,
+  xl: tokens.radius.xl,
+  full: tokens.radius.full,
 } as const;
 
 /** Alphas de state layers MD3 (overlay del color on-surface sobre el fondo). */
@@ -192,21 +242,22 @@ export const StateLayer = {
 
 /**
  * Liquid Glass — acabado translúcido para superficies clave (web).
+ * blur(12px) según la espec del skill (sección 1: "Liquid Glass sutil").
  * El nativo degrada a superficies sólidas de la jerarquía MD3 (los
  * componentes lo resuelven con Platform.select). Alpha alto (≥0.72) para
  * preservar contraste AA: la legibilidad gana sobre la estética (AGENTS.md §3).
  */
 export const Glass = {
   light: {
-    background: 'rgba(255, 255, 255, 0.72)',
+    background: tokens.colors.surfaceGlass.light,
     border: 'rgba(255, 255, 255, 0.6)',
-    blur: 16,
+    blur: 12,
     shadow: 'rgba(0, 0, 0, 0.06)',
   },
   dark: {
-    background: 'rgba(18, 19, 22, 0.72)',
-    border: 'rgba(255, 255, 255, 0.12)',
-    blur: 16,
+    background: tokens.colors.surfaceGlass.dark,
+    border: tokens.colors.border.dark,
+    blur: 12,
     shadow: 'rgba(0, 0, 0, 0.4)',
   },
 } as const;

@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Brand, Shape, Spacing, StateLayer } from '@/constants/theme';
+import { Brand, Shape, Spacing, StateLayer, TouchTarget } from '@/constants/theme';
 
 type ButtonVariant = 'primary' | 'secondary' | 'success' | 'danger' | 'whatsapp';
 
@@ -111,6 +111,7 @@ const styles = StyleSheet.create({
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
+    minHeight: TouchTarget.min,
     paddingVertical: Spacing.three,
     paddingHorizontal: Spacing.four,
     borderRadius: Shape.lg,

@@ -8,7 +8,7 @@ import { Screen } from '@/components/ui/screen';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Brand, BREAKPOINTS, Spacing } from '@/constants/theme';
+import { Brand, BREAKPOINTS, Shape, Spacing, TouchTarget } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { useRepair, type RepairItem } from '@/context/repair-context';
 import { useTheme } from '@/hooks/use-theme';
@@ -130,7 +130,7 @@ export default function CustomersScreen() {
                 </Pressable>
 
                 {isOpen && (
-                  <View style={styles.history}>
+                  <View style={[styles.history, { borderTopColor: theme.border }]}>
                     {customer.repairs.map((r) => (
                       <Pressable
                         key={r.id}
@@ -196,7 +196,7 @@ const styles = StyleSheet.create({
   },
   emptyContainer: {
     padding: Spacing.six,
-    borderRadius: Spacing.three,
+    borderRadius: Shape.lg,
     alignItems: 'center',
     width: '100%',
     flexGrow: 0,
@@ -207,7 +207,7 @@ const styles = StyleSheet.create({
   },
   card: {
     padding: Spacing.three,
-    borderRadius: Spacing.three,
+    borderRadius: Shape.lg,
     gap: Spacing.two,
     flexGrow: 0,
     flexShrink: 0,
@@ -222,30 +222,31 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: Spacing.two,
+    minHeight: TouchTarget.min,
   },
   customerInfo: {
     flex: 1,
-    gap: 2,
+    gap: Spacing.half,
   },
   customerMeta: {
     alignItems: 'flex-end',
-    gap: 2,
+    gap: Spacing.half,
   },
   history: {
     gap: Spacing.two,
     paddingTop: Spacing.two,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#4b5563',
   },
   historyRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: Spacing.two,
+    minHeight: TouchTarget.min,
   },
   historyMain: {
     flex: 1,
-    gap: 2,
+    gap: Spacing.half,
   },
   deviceText: {
     fontSize: 14,

@@ -6,7 +6,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Button } from '@/components/ui/button';
 import { GlassCard } from '@/components/ui/glass-card';
 import { Screen } from '@/components/ui/screen';
-import { Brand, BREAKPOINTS, Elevation, KpiAccent, Shape, Spacing, statusStyle } from '@/constants/theme';
+import { Brand, BREAKPOINTS, Elevation, KpiAccent, Shape, Spacing, statusStyle, tokens } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { useRepair, type RepairStatus } from '@/context/repair-context';
 import { useWorkshop } from '@/context/workshop-context';
@@ -181,7 +181,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: Shape.xl,
-    backgroundColor: `${Brand.primary}1f`,
+    backgroundColor: tokens.colors.primary.surface,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,

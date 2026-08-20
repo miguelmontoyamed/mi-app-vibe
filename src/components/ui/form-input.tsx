@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
+import { Shape, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 type FormInputProps = TextInputProps & {
@@ -43,7 +43,7 @@ const styles = StyleSheet.create({
   },
   input: {
     borderWidth: 1,
-    borderRadius: Spacing.two,
+    borderRadius: Shape.sm,
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.three,
     fontSize: 16,
