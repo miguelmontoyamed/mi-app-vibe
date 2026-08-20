@@ -3,22 +3,33 @@
 > **Documento de estado actual.** Leer SIEMPRE antes de comenzar cualquier tarea.
 > Actualizar al finalizar cada tarea (ver `progress.md`).
 
-## Estado Actual
-- **Rediseño visual híbrido (Material Design 3 + Liquid Glass)** implementado:
-  tokens centralizados en `src/constants/theme.ts`, 44px de touch target,
-  bordes y radios por tema, degradación a `surfaceContainer` en nativas.
-- **Seguridad multi-tenant y RLS blindada** contra accesos cruzados: toda tabla
-  filtra por `workshop_id`; RPCs `security definer` sin sesión bloqueadas.
-- **Pasarela y paywall Bre-B activo** con acumulación matemática de días de
-  suscripción (20.000 COP/mes, llave `3002011801`).
+## Estado Actual (Consolidado — verificado contra el código)
+- **Búsqueda multicriterio en tiempo real operativa** en
+  `src/app/(tabs)/jobs.tsx`: filtra por **Folio TRM**, **IMEI/Serial**,
+  **Teléfono** y **Nombre del Cliente** (`normalizeSearch()` + chips de estado).
+- **Generación e impresión de tickets térmicos/PDF operativa** en
+  `src/app/receipt/[id].tsx`: membrete del taller, **cálculo DIAN Módulo 11**
+  (`src/utils/nit.ts`) y `expo-print` (impresión web + PDF nativo + compartir).
+- **Seguridad RLS multi-tenant por `workshop_id`** completada: toda tabla filtra
+  por taller; RPCs `security definer` sin sesión bloqueadas.
+- **Sistema de invitaciones por token temporal (10 min)** y **gestión de
+  técnicos (hasta `MAX_TECHNICIANS = 5`)** completados.
+- **Monetización Bre-B activa** (Llave: `3002011801`, 20.000 COP/mes) con
+  **acumulación matemática de tiempo** de suscripción (90 días de prueba,
+  alerta visual a 10 días del vencimiento).
 - **Fix de sesiones obsoletas aplicado y desplegado:** un JWT de un usuario
   eliminado ya no bloquea `fetchRepairs`; el cliente se auto-desloguea.
 
-## Foco Operativo Inmediato
-1. **Búsqueda multicriterio avanzada** en `src/app/(tabs)/jobs.tsx`
-   (Folio TRM, IMEI, Teléfono, Nombre).
-2. **Generación e impresión de tickets térmicos/PDF** con membrete del taller
-   y NIT Módulo 11 (`src/utils/nit.ts` + `expo-print`).
+## Foco Operativo Inmediato (Sprint Actual)
+**Módulo de Control de Caja y Cierre de Turno:**
+1. **Diseñar el esquema SQL** para la tabla `cash_register` / `cash_movements`
+   en Supabase con **RLS estricto por `workshop_id`** (hoy la tabla NO existe en
+   el schema — solo hay métricas en memoria en `admin.tsx`).
+2. **Flujo de caja:**
+   - Apertura de caja (base inicial).
+   - Registro de ingresos/egresos por **método de pago** (Efectivo,
+     Bre-B/Transferencia).
+   - Arqueo y cierre de turno diario.
 
 ## Decisiones Recientes
 - `ensure_workshop()` devuelve `null` (sin violar FK) cuando el usuario ya no
@@ -27,5 +38,5 @@
 - Las anon keys son públicas por diseño (RLS es la barrera real).
 
 ## Próximo Paso Esperado
-- Iniciar la búsqueda multicriterio en `jobs.tsx` o el módulo de impresión de
-  tickets, según la prioridad del administrador del proyecto.
+- Definir el esquema `cash_register` + RLS (migración) y la pantalla de Control
+  de Caja, según la prioridad del administrador del proyecto.
