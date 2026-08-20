@@ -104,7 +104,7 @@ export default function CustomersScreen() {
               <ThemedView
                 key={customer.key}
                 type="backgroundElement"
-                style={[styles.card, { flexBasis: isTablet ? '48%' : '100%' }]}>
+                style={[styles.card, isTablet && styles.cardTablet]}>
                 <Pressable
                   onPress={() => setExpandedKey(isOpen ? null : customer.key)}
                   style={styles.cardHeader}>
@@ -211,6 +211,11 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
     flexGrow: 0,
     flexShrink: 0,
+    alignSelf: 'stretch',
+    height: 'auto',
+  },
+  cardTablet: {
+    flexBasis: '48%',
   },
   cardHeader: {
     flexDirection: 'row',

@@ -55,5 +55,7 @@ export function GlassCard({ style, accent, elevation = 1, ...rest }: GlassCardPr
 const styles = StyleSheet.create({
   base: {
     borderWidth: 1,
+    flexGrow: 0,
+    flexShrink: 0,
   },
 });

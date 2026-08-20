@@ -109,6 +109,10 @@ const styles = StyleSheet.create({
   contentContainer: {
     paddingHorizontal: Spacing.four,
     alignItems: 'center',
+    // flexGrow: 1 hace que el área de contenido llene al menos el viewport
+    // (scroll natural cuando el contenido lo supera) sin forzar a los hijos
+    // a estirarse verticalmente — los items de lista usan flexGrow: 0.
+    flexGrow: 1,
   },
   container: {
     maxWidth: MaxContentWidth,

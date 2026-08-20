@@ -192,7 +192,7 @@ export default function JobsScreen() {
             <ThemedView
               key={item.id}
               type="backgroundElement"
-              style={[styles.repairCard, { flexBasis: isTablet ? '48%' : '100%' }]}>
+              style={[styles.repairCard, isTablet && styles.repairCardTablet]}>
               <View style={styles.repairCardTop}>
                 <View style={styles.clientInfo}>
                   <ThemedText type="smallBold">{item.clientName}</ThemedText>
@@ -411,7 +411,6 @@ const styles = StyleSheet.create({
     padding: Spacing.six,
     borderRadius: Spacing.three,
     alignItems: 'center',
-    flexBasis: '100%',
     flexGrow: 0,
     flexShrink: 0,
   },
@@ -424,6 +423,11 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
     flexGrow: 0,
     flexShrink: 0,
+    alignSelf: 'stretch',
+    height: 'auto',
+  },
+  repairCardTablet: {
+    flexBasis: '48%',
   },
   repairCardTop: {
     flexDirection: 'row',
