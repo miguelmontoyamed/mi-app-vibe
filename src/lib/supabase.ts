@@ -101,6 +101,25 @@ export async function resolveWorkshopId(): Promise<string | null> {
   } = await supabase.auth.getSession();
   if (!session) return null;
 
+  // Sesión obsoleta: el JWT puede seguir siendo válido para un usuario que ya
+  // fue eliminado de auth.users (p. ej. cuenta borrada vía Admin API mientras
+  // el navegador conservaba la sesión). En ese caso ensure_workshop() no puede
+  // crear el perfil (violaría profiles_id_fkey → 23503) y el taller queda sin
+  // resolver. Detectar la cuenta fantasma con getUser() (valida contra
+  // auth.users en el servidor) y cerrar la sesión para que el guard del router
+  // devuelva al usuario al login en lugar de dejarlo bloqueado sin datos.
+  const {
+    data: { user: sessionUser },
+    error: userError,
+  } = await supabase.auth.getUser();
+  if (userError || !sessionUser) {
+    console.warn(
+      '[supabase] Sesión obsoleta (usuario eliminado de auth.users): cerrando sesión.'
+    );
+    await supabase.auth.signOut();
+    return null;
+  }
+
   const { data: ensured, error } = await supabase.rpc('ensure_workshop');
   if (!error && typeof ensured === 'string') {
     return ensured;

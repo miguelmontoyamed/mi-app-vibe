@@ -229,6 +229,14 @@ begin
     from auth.users
    where id = uid;
 
+  -- Sesión obsoleta (usuario eliminado de auth.users pero con JWT aún válido):
+  -- no hay taller que sanear. Devolver null SIN insertar: crear el perfil aquí
+  -- violaría profiles_id_fkey (error 23503) y bloquearía fetchRepairs del
+  -- cliente. El cliente detecta el null + getUser() fallido y cierra la sesión.
+  if not found then
+    return null;
+  end if;
+
   insert into public.workshops (name)
   values (coalesce(nullif(full_name, ''), 'Mi Taller'))
   returning id into w_id;
