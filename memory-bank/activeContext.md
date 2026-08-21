@@ -4,6 +4,21 @@
 > Actualizar al finalizar cada tarea (ver `progress.md`).
 
 ## Estado Actual (Consolidado — verificado contra el código)
+- **Asignación y reasignación de técnico en órdenes operativa (2026-08-21):**
+  - Al crear (`receive.tsx`): selector "Asignar a" con chips — el usuario actual
+    primero (`(tú)`, default = comportamiento histórico) + el resto de miembros
+    activos del taller desde `useAuth().users`; el id/nombre elegido viaja en
+    `addRepair({ technicianId, technicianName })`. El elegido NO se persiste en
+    el blob `receiptData` de AsyncStorage.
+  - Al editar (`job/[id].tsx`): botón "👥 Reasignar técnico" (oculto si la
+    orden está cancelada) + modal con chips (asignado actual marcado
+    "(actual)", self "(tú)") → `updateRepair(id, { technicianId,
+    technicianName })`. Visible para CUALQUIER miembro que pueda ver la orden:
+    RLS `repairs_workshop_update` ya autoriza UPDATE a todo el taller, así un
+    técnico que no puede continuar pasa la orden a otro. Sin migración SQL.
+  - Privacidad intacta: `visibleRepairs`/`canViewRepair` siguen filtrando —
+    el técnico solo ve SUS órdenes; al reasignar, la orden desaparece de su
+    lista y aparece en la del nuevo técnico.
 - **Búsqueda multicriterio en tiempo real operativa** en
   `src/app/(tabs)/jobs.tsx`: filtra por **Folio TRM**, **IMEI/Serial**,
   **Teléfono** y **Nombre del Cliente** (`normalizeSearch()` + chips de estado).
@@ -67,6 +82,15 @@ producción. El desglose mensual se calcula por fecha real de entrega
 (`delivered_at`) y los meses cerrados se consumen de solo lectura.
 
 ## Decisiones Recientes
+- **Lint react-hooks (2026-08-21):** el periodo por defecto del panel de
+  liquidación es DERIVADO (`effectivePeriod = selectedPeriod ?? currentPeriod
+  ?? periodOptions[0]?.period`), sin efecto de ajuste; el spinner de carga se
+  deriva comparando `loadedPeriod` vs `effectivePeriod` (todos los setState de
+  la RPC ocurren tras el await). `jobs.tsx`/`customers.tsx` memoizan ANTES del
+  guard de autenticación (regla de hooks) devolviendo vacío sin usuario. El
+  dashboard lee el reloj con `useSyncExternalStore` (snapshot SSR = valor
+  enorme para no disparar la alerta de trial en HTML estático). Quedan 3
+  warnings de variables sin usar (refreshBilling, supabase, notifyError).
 - **Liquidación mensual:** la comisión se liquida sobre la PRODUCCIÓN NETA
   (`max(budget − parts_cost, 0)`) con `commission_rate` como FRACCIÓN 0–1
   (0.30 = 30%), idéntico a `commissionForRepair()`; el agrupado mensual usa la
