@@ -18,6 +18,7 @@ import { Brand, Shape, Spacing, TouchTarget } from '@/constants/theme';
 import { useAuth, MAX_TECHNICIANS, type User } from '@/context/auth-context';
 import { useRepair } from '@/context/repair-context';
 import { useWorkshop } from '@/context/workshop-context';
+import { useBilling } from '@/context/billing-context';
 import { useTheme } from '@/hooks/use-theme';
 import { SUPER_ADMIN_USER_ID } from '@/lib/super-admin';
 import { formatCOP } from '@/utils/format';
@@ -45,6 +46,7 @@ export default function AdminScreen() {
   } = useAuth();
   const { repairs, inventory } = useRepair();
   const { subscription } = useWorkshop();
+  const { closures, currentPeriod, refresh: refreshBilling } = useBilling();
   const router = useRouter();
 
   // Technician management form states
@@ -549,6 +551,61 @@ export default function AdminScreen() {
         </View>
       </ThemedView>
 
+      {/* Monthly Closures Card — cierres de meses anteriores */}
+      <ThemedView type="backgroundElement" style={styles.card}>
+        <ThemedText type="subtitle">Cierres de Mes Anteriores</ThemedText>
+        {closures.length === 0 ? (
+          <ThemedText type="small" themeColor="textSecondary">
+            No hay meses cerrados aún. El cierre se genera automáticamente al
+            cambiar de mes.
+          </ThemedText>
+        ) : (
+          <>
+            <ThemedText type="small" themeColor="textSecondary" style={styles.periodHint}>
+              Periodo abierto actual: {currentPeriod ?? '—'}
+            </ThemedText>
+            {closures.map((c) => (
+              <View key={c.id} style={styles.closureRow}>
+                <View style={styles.closureInfo}>
+                  <ThemedText type="smallBold">{c.period}</ThemedText>
+                  <ThemedText type="small" themeColor="textSecondary">
+                    Cerrado: {new Date(c.closedAt).toLocaleDateString('es-CO', { day: '2-digit', month: 'long', year: 'numeric' })}
+                  </ThemedText>
+                </View>
+                <View style={styles.closureMetrics}>
+                  <View style={styles.metric}>
+                    <ThemedText type="small" themeColor="textSecondary">Ingresos</ThemedText>
+                    <ThemedText type="smallBold" style={{ color: Brand.success }}>
+                      {formatCOP(c.revenue)}
+                    </ThemedText>
+                  </View>
+                  <View style={styles.metric}>
+                    <ThemedText type="small" themeColor="textSecondary">Repuestos</ThemedText>
+                    <ThemedText type="smallBold" style={{ color: Brand.warning }}>
+                      {formatCOP(c.partsCost)}
+                    </ThemedText>
+                  </View>
+                  <View style={styles.metric}>
+                    <ThemedText type="small" themeColor="textSecondary">Entregadas</ThemedText>
+                    <ThemedText type="smallBold">{c.deliveredCount}</ThemedText>
+                  </View>
+                  <View style={styles.metric}>
+                    <ThemedText type="small" themeColor="textSecondary">Canceladas</ThemedText>
+                    <ThemedText type="smallBold" style={{ color: Brand.danger }}>
+                      {c.cancelledCount}
+                    </ThemedText>
+                  </View>
+                  <View style={styles.metric}>
+                    <ThemedText type="small" themeColor="textSecondary">Total</ThemedText>
+                    <ThemedText type="smallBold">{c.totalCount}</ThemedText>
+                  </View>
+                </View>
+              </View>
+            ))}
+          </>
+        )}
+      </ThemedView>
+
       {/* Subscription Status Card — estado real de la suscripción del taller */}
       <ThemedView type="backgroundElement" style={styles.card}>
         <ThemedText type="subtitle">Suscripción del Taller</ThemedText>
@@ -888,5 +945,33 @@ const styles = StyleSheet.create({
   techForm: {
     gap: Spacing.two,
     marginTop: Spacing.one,
+  },
+  periodHint: {
+    marginBottom: Spacing.two,
+    fontStyle: 'italic',
+  },
+  closureRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.three,
+    paddingVertical: Spacing.two,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#e5e7eb',
+  },
+  closureInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  closureMetrics: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.three,
+    alignItems: 'center',
+  },
+  metric: {
+    gap: 2,
+    alignItems: 'flex-end',
+    minWidth: 70,
   },
 });
