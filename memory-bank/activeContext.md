@@ -82,6 +82,13 @@ producción. El desglose mensual se calcula por fecha real de entrega
 (`delivered_at`) y los meses cerrados se consumen de solo lectura.
 
 ## Decisiones Recientes
+- **Liquidación en tiempo real (2026-08-21):** el panel se suscribe a
+  `postgres_changes` sobre `public.repairs` (canal `admin-liquidacion-realtime`)
+  con DEBOUNCE de 800 ms que incrementa `realtimeTick`, dependencia del efecto
+  que llama a la RPC. Requiere `repairs` en la publicación `supabase_realtime`
+  (migración idempotente; la visibilidad de eventos respeta RLS por taller).
+  El setState ocurre en el callback de la suscripción, nunca síncrono en el
+  cuerpo del efecto (regla react-hooks/set-state-in-effect).
 - **RPC liquidación (fix 2026-08-21):** `count(*)` devuelve bigint y
   `RETURN QUERY` no downcastea → error 42804 solo con usuario REAL (con
   service_role `auth.uid()` es null y la función salía temprano: por eso el

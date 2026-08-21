@@ -57,6 +57,7 @@
 ## Historial Reciente
 | Fecha | Cambio |
 |-------|--------|
+| 2026-08-21 | Liquidación en TIEMPO REAL: `public.repairs` agregada a la publicación `supabase_realtime` (migración `20260821220000`, aplicada en vivo) + suscripción `postgres_changes` en `admin.tsx` con debounce 800 ms → el panel se refresca solo ante entregas/ediciones/reasignaciones de cualquier miembro, sin recargar |
 | 2026-08-21 | Fix RPC `get_technician_monthly_performance` (error 42804 en producción): `count(*)` (bigint) no coincidía con `delivered_count int` del RETURNS TABLE; cast `count(*)::int` en migración `20260821210000` aplicada en vivo vía `supabase db query --linked` (Management API) y espejada en schema.sql. Repro y verificación con sesión simulada (request.jwt.claims + LATERAL) |
 | 2026-08-21 | Fix lint: reparados los 6 errores react-hooks (set-state-in-effect en admin/super-admin, rules-of-hooks en jobs/customers, pureza Date.now en dashboard vía useSyncExternalStore). Lint repo: 0 errores; quedan 3 warnings de imports/vars sin usar |
 | 2026-08-21 | Asignación de técnico al crear la orden (chips "Asignar a" en `receive.tsx`, default = creador) y reasignación desde el detalle (`job/[id].tsx`, modal visible para cualquier miembro; RLS de UPDATE por taller ya lo permitía — sin migración). tsc 0 errores, 52/52 tests, lint limpio en los 2 archivos tocados |
