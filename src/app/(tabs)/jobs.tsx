@@ -270,7 +270,7 @@ export default function JobsScreen() {
                 />
                 {(item.advancePayment ?? 0) < item.budget && (
                   <Button
-                    label="💵 Registrar Pago"
+                    label="💰 Registrar Pago"
                     variant="success"
                     onPress={() => {
                       setPayingId(item.id);
