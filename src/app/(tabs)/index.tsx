@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Link } from 'expo-router';
+import { useSyncExternalStore } from 'react';
 import { Linking, Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -26,6 +27,26 @@ type KpiCard = {
   accent: string;
 };
 
+/** Suscripción del reloj: refresca cada minuto (granularidad de días sobra). */
+function subscribeToClock(onChange: () => void): () => void {
+  const id = setInterval(onChange, 60_000);
+  return () => clearInterval(id);
+}
+
+/**
+ * Hora actual como sistema externo (useSyncExternalStore): evita llamar
+ * `Date.now()` (impuro) durante el render. En prerender/SSR devuelve un valor
+ * enorme para NO disparar la alerta de trial en el HTML estático; tras la
+ * hidratación useSyncExternalStore conmuta al snapshot real sin parpadeo.
+ */
+function useNowMs(): number {
+  return useSyncExternalStore(
+    subscribeToClock,
+    () => Date.now(),
+    () => Number.MAX_SAFE_INTEGER
+  );
+}
+
 export default function DashboardScreen() {
   const scheme = useColorScheme();
   const dark = scheme === 'dark';
@@ -34,6 +55,7 @@ export default function DashboardScreen() {
   const { repairs } = useRepair();
   const { currentUser } = useAuth();
   const { subscription } = useWorkshop();
+  const nowMs = useNowMs();
 
   // Tabs only render when authenticated. Guard keeps typing safe (User | null).
   if (!currentUser) {
@@ -43,7 +65,7 @@ export default function DashboardScreen() {
   // Trial por vencer: status 'trial' y faltan <=10 días para trial_ends_at.
   const trialDaysLeft =
     subscription.status === 'trial' && subscription.trialEndsAt
-      ? Math.max(0, Math.ceil((new Date(subscription.trialEndsAt).getTime() - Date.now()) / 86_400_000))
+      ? Math.max(0, Math.ceil((new Date(subscription.trialEndsAt).getTime() - nowMs) / 86_400_000))
       : null;
   const showTrialWarning = trialDaysLeft !== null && trialDaysLeft <= 10;
 

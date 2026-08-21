@@ -54,17 +54,17 @@ export default function JobsScreen() {
   const [paymentInput, setPaymentInput] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('Efectivo');
 
-  // Los tabs solo se renderizan autenticados; el guard mantiene el tipado seguro.
-  if (!currentUser) {
-    return null;
-  }
-
   /**
    * Filtrado multicriterio en memoria, memoizado para que sea fluido al
    * escribir. La cadena normalizada busca coincidencia (case-insensitive,
    * sin espacios extras) en: número de orden (id), cliente, celular e IMEI.
+   * Vive ANTES del guard de autenticación (regla de hooks); sin usuario
+   * devuelve vacío porque el componente no renderiza nada igualmente.
    */
   const filteredRepairs = useMemo(() => {
+    if (!currentUser) {
+      return [];
+    }
     const query = normalizeSearch(searchQuery);
     const hasQuery = query.length > 0;
     // RBAC: un técnico solo ve las órdenes asignadas a su nombre/ID; el admin todas.
@@ -85,6 +85,11 @@ export default function JobsScreen() {
       );
     });
   }, [repairs, currentUser, searchQuery, selectedFilter]);
+
+  // Los tabs solo se renderizan autenticados; el guard mantiene el tipado seguro.
+  if (!currentUser) {
+    return null;
+  }
 
   const handleSendWhatsApp = (item: {
     clientName: string;

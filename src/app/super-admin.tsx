@@ -82,10 +82,31 @@ export default function SuperAdminScreen() {
     setProfiles(profRes.data ?? []);
   };
 
+  // Carga inicial: inline (sin pasar por refresh) para que TODOS los setState
+  // ocurran tras el await — nunca síncronos dentro del efecto. `loading` ya
+  // nace true, así que el spinner cubre desde el primer render.
   useEffect(() => {
-    if (currentUser?.id === SUPER_ADMIN_USER_ID) {
-      refresh();
+    if (currentUser?.id !== SUPER_ADMIN_USER_ID) {
+      return;
     }
+    let cancelled = false;
+    void (async () => {
+      const [wsRes, profRes] = await Promise.all([listAllWorkshops(), listAllProfiles()]);
+      if (cancelled) {
+        return;
+      }
+      setLoading(false);
+      if (wsRes.error || profRes.error) {
+        setLoadError(wsRes.error ?? profRes.error);
+        return;
+      }
+      setLoadError(null);
+      setWorkshops(wsRes.data ?? []);
+      setProfiles(profRes.data ?? []);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [currentUser?.id]);
 
   if (!currentUser || currentUser.id !== SUPER_ADMIN_USER_ID) {

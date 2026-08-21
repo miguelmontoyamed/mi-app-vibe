@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Linking,
@@ -75,11 +75,12 @@ export default function AdminScreen() {
   const [supportMessage, setSupportMessage] = useState('');
 
   // ── Panel de Liquidación y Rendimiento Mensual por Técnico ──
-  /** Periodo seleccionado en el panel ('YYYY-MM'); null hasta hidratar opciones. */
+  /** Periodo elegido explícitamente por el usuario ('YYYY-MM'); null hasta que elige. */
   const [selectedPeriod, setSelectedPeriod] = useState<string | null>(null);
   /** Desglose por técnico del periodo seleccionado (fuente: RPC en la nube). */
   const [performances, setPerformances] = useState<TechnicianMonthlyPerformance[]>([]);
-  const [perfLoading, setPerfLoading] = useState(false);
+  /** Último periodo cuyos datos ya aterrizaron de la RPC (base del spinner derivado). */
+  const [loadedPeriod, setLoadedPeriod] = useState<string | null>(null);
   const [perfError, setPerfError] = useState<string | null>(null);
 
   /** Mes actual + meses archivados (cierres) + meses con entregas, desc. */
@@ -87,39 +88,48 @@ export default function AdminScreen() {
     () => buildPeriodOptions(currentPeriod, closures.map((c) => c.period), repairs),
     [currentPeriod, closures, repairs]
   );
+  /**
+   * Periodo efectivo: la elección del usuario y, si aún no eligió, el mes en
+   * curso o el más reciente disponible (evita panel vacío en talleres nuevos).
+   * Derivado en render — sin efecto ni setState.
+   */
+  const effectivePeriod = selectedPeriod ?? currentPeriod ?? periodOptions[0]?.period ?? null;
   /** Los meses archivados son de solo lectura; el mes en curso sigue abierto. */
-  const isArchivedPeriod = selectedPeriod !== null && selectedPeriod !== currentPeriod;
+  const isArchivedPeriod = effectivePeriod !== null && effectivePeriod !== currentPeriod;
 
-  // Periodo por defecto: el mes en curso; si aún no hay periodo abierto,
-  // el más reciente disponible (evita panel vacío en talleres nuevos).
+  // Spinner derivado: hay carga en vuelo mientras se muestra un periodo cuyos
+  // datos todavía no aterrizan (primera carga o cambio de mes).
+  const perfLoading = effectivePeriod !== null && loadedPeriod !== effectivePeriod;
+
+  /** Carga el desglose mensual desde la RPC cada vez que cambia el periodo.
+   *  Todos los setState ocurren DESPUÉS del await: nunca síncronos en el efecto. */
   useEffect(() => {
-    if (!selectedPeriod && periodOptions.length > 0) {
-      setSelectedPeriod(currentPeriod ?? periodOptions[0].period);
+    if (!effectivePeriod) {
+      return;
     }
-  }, [currentPeriod, periodOptions, selectedPeriod]);
-
-  /** Carga el desglose mensual desde la RPC cada vez que cambia el periodo. */
-  const loadPerformance = useCallback(async () => {
-    if (!selectedPeriod) return;
-    setPerfLoading(true);
-    setPerfError(null);
-    const result = await fetchMonthlyPerformance(selectedPeriod);
-    if (result.ok) {
-      setPerformances(result.data);
-    } else {
-      setPerformances([]);
-      setPerfError(result.error ?? 'Error al cargar el rendimiento mensual.');
-    }
-    setPerfLoading(false);
-  }, [fetchMonthlyPerformance, selectedPeriod]);
-
-  useEffect(() => {
-    void loadPerformance();
-  }, [loadPerformance]);
+    let cancelled = false;
+    void (async () => {
+      const result = await fetchMonthlyPerformance(effectivePeriod);
+      if (cancelled) {
+        return;
+      }
+      if (result.ok) {
+        setPerformances(result.data);
+        setPerfError(null);
+      } else {
+        setPerformances([]);
+        setPerfError(result.error ?? 'Error al cargar el rendimiento mensual.');
+      }
+      setLoadedPeriod(effectivePeriod);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchMonthlyPerformance, effectivePeriod]);
 
   /** Resumen global del periodo + técnicos ordenados por producción neta. */
   const monthlySummary = summarizePerformances(
-    selectedPeriod ?? '',
+    effectivePeriod ?? '',
     isArchivedPeriod,
     performances
   );
@@ -590,7 +600,7 @@ export default function AdminScreen() {
         {periodOptions.length > 0 && (
           <View style={styles.periodRow}>
             {periodOptions.map((option) => {
-              const isSelected = option.period === selectedPeriod;
+              const isSelected = option.period === effectivePeriod;
               return (
                 <Pressable
                   key={option.period}
@@ -708,7 +718,7 @@ export default function AdminScreen() {
                 themeColor="textSecondary"
                 style={{ fontStyle: 'italic' }}>
                 Sin órdenes entregadas en{' '}
-                {selectedPeriod ? formatPeriodLabel(selectedPeriod) : 'este periodo'}.
+                {effectivePeriod ? formatPeriodLabel(effectivePeriod) : 'este periodo'}.
               </ThemedText>
             ) : (
               monthlySummary.technicians.map((t) => {

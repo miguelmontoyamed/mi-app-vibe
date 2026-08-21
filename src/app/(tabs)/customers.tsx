@@ -32,13 +32,13 @@ export default function CustomersScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
-  // Los tabs solo se renderizan autenticados; el guard mantiene el tipado seguro.
-  if (!currentUser) {
-    return null;
-  }
-
   // Group repairs by (phone | name) so a returning client shows their full history.
+  // Vive ANTES del guard de autenticación (regla de hooks); sin usuario devuelve
+  // vacío porque el componente no renderiza nada igualmente.
   const customers = useMemo<CustomerGroup[]>(() => {
+    if (!currentUser) {
+      return [];
+    }
     const map = new Map<string, CustomerGroup>();
     // RBAC: el técnico solo ve clientes de sus órdenes asignadas; el admin todos.
     for (const r of visibleRepairs(repairs, currentUser)) {
@@ -60,6 +60,11 @@ export default function CustomersScreen() {
       (a, b) => b.repairs.length - a.repairs.length
     );
   }, [repairs, currentUser]);
+
+  // Los tabs solo se renderizan autenticados; el guard mantiene el tipado seguro.
+  if (!currentUser) {
+    return null;
+  }
 
   const filtered = customers.filter(
     (c) =>
