@@ -9,7 +9,7 @@ import { Screen } from '@/components/ui/screen';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Brand, Spacing } from '@/constants/theme';
-import { useAuth } from '@/context/auth-context';
+import { useAuth, type User } from '@/context/auth-context';
 import { useRepair } from '@/context/repair-context';
 import { supabase } from '@/lib/supabase';
 
@@ -53,7 +53,7 @@ function notify(message: string) {
 export default function ReceiveScreen() {
   const router = useRouter();
   const { addRepair } = useRepair();
-  const { currentUser } = useAuth();
+  const { currentUser, users } = useAuth();
 
   const [clientName, setClientName] = useState('');
   const [phone, setPhone] = useState('');
@@ -64,6 +64,11 @@ export default function ReceiveScreen() {
   const [advancePayment, setAdvancePayment] = useState('');
   const [budget, setBudget] = useState('');
   const [partsCost, setPartsCost] = useState('');
+  /**
+   * Miembro del taller elegido para asumir la orden. `null` = el usuario
+   * actual (comportamiento por defecto, idéntico al histórico).
+   */
+  const [assignedMember, setAssignedMember] = useState<User | null>(null);
 
   // Load saved receipt data when the form initializes.
   // NOTE: unlockCode (device PIN) is intentionally NOT persisted — see handleSave.
@@ -94,6 +99,17 @@ export default function ReceiveScreen() {
   if (!currentUser) {
     return null;
   }
+
+  // Destinatarios posibles de la orden: el usuario actual primero ("tú") y
+  // después el resto de miembros activos del taller (dueño + técnicos).
+  // `users` ya viene filtrado por is_active desde auth-context.
+  const memberOptions: { user: User; label: string }[] = [
+    { user: currentUser, label: `${currentUser.name} (tú)` },
+    ...users
+      .filter((u) => u.id !== currentUser.id)
+      .map((u) => ({ user: u, label: u.name })),
+  ];
+  const resolvedAssignee = assignedMember ?? currentUser;
 
   const handleSave = async () => {
     if (
@@ -131,8 +147,8 @@ export default function ReceiveScreen() {
       unlockCode: unlockCode.trim() || 'No especificado',
       imei: imei.trim() || undefined,
       advancePayment: advanceNum,
-      technicianName: currentUser.name,
-      technicianId: currentUser.id,
+      technicianName: resolvedAssignee.name,
+      technicianId: resolvedAssignee.id,
     });
 
     // La orden se guardó SOLO si Supabase confirmó el INSERT. Si la DB la
@@ -165,7 +181,7 @@ export default function ReceiveScreen() {
       console.error('Error saving receipt data:', error);
     }
 
-    notify(`¡Equipo recibido y asignado a ${currentUser.name}!`);
+    notify(`¡Equipo recibido y asignado a ${resolvedAssignee.name}!`);
 
     // Reset form
     setClientName('');
@@ -177,6 +193,7 @@ export default function ReceiveScreen() {
     setAdvancePayment('');
     setBudget('');
     setPartsCost('');
+    setAssignedMember(null);
 
     // Navigate to jobs list
     router.push('/jobs');
@@ -298,6 +315,26 @@ export default function ReceiveScreen() {
           maxLength={MAX_LENGTHS.money}
         />
 
+        {/* Asignación: quién asume la orden (por defecto el usuario actual). */}
+        <View style={styles.assignGroup}>
+          <ThemedText type="smallBold">Asignar a</ThemedText>
+          <View style={styles.chipsRow}>
+            {memberOptions.map((option) => {
+              const selected = (assignedMember?.id ?? currentUser.id) === option.user.id;
+              return (
+                <Pressable
+                  key={option.user.id}
+                  onPress={() => setAssignedMember(option.user)}
+                  style={[styles.chip, selected && styles.chipSelected]}>
+                  <ThemedText style={[styles.chipText, selected && styles.chipTextSelected]}>
+                    {option.label}
+                  </ThemedText>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+
         <Button label="Registrar Recepción y Asignar" onPress={handleSave} style={styles.submitButton} />
       </ThemedView>
     </Screen>
@@ -348,6 +385,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     lineHeight: 16,
+  },
+  assignGroup: {
+    gap: Spacing.one,
+  },
+  chipSelected: {
+    backgroundColor: Brand.primary,
+  },
+  chipTextSelected: {
+    color: Brand.onBrand,
   },
   rowInputs: {
     flexDirection: 'row',

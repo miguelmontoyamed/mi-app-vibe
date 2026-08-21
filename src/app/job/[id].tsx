@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Modal, Platform, StyleSheet, View } from 'react-native';
+import { Alert, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -8,8 +8,8 @@ import { Button } from '@/components/ui/button';
 import { FormInput } from '@/components/ui/form-input';
 import { Screen } from '@/components/ui/screen';
 import { StatusBadge } from '@/components/ui/status-badge';
-import { Shape, Spacing, statusStyle } from '@/constants/theme';
-import { useAuth } from '@/context/auth-context';
+import { Brand, Shape, Spacing, statusStyle } from '@/constants/theme';
+import { useAuth, type User } from '@/context/auth-context';
 import { useRepair } from '@/context/repair-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useTheme } from '@/hooks/use-theme';
@@ -19,7 +19,7 @@ import { canCancel, isAssignedToTechnician, profitForRepair } from '@/utils/repa
 export default function JobDetailScreen() {
   const router = useRouter();
   const theme = useTheme();
-  const { currentUser } = useAuth();
+  const { currentUser, users } = useAuth();
   const { repairs, cancelRepair, deleteRepair, updateRepair } = useRepair();
   const { id } = useLocalSearchParams<{ id: string }>();
   const scheme = useColorScheme();
@@ -28,6 +28,9 @@ export default function JobDetailScreen() {
   const [cancelMotivo, setCancelMotivo] = useState('');
   const [partsModalVisible, setPartsModalVisible] = useState(false);
   const [partsInput, setPartsInput] = useState('');
+  const [reassignModalVisible, setReassignModalVisible] = useState(false);
+  /** Miembro elegido en el modal de reasignación (null = aún sin elegir). */
+  const [reassignTarget, setReassignTarget] = useState<User | null>(null);
 
   const repair = repairs.find((r) => r.id === id);
 
@@ -64,6 +67,50 @@ export default function JobDetailScreen() {
   const openPartsModal = () => {
     setPartsInput(partsCost > 0 ? String(partsCost) : '');
     setPartsModalVisible(true);
+  };
+
+  // Destinatarios para reasignar: el asignado actual primero ("actual") y
+  // después el resto de miembros activos del taller (dueño + técnicos).
+  // RLS (`repairs_workshop_update`) ya permite que CUALQUIER miembro del
+  // taller actualice la orden, así que no hay gate de rol aquí.
+  const currentAssignee = repair.technicianId
+    ? users.find((u) => u.id === repair.technicianId)
+    : undefined;
+  const reassignOptions: { user: User; label: string }[] = (() => {
+    const labelFor = (u: User): string => {
+      const tags = [
+        u.id === currentAssignee?.id ? 'actual' : null,
+        currentUser && u.id === currentUser.id ? 'tú' : null,
+      ].filter((t): t is string => t !== null);
+      return tags.length > 0 ? `${u.name} (${tags.join(' · ')})` : u.name;
+    };
+    const list: { user: User; label: string }[] = [];
+    if (currentAssignee) {
+      list.push({ user: currentAssignee, label: labelFor(currentAssignee) });
+    }
+    for (const u of users) {
+      if (u.id !== currentAssignee?.id) {
+        list.push({ user: u, label: labelFor(u) });
+      }
+    }
+    return list;
+  })();
+
+  const openReassignModal = () => {
+    setReassignTarget(null);
+    setReassignModalVisible(true);
+  };
+
+  const handleConfirmReassign = async () => {
+    if (!reassignTarget) {
+      return;
+    }
+    await updateRepair(repair.id, {
+      technicianId: reassignTarget.id,
+      technicianName: reassignTarget.name,
+    });
+    setReassignModalVisible(false);
+    setReassignTarget(null);
   };
 
   const handleSaveParts = async () => {
@@ -238,6 +285,14 @@ export default function JobDetailScreen() {
           onPress={openPartsModal}
           style={styles.partsBtn}
         />
+        {repair.status !== 'Cancelado / No Reparado' && (
+          <Button
+            label="👥 Reasignar técnico"
+            variant="secondary"
+            onPress={openReassignModal}
+            style={styles.partsBtn}
+          />
+        )}
       </ThemedView>
 
       {/* Dangerous actions */}
@@ -316,6 +371,50 @@ export default function JobDetailScreen() {
           </ThemedView>
         </View>
       </Modal>
+
+      {/* Reassign technician modal (cualquier miembro del taller) */}
+      <Modal
+        visible={reassignModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setReassignModalVisible(false)}>
+        <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
+          <ThemedView type="backgroundElement" style={styles.modalCard}>
+            <ThemedText type="subtitle">Reasignar técnico</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              La orden pasará al miembro seleccionado. Útil cuando el técnico
+              asignado no puede continuar con el trabajo.
+            </ThemedText>
+            {reassignOptions.length === 0 ? (
+              <ThemedText type="small" themeColor="textSecondary">
+                No hay miembros disponibles en el taller.
+              </ThemedText>
+            ) : (
+              <View style={styles.chipsWrap}>
+                {reassignOptions.map((option) => {
+                  const selected = reassignTarget?.id === option.user.id;
+                  return (
+                    <Pressable
+                      key={option.user.id}
+                      onPress={() => setReassignTarget(option.user)}
+                      style={[styles.reassignChip, selected && styles.reassignChipSelected]}>
+                      <ThemedText
+                        type="smallBold"
+                        style={[styles.reassignChipText, selected && styles.reassignChipTextSelected]}>
+                        {option.label}
+                      </ThemedText>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+            <View style={styles.modalActions}>
+              <Button label="Cancelar" variant="secondary" onPress={() => setReassignModalVisible(false)} style={styles.modalBtn} />
+              <Button label="Asignar" variant="primary" onPress={handleConfirmReassign} disabled={!reassignTarget} style={styles.modalBtn} />
+            </View>
+          </ThemedView>
+        </View>
+      </Modal>
     </Screen>
   );
 }
@@ -367,6 +466,27 @@ const styles = StyleSheet.create({
   },
   partsBtn: {
     marginTop: Spacing.one,
+  },
+  chipsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.two,
+  },
+  reassignChip: {
+    backgroundColor: Brand.secondary,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.one,
+    borderRadius: Spacing.five,
+    overflow: 'hidden',
+  },
+  reassignChipSelected: {
+    backgroundColor: Brand.primary,
+  },
+  reassignChipText: {
+    color: Brand.onBrand,
+  },
+  reassignChipTextSelected: {
+    color: Brand.onBrand,
   },
   dangerZone: {
     gap: Spacing.two,
