@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Linking,
@@ -20,6 +20,7 @@ import { useBilling } from '@/context/billing-context';
 import { useRepair } from '@/context/repair-context';
 import { useWorkshop } from '@/context/workshop-context';
 import { useTheme } from '@/hooks/use-theme';
+import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import { SUPER_ADMIN_USER_ID } from '@/lib/super-admin';
 import type { TechnicianMonthlyPerformance } from '@/types/billing';
 import { formatCOP } from '@/utils/format';
@@ -82,6 +83,10 @@ export default function AdminScreen() {
   /** Último periodo cuyos datos ya aterrizaron de la RPC (base del spinner derivado). */
   const [loadedPeriod, setLoadedPeriod] = useState<string | null>(null);
   const [perfError, setPerfError] = useState<string | null>(null);
+  /** Tick incrementado (con debounce) cuando Realtime reporta cambios en repairs. */
+  const [realtimeTick, setRealtimeTick] = useState(0);
+  /** Timer del debounce Realtime (se limpia al desmontar o tras disparar). */
+  const realtimeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /** Mes actual + meses archivados (cierres) + meses con entregas, desc. */
   const periodOptions = useMemo(
@@ -101,8 +106,9 @@ export default function AdminScreen() {
   // datos todavía no aterrizan (primera carga o cambio de mes).
   const perfLoading = effectivePeriod !== null && loadedPeriod !== effectivePeriod;
 
-  /** Carga el desglose mensual desde la RPC cada vez que cambia el periodo.
-   *  Todos los setState ocurren DESPUÉS del await: nunca síncronos en el efecto. */
+  /** Carga el desglose mensual desde la RPC cuando cambia el periodo o llega
+   *  un tick realtime. Todos los setState ocurren DESPUÉS del await: nunca
+   *  síncronos en el efecto. */
   useEffect(() => {
     if (!effectivePeriod) {
       return;
@@ -125,7 +131,42 @@ export default function AdminScreen() {
     return () => {
       cancelled = true;
     };
-  }, [fetchMonthlyPerformance, effectivePeriod]);
+  }, [fetchMonthlyPerformance, effectivePeriod, realtimeTick]);
+
+  // ── Tiempo real: refresca el desglose cuando cambian las órdenes ──
+  // Suscripción postgres_changes sobre public.repairs (la visibilidad de los
+  // eventos respeta RLS por taller). Cualquier entrega, edición de repuestos,
+  // cobro o reasignación — propia o hecha desde otro dispositivo por otro
+  // miembro — dispara una recarga DEBOUNCED del periodo visible. El setState
+  // ocurre dentro del callback de la suscripción (sistema externo), nunca
+  // síncrono en el cuerpo del efecto.
+  useEffect(() => {
+    if (!isSupabaseConfigured) {
+      return;
+    }
+    const channel = supabase
+      .channel('admin-liquidacion-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'repairs' },
+        () => {
+          if (realtimeTimerRef.current) {
+            clearTimeout(realtimeTimerRef.current);
+          }
+          realtimeTimerRef.current = setTimeout(() => {
+            setRealtimeTick((tick) => tick + 1);
+          }, 800);
+        },
+      )
+      .subscribe();
+    return () => {
+      if (realtimeTimerRef.current) {
+        clearTimeout(realtimeTimerRef.current);
+        realtimeTimerRef.current = null;
+      }
+      void supabase.removeChannel(channel);
+    };
+  }, []);
 
   /** Resumen global del periodo + técnicos ordenados por producción neta. */
   const monthlySummary = summarizePerformances(

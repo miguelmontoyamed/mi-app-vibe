@@ -663,3 +663,21 @@ create index if not exists idx_monthly_closures_workshop_period on public.monthl
 -- DATOS INICIALES (demo)
 -- ============================================================
 -- Nota: el taller y el dueño se crean solos al registrar la 1ª cuenta.
+-- ============================================================
+-- REALTIME: liquidación y rendimiento mensual en vivo
+-- ============================================================
+-- public.repairs en la publicación supabase_realtime: el panel de
+-- Liquidación (admin.tsx) se suscribe a postgres_changes y refresca el
+-- desglose sin recargar. La visibilidad respeta RLS por taller.
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'repairs'
+  ) then
+    alter publication supabase_realtime add table public.repairs;
+  end if;
+end
+$$;
