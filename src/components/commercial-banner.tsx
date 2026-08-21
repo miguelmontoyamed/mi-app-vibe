@@ -5,8 +5,8 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Brand, Spacing } from '@/constants/theme';
 
-/** Canal de contacto comercial de TechRepair Master (uso en banner). */
-export const CONTACT_WHATSAPP = '+57 300 000 0000';
+/** Canal de contacto comercial de TechRepair Master (banner, PDF e impresión). */
+export const CONTACT_WHATSAPP = '+57 300 201 1801';
 
 /**
  * Banner de contacto comercial y profesional. Reemplaza los textos de prueba

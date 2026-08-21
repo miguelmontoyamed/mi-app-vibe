@@ -366,7 +366,7 @@ export default function AdminScreen() {
 
   const handleSupportWhatsApp = () => {
     if (!handleSupportValidation()) return;
-    const url = `https://wa.me/573000000000?text=${encodeURIComponent(
+    const url = `https://wa.me/573002011801?text=${encodeURIComponent(
       buildSupportMessage()
     )}`;
     if (Platform.OS === 'web') {
