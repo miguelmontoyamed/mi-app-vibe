@@ -11,7 +11,7 @@
 export interface ReceiptPdfData {
   /** Nombre del taller (membrete). */
   brand: string;
-  /** NIT colombiano de 10 dígitos (9 base + DV), formateado con formatNit. */
+  /** NIT colombiano de longitud libre (1–15 base + DV), formateado con formatNit. */
   nit?: string;
   /** Dirección del taller. */
   address?: string;

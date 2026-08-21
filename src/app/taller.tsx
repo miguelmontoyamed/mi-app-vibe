@@ -10,7 +10,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Brand, Shape, Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { useWorkshop } from '@/context/workshop-context';
-import { formatNit, NIT_BASE_LENGTH, nitCheckDigit, normalizeNit } from '@/utils/nit';
+import { formatNit, NIT_MAX_BASE_LENGTH, nitCheckDigit, normalizeNit } from '@/utils/nit';
 
 interface FieldErrors {
   name?: string;
@@ -22,10 +22,11 @@ interface FieldErrors {
  * Onboarding / perfil del taller. Guarda el membrete (nombre, NIT, dirección,
  * teléfono) que se imprime en los recibos de reparación.
  *
- * El campo NIT solo acepta los 9 dígitos base; el dígito de verificación (DV)
- * se calcula automáticamente en segundo plano con el módulo 11 de la DIAN
- * (`nitCheckDigit`) y se adjunta al guardar, por lo que el usuario nunca
- * escribe guiones ni el DV.
+ * El campo NIT acepta cualquier cantidad de dígitos base (1–15): personas
+ * naturales suelen tener menos de 9 y jurídicas 9 o más. El dígito de
+ * verificación (DV) se calcula automáticamente en segundo plano con el módulo
+ * 11 de la DIAN (`nitCheckDigit`) y se adjunta al guardar, por lo que el
+ * usuario nunca escribe guiones ni el DV.
  */
 export default function TallerScreen() {
   const router = useRouter();
@@ -43,21 +44,21 @@ export default function TallerScreen() {
   const [name, setName] = useState(profile?.name ?? '');
   // Solo los 9 dígitos base: si el perfil previo guardó 10 (base + DV), se
   // recortan y el DV se recalcula con el mismo algoritmo.
-  const [nit, setNit] = useState(() => normalizeNit(profile?.nit ?? '').slice(0, NIT_BASE_LENGTH));
+  const [nit, setNit] = useState(() => normalizeNit(profile?.nit ?? '').slice(0, NIT_MAX_BASE_LENGTH));
   const [address, setAddress] = useState(profile?.address ?? '');
   const [phone, setPhone] = useState(profile?.phone ?? '');
   const [errors, setErrors] = useState<FieldErrors>({});
 
   // DV calculado en vivo (módulo 11 DIAN) apenas hay 9 dígitos base.
-  const calculatedDv = nit.length === NIT_BASE_LENGTH ? nitCheckDigit(nit) : null;
+  const calculatedDv = nit.length > 0 ? nitCheckDigit(nit) : null;
 
   const handleSave = async () => {
     const nextErrors: FieldErrors = {};
     if (!name.trim()) {
       nextErrors.name = 'Ingresa el nombre del taller.';
     }
-    if (nit.length !== NIT_BASE_LENGTH) {
-      nextErrors.nit = 'NIT inválido: ingresa los 9 dígitos (sin guiones ni dígito de verificación).';
+    if (nit.length < 1) {
+      nextErrors.nit = 'NIT inválido: ingresa los dígitos del NIT (sin guiones ni dígito de verificación).';
     }
     if (!phone.trim()) {
       nextErrors.phone = 'Ingresa el teléfono del taller.';
@@ -67,7 +68,7 @@ export default function TallerScreen() {
       return;
     }
 
-    // El DV se adjunta automáticamente: se guardan los 10 dígitos (base + DV).
+    // El DV se adjunta automáticamente: se guardan base + DV (longitud libre).
     // `saveProfile` espera la confirmación de Supabase y muestra su propio
     // alert de error en caso de fallo; solo resolvemos aquí si persistió.
     await saveProfile({
@@ -118,8 +119,8 @@ export default function TallerScreen() {
             placeholder="Ej: 901234567"
             keyboardType="number-pad"
             value={nit}
-            onChangeText={(text) => setNit(text.replace(/\D/g, '').slice(0, NIT_BASE_LENGTH))}
-            maxLength={NIT_BASE_LENGTH}
+            onChangeText={(text) => setNit(text.replace(/\D/g, '').slice(0, NIT_MAX_BASE_LENGTH))}
+            maxLength={NIT_MAX_BASE_LENGTH}
           />
           {errors.nit ? <ThemedText style={styles.error}>{errors.nit}</ThemedText> : null}
           {calculatedDv !== null ? (
@@ -129,8 +130,8 @@ export default function TallerScreen() {
             </ThemedText>
           ) : (
             <ThemedText type="small" themeColor="textSecondary" style={styles.nitHint}>
-              Ingresa los 9 dígitos del NIT: el dígito de verificación se calcula
-              automáticamente.
+              Ingresa los dígitos del NIT (con la longitud que sea): el dígito de
+              verificación se calcula automáticamente.
             </ThemedText>
           )}
         </View>

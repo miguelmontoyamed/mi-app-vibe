@@ -19,8 +19,8 @@ import { useAuth } from '@/context/auth-context';
 export interface WorkshopProfile {
   /** Nombre del taller (nombre del taller). */
   name: string;
-  /** NIT colombiano: 9 dígitos + dígito de verificación (validado en el form). */
-  nit: string;
+/** NIT colombiano: dígitos base (1–15) + dígito de verificación (validado en el form). */
+nit: string;
   /** Dirección del taller. */
   address: string;
   /** Teléfono del taller. */
