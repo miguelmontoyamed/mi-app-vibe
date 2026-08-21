@@ -82,6 +82,12 @@ producción. El desglose mensual se calcula por fecha real de entrega
 (`delivered_at`) y los meses cerrados se consumen de solo lectura.
 
 ## Decisiones Recientes
+- **RPC liquidación (fix 2026-08-21):** `count(*)` devuelve bigint y
+  `RETURN QUERY` no downcastea → error 42804 solo con usuario REAL (con
+  service_role `auth.uid()` es null y la función salía temprano: por eso el
+  smoke test no lo detectó). Fix: `count(*)::int`. Para probar RPCs con
+  sesión simulada vía CLI: `supabase db query --linked` + set_config de
+  `request.jwt.claims` en un statement con CROSS JOIN LATERAL.
 - **Lint react-hooks (2026-08-21):** el periodo por defecto del panel de
   liquidación es DERIVADO (`effectivePeriod = selectedPeriod ?? currentPeriod
   ?? periodOptions[0]?.period`), sin efecto de ajuste; el spinner de carga se
@@ -113,7 +119,8 @@ producción. El desglose mensual se calcula por fecha real de entrega
 - Las anon keys son públicas por diseño (RLS es la barrera real).
 
 ## Próximo Paso Esperado
-- Verificación funcional en vivo del panel (abrir Admin → Liquidación,
-  alternar mes archivado vs en curso) tras el deploy.
-- La migración `20260821000000_technician_monthly_performance.sql` ya está
-  aplicada en vivo; schema.sql espejado con delivered_at, trigger y RPC.
+- El panel de liquidación ya funciona en producción (fix 42804 aplicado en
+  vivo el 2026-08-21): verificar en vivo alternando mes archivado vs en curso.
+- La migración `20260821000000_technician_monthly_performance.sql` y el fix
+  `20260821210000_fix_monthly_performance_count_type.sql` están aplicados en
+  vivo; schema.sql espejado con delivered_at, trigger, RPC (count(*)::int).
