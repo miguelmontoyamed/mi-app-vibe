@@ -422,7 +422,7 @@ begin
     coalesce(prof.id::text, nullif(r.technician_id, ''), r.technician_name) as technician_id,
     coalesce(prof.full_name, nullif(r.technician_name, ''), 'Sin asignar')  as technician_name,
     coalesce(prof.commission_rate, 0)                                       as commission_rate,
-    count(*)                                                                as delivered_count,
+    count(*)::int                                                           as delivered_count,
     coalesce(sum(r.budget), 0)                                              as total_revenue,
     coalesce(sum(r.parts_cost), 0)                                          as total_parts_cost,
     coalesce(sum(greatest(r.budget - coalesce(r.parts_cost, 0), 0)), 0)     as net_production,
