@@ -14,8 +14,33 @@
   - Nativo (`src/utils/receipt-pdf.ts`): `expo-print` → `expo-sharing`.
   - Membrete del taller, **cálculo DIAN Módulo 11** (`src/utils/nit.ts`),
     botones de impresión web y de compartir por WhatsApp/PDF con feedback.
+- **Panel de Liquidación y Rendimiento Mensual por Técnico operativo
+  (histórico mes a mes):**
+  - `repairs.delivered_at` (fecha real de entrega/cobro) estampada por el
+    trigger `trg_repairs_delivered_at` al pasar a 'Entregado' (se limpia si
+    sale del estado); backfill aplicado con `updated_at` para órdenes previas.
+  - RPC `get_technician_monthly_performance(p_period 'YYYY-MM')`
+    (SECURITY DEFINER, taller resuelto desde la sesión, sin sesión → vacío):
+    agrupa las órdenes ENTREGADAS por MES DE ENTREGA real
+    (`coalesce(delivered_at, updated_at, date)::date`) y devuelve por técnico:
+    órdenes entregadas, total recaudado (`budget`), repuestos (`parts_cost`),
+    producción neta (Σ `max(budget − parts_cost, 0)`), comisión a liquidar
+    (Σ redondeo de producción neta × `commission_rate`, fracción 0–1) y
+    ganancia neta del taller. Órdenes legacy sin `technician_id` se agrupan
+    por nombre histórico con comisión 0. Aplicada en vivo a la BD real.
+  - Tipado estricto en `src/types/billing.ts` (`TechnicianMonthlyPerformance`,
+    `MonthlyBreakdownSummary`, `PeriodOption`; cero `any`).
+  - Lógica pura testeable en `src/utils/billing-performance.ts` (+9 tests:
+    periodos disponibles, etiquetas es-CO, resumen global).
+  - `BillingProvider.fetchMonthlyPerformance(period)` en
+    `src/context/billing-context.tsx`: llama a la RPC y normaliza numeric → number.
+  - UI en `admin.tsx`: selector de periodo (Mes Actual "En Curso" + meses
+    archivados de `monthly_closures` y entregas, solo lectura), tarjeta de
+    resumen global (Facturado / Repuestos / Comisiones por Pagar / Utilidad
+    Neta) y tarjetas por técnico con badge de %, métricas COP exactas y fila
+    destacada "Por liquidar al técnico".
 - **Cierres de mes operativos** (snapshot mensual para verificación futura +
-  facturación inmediata del mes nuevo):
+   facturación inmediata del mes nuevo):
   - Tabla `public.monthly_closures` (workshop_id, period 'YYYY-MM', revenue,
     parts_cost, delivered_count, cancelled_count, total_count) con RLS de SOLO
     lectura por taller.
@@ -36,17 +61,19 @@
   eliminado ya no bloquea `fetchRepairs`; el cliente se auto-desloguea.
 
 ## Foco Operativo Inmediato (Sprint Actual)
-**Módulo de Control de Caja y Cierre de Turno:**
-1. **Diseñar el esquema SQL** para la tabla `cash_register` / `cash_movements`
-   en Supabase con **RLS estricto por `workshop_id`** (hoy la tabla NO existe en
-   el schema — solo hay métricas en memoria en `admin.tsx`).
-2. **Flujo de caja:**
-   - Apertura de caja (base inicial).
-   - Registro de ingresos/egresos por **método de pago** (Efectivo,
-     Bre-B/Transferencia).
-   - Arqueo y cierre de turno diario.
+**Consolidación del módulo de liquidación mensual (COMPLETADO 2026-08-21):**
+el panel de rendimiento por técnico con histórico archivado ya está en
+producción. El desglose mensual se calcula por fecha real de entrega
+(`delivered_at`) y los meses cerrados se consumen de solo lectura.
 
 ## Decisiones Recientes
+- **Liquidación mensual:** la comisión se liquida sobre la PRODUCCIÓN NETA
+  (`max(budget − parts_cost, 0)`) con `commission_rate` como FRACCIÓN 0–1
+  (0.30 = 30%), idéntico a `commissionForRepair()`; el agrupado mensual usa la
+  FECHA DE ENTREGA REAL (`delivered_at`, trigger) y no la fecha de creación.
+- Los meses archivados NO guardan snapshot por técnico: el histórico por
+  técnico se recalcula desde `repairs` (inmutables en la práctica); el badge
+  de % muestra la comisión VIGENTE del perfil también en meses pasados.
 - `ensure_workshop()` devuelve `null` (sin violar FK) cuando el usuario ya no
   existe en `auth.users`; `resolveWorkshopId()` cierra la sesión obsoleta.
 - `expo-print` en web solo llama a `window.print()` (no genera PDF); por eso el
@@ -62,8 +89,7 @@
 - Las anon keys son públicas por diseño (RLS es la barrera real).
 
 ## Próximo Paso Esperado
-- Definir el esquema `cash_register` + RLS (migración) y la pantalla de Control
-  de Caja, según la prioridad del administrador del proyecto.
-- La migración `20260820010000_monthly_closures.sql` ya está aplicada en vivo;
-  los cambios de schema.sql para cierres de mes están en el working tree sin
-  commitear junto con el resto de esta sesión.
+- Verificación funcional en vivo del panel (abrir Admin → Liquidación,
+  alternar mes archivado vs en curso) tras el deploy.
+- La migración `20260821000000_technician_monthly_performance.sql` ya está
+  aplicada en vivo; schema.sql espejado con delivered_at, trigger y RPC.

@@ -26,6 +26,17 @@
   `src/utils/receipt-pdf.web.ts`; nativo con `expo-print` + `expo-sharing` en
   `src/utils/receipt-pdf.ts`; botones con feedback en `receipt/[id].tsx`;
   tests unitarios del PDF web (magia `%PDF`, folio, español).
+- **Panel de Liquidación y Rendimiento Mensual por Técnico (histórico mes a
+  mes):** `repairs.delivered_at` + trigger `trg_repairs_delivered_at` (fecha
+  real de entrega/cobro, con backfill); RPC
+  `get_technician_monthly_performance('YYYY-MM')` (SECURITY DEFINER por
+  taller) con órdenes entregadas, recaudo (`budget`), repuestos
+  (`parts_cost`), producción neta, comisión a liquidar y utilidad del taller;
+  tipos estrictos en `src/types/billing.ts`; helpers puros en
+  `src/utils/billing-performance.ts` (+9 tests); `fetchMonthlyPerformance()`
+  en `BillingProvider`; UI en `admin.tsx` con selector de periodo (mes en
+  curso + archivados solo lectura), resumen global y tarjetas COP por técnico.
+  Migración aplicada en vivo; tsc 0 errores; 52/52 tests.
 - **Cierres de mes:** tabla `monthly_closures` + RPC `ensure_month_closure()`
   (SECURITY DEFINER, idempotente) en schema.sql y migración
   `20260820010000_monthly_closures.sql` aplicada en vivo a la BD real;
@@ -36,19 +47,17 @@
   (7/7 checks), desplegado en producción.
 
 ## En Desarrollo / Próximo (🔄)
-- **Creación de la tabla `cash_register` / `cash_movements`** y su RLS estricto
-  por `workshop_id` en Supabase (hoy la tabla NO existe en el schema).
-- **Pantalla de Control de Caja** (`src/app/(tabs)/caja.tsx` o dashboard de
-  caja): apertura (base inicial), ingresos/egresos por método de pago
-  (Efectivo, Bre-B/Transferencia) y arqueo/cierre de turno diario.
+- **Verificación funcional en vivo** del panel de liquidación (alternar mes
+  archivado vs en curso) tras el deploy a producción.
 
 ## Pendiente (◻)
-- **Reportes financieros consolidados y exportación contable** (métricas por
-  técnico, por servicio, márgenes, proyecciones).
+- **Reportes financieros consolidados y exportación contable** (por servicio,
+  márgenes, proyecciones).
 
 ## Historial Reciente
 | Fecha | Cambio |
 |-------|--------|
+| 2026-08-21 | Panel de Liquidación y Rendimiento Mensual por Técnico: `delivered_at` + trigger + RPC `get_technician_monthly_performance` (migración aplicada en vivo), tipos estrictos, helpers testeados, UI con selector de periodo y tarjetas COP por técnico |
 | 2026-08-20 | Fix deploy web: `metro.config.js` redirige jspdf a la build ESM (el SSR estático resolvía la build node con require AMD que rompía `expo export -p web`) |
 | 2026-08-20 | Cierres de mes: tabla `monthly_closures` + RPC `ensure_month_closure` + `BillingProvider` (auto-cierre al abrir la app); migración aplicada en vivo |
 | 2026-08-20 | Compartir recibo PDF por WhatsApp en web (jspdf + Web Share API + fallback descarga) y nativo (expo-print + sharing) con tests |

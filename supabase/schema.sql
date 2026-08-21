@@ -154,6 +154,9 @@ alter table public.repairs add column if not exists unlock_code text;
 alter table public.repairs add column if not exists imei text;
 alter table public.repairs add column if not exists issue text;
 alter table public.repairs add column if not exists updated_at timestamptz not null default now();
+-- Fecha real de entrega/cobro (panel de liquidación mensual por técnico).
+alter table public.repairs add column if not exists parts_cost numeric not null default 0;
+alter table public.repairs add column if not exists delivered_at timestamptz;
 
 -- v2: cancelación con motivo en texto libre. Renombra la columna legacy
 -- `cancellation_reason` (CHECK de lista fija) a `motivo_cancelacion` (sin CHECK).
@@ -338,6 +341,112 @@ $$;
 
 revoke execute on function public.ensure_month_closure() from public, anon, authenticated;
 grant execute on function public.ensure_month_closure() to authenticated, service_role;
+
+-- ============================================================
+-- LIQUIDACIÓN Y RENDIMIENTO MENSUAL POR TÉCNICO
+-- ============================================================
+-- Trigger: estampa `delivered_at` cuando la orden pasa a 'Entregado' y lo
+-- limpia si sale de ese estado (re-apertura). Es la base del agrupado
+-- mensual por MES DE ENTREGA del panel de liquidación.
+create or replace function public.stamp_delivered_at()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.status = 'Entregado' and old.status is distinct from 'Entregado' then
+    new.delivered_at := now();
+  elsif new.status is distinct from 'Entregado' then
+    -- Re-apertura: la orden deja de estar entregada, se limpia la marca.
+    new.delivered_at := null;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_repairs_delivered_at on public.repairs;
+create trigger trg_repairs_delivered_at
+  before update on public.repairs
+  for each row execute function public.stamp_delivered_at();
+
+-- Backfill idempotente: órdenes ya entregadas sin marca de entrega.
+update public.repairs
+   set delivered_at = coalesce(updated_at, date::timestamptz)
+ where status = 'Entregado'
+   and delivered_at is null;
+
+-- RPC: desglose mensual por técnico del taller del usuario autenticado.
+-- Agrupa las órdenes ENTREGADAS por el mes de entrega real:
+--   coalesce(delivered_at::date, updated_at::date, date) → 'YYYY-MM'.
+-- Une con profiles (por taller) para nombre y comisión vigente; las órdenes
+-- legacy sin technician_id se agrupan por su nombre histórico con comisión 0.
+-- Convención: commission_rate es FRACCIÓN (0.30 = 30%), igual que en
+-- commissionForRepair() de src/utils/repair-logic.ts.
+create or replace function public.get_technician_monthly_performance(p_period text)
+returns table (
+  technician_id        text,
+  technician_name      text,
+  commission_rate      numeric,
+  delivered_count      int,
+  total_revenue        numeric,
+  total_parts_cost     numeric,
+  net_production       numeric,
+  commission_total     numeric,
+  workshop_net_profit  numeric
+)
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  uid uuid := auth.uid();
+  wid uuid;
+begin
+  -- Periodo inválido: error explícito (el cliente valida antes de llamar).
+  if p_period is null or p_period !~ '^\d{4}-\d{2}$' then
+    raise exception 'Periodo inválido: se espera YYYY-MM' using errcode = '22023';
+  end if;
+
+  -- Sin sesión o sin perfil: sin datos (nunca cross-taller).
+  if uid is null then
+    return;
+  end if;
+
+  select workshop_id into wid from public.profiles where id = uid;
+  if wid is null then
+    return;
+  end if;
+
+  return query
+  select
+    coalesce(prof.id::text, nullif(r.technician_id, ''), r.technician_name) as technician_id,
+    coalesce(prof.full_name, nullif(r.technician_name, ''), 'Sin asignar')  as technician_name,
+    coalesce(prof.commission_rate, 0)                                       as commission_rate,
+    count(*)                                                                as delivered_count,
+    coalesce(sum(r.budget), 0)                                              as total_revenue,
+    coalesce(sum(r.parts_cost), 0)                                          as total_parts_cost,
+    coalesce(sum(greatest(r.budget - coalesce(r.parts_cost, 0), 0)), 0)     as net_production,
+    coalesce(sum(round(greatest(r.budget - coalesce(r.parts_cost, 0), 0)
+                       * coalesce(prof.commission_rate, 0))), 0)            as commission_total,
+    coalesce(sum(greatest(r.budget - coalesce(r.parts_cost, 0), 0)), 0)
+      - coalesce(sum(round(greatest(r.budget - coalesce(r.parts_cost, 0), 0)
+                           * coalesce(prof.commission_rate, 0))), 0)        as workshop_net_profit
+  from public.repairs r
+  left join public.profiles prof
+         on prof.workshop_id = r.workshop_id
+        and r.technician_id = prof.id::text
+  where r.workshop_id = wid
+    and r.status = 'Entregado'
+    and to_char(coalesce(r.delivered_at::date, r.updated_at::date, r.date), 'YYYY-MM') = p_period
+  group by 1, 2, 3
+  order by net_production desc, technician_name asc;
+end;
+$$;
+
+revoke execute on function public.get_technician_monthly_performance(text)
+  from public, anon, authenticated;
+grant execute on function public.get_technician_monthly_performance(text)
+  to authenticated, service_role;
 
 -- ============================================================
 -- TRIGGER: al registrarse una cuenta nueva se crea su taller y su perfil.
@@ -543,6 +652,7 @@ create index if not exists idx_profiles_workshop   on public.profiles (workshop_
 create index if not exists idx_profiles_role       on public.profiles (workshop_id, role);
 create index if not exists idx_repairs_workshop    on public.repairs (workshop_id);
 create index if not exists idx_repairs_status      on public.repairs (status);
+create index if not exists idx_repairs_workshop_status on public.repairs (workshop_id, status);
 create index if not exists idx_repairs_date        on public.repairs (date desc);
 create index if not exists idx_inventory_workshop  on public.inventory (workshop_id);
 create index if not exists idx_clients_workshop    on public.clients (workshop_id);

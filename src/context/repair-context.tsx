@@ -43,6 +43,12 @@ export interface RepairItem {
   motivoCancelacion?: string;
   status: RepairStatus;
   date: string;
+  /**
+   * Fecha real de entrega/cobro (ISO). La estampa el trigger
+   * `trg_repairs_delivered_at` al pasar a 'Entregado'; base del agrupado
+   * mensual del panel de liquidación. Ausente en órdenes no entregadas.
+   */
+  deliveredAt?: string;
 }
 
 export interface InventoryPart {
@@ -103,6 +109,8 @@ interface RepairRow {
   motivo_cancelacion: string | null;
   status: string;
   date: string | null;
+  /** Solo lectura: lo estampa el trigger trg_repairs_delivered_at (nunca se inserta desde el cliente). */
+  delivered_at?: string | null;
   created_at?: string | null;
 }
 
@@ -180,6 +188,7 @@ function rowToRepair(row: RepairRow): RepairItem {
     motivoCancelacion: row.motivo_cancelacion ?? undefined,
     status: row.status as RepairStatus,
     date: row.date ?? (row.created_at?.split('T')[0] ?? ''),
+    deliveredAt: row.delivered_at ?? undefined,
   };
 }
 

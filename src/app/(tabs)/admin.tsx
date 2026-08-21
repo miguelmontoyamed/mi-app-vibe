@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Linking,
@@ -16,12 +16,18 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Brand, Shape, Spacing, TouchTarget } from '@/constants/theme';
 import { useAuth, MAX_TECHNICIANS, type User } from '@/context/auth-context';
+import { useBilling } from '@/context/billing-context';
 import { useRepair } from '@/context/repair-context';
 import { useWorkshop } from '@/context/workshop-context';
-import { useBilling } from '@/context/billing-context';
 import { useTheme } from '@/hooks/use-theme';
 import { SUPER_ADMIN_USER_ID } from '@/lib/super-admin';
+import type { TechnicianMonthlyPerformance } from '@/types/billing';
 import { formatCOP } from '@/utils/format';
+import {
+  buildPeriodOptions,
+  formatPeriodLabel,
+  summarizePerformances,
+} from '@/utils/billing-performance';
 import { accumulatedCommission, accumulatedProfit } from '@/utils/repair-logic';
 
 const SUPPORT_TYPES = [
@@ -46,7 +52,14 @@ export default function AdminScreen() {
   } = useAuth();
   const { repairs, inventory } = useRepair();
   const { subscription } = useWorkshop();
-  const { closures, currentPeriod, refresh: refreshBilling } = useBilling();
+  // Una sola suscripción a billing: periodo abierto, cierres históricos,
+  // desglose mensual por técnico (RPC) y refresh del auto-cierre de mes.
+  const {
+    currentPeriod,
+    closures,
+    fetchMonthlyPerformance,
+    refresh: refreshBilling,
+  } = useBilling();
   const router = useRouter();
 
   // Technician management form states
@@ -60,6 +73,56 @@ export default function AdminScreen() {
   // Support ticket state
   const [supportType, setSupportType] = useState(SUPPORT_TYPES[0]);
   const [supportMessage, setSupportMessage] = useState('');
+
+  // ── Panel de Liquidación y Rendimiento Mensual por Técnico ──
+  /** Periodo seleccionado en el panel ('YYYY-MM'); null hasta hidratar opciones. */
+  const [selectedPeriod, setSelectedPeriod] = useState<string | null>(null);
+  /** Desglose por técnico del periodo seleccionado (fuente: RPC en la nube). */
+  const [performances, setPerformances] = useState<TechnicianMonthlyPerformance[]>([]);
+  const [perfLoading, setPerfLoading] = useState(false);
+  const [perfError, setPerfError] = useState<string | null>(null);
+
+  /** Mes actual + meses archivados (cierres) + meses con entregas, desc. */
+  const periodOptions = useMemo(
+    () => buildPeriodOptions(currentPeriod, closures.map((c) => c.period), repairs),
+    [currentPeriod, closures, repairs]
+  );
+  /** Los meses archivados son de solo lectura; el mes en curso sigue abierto. */
+  const isArchivedPeriod = selectedPeriod !== null && selectedPeriod !== currentPeriod;
+
+  // Periodo por defecto: el mes en curso; si aún no hay periodo abierto,
+  // el más reciente disponible (evita panel vacío en talleres nuevos).
+  useEffect(() => {
+    if (!selectedPeriod && periodOptions.length > 0) {
+      setSelectedPeriod(currentPeriod ?? periodOptions[0].period);
+    }
+  }, [currentPeriod, periodOptions, selectedPeriod]);
+
+  /** Carga el desglose mensual desde la RPC cada vez que cambia el periodo. */
+  const loadPerformance = useCallback(async () => {
+    if (!selectedPeriod) return;
+    setPerfLoading(true);
+    setPerfError(null);
+    const result = await fetchMonthlyPerformance(selectedPeriod);
+    if (result.ok) {
+      setPerformances(result.data);
+    } else {
+      setPerformances([]);
+      setPerfError(result.error ?? 'Error al cargar el rendimiento mensual.');
+    }
+    setPerfLoading(false);
+  }, [fetchMonthlyPerformance, selectedPeriod]);
+
+  useEffect(() => {
+    void loadPerformance();
+  }, [loadPerformance]);
+
+  /** Resumen global del periodo + técnicos ordenados por producción neta. */
+  const monthlySummary = summarizePerformances(
+    selectedPeriod ?? '',
+    isArchivedPeriod,
+    performances
+  );
 
   // Guard de ruta (rol): el tab Admin es exclusivo del dueño. Un técnico que
   // entre por URL directa es redirigido a la zona protegida.
@@ -513,6 +576,217 @@ export default function AdminScreen() {
           </View>
         </ThemedView>
       )}
+
+      {/* Liquidación y Rendimiento Mensual por Técnico */}
+      <ThemedView type="backgroundElement" style={styles.card}>
+        <ThemedText type="subtitle">Liquidación y Rendimiento Mensual</ThemedText>
+        <ThemedText type="small" themeColor="textSecondary">
+          Desglose por técnico según la fecha real de entrega/cobro. Los meses
+          archivados quedan congelados como solo lectura; el mes en curso
+          sigue acumulando.
+        </ThemedText>
+
+        {/* Selector de periodo: mes en curso + meses archivados */}
+        {periodOptions.length > 0 && (
+          <View style={styles.periodRow}>
+            {periodOptions.map((option) => {
+              const isSelected = option.period === selectedPeriod;
+              return (
+                <Pressable
+                  key={option.period}
+                  onPress={() => setSelectedPeriod(option.period)}
+                  style={({ pressed }) => [
+                    styles.periodChip,
+                    pressed && styles.pressed,
+                    isSelected
+                      ? { backgroundColor: Brand.primary }
+                      : { backgroundColor: theme.surfaceContainerHigh },
+                  ]}>
+                  <ThemedText
+                    type="smallBold"
+                    style={
+                      isSelected
+                        ? { color: Brand.onBrand }
+                        : undefined
+                    }>
+                    {option.isCurrent ? `${option.label} (En Curso)` : option.label}
+                  </ThemedText>
+                  {!option.isCurrent && (
+                    <ThemedText
+                      type="small"
+                      style={
+                        isSelected
+                          ? { color: Brand.onBrand, opacity: 0.75, fontSize: 10 }
+                          : { color: theme.textSecondary, fontSize: 10 }
+                      }>
+                      Archivado
+                    </ThemedText>
+                  )}
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
+
+        {perfLoading ? (
+          <ThemedText type="small" themeColor="textSecondary">
+            Cargando rendimiento del periodo…
+          </ThemedText>
+        ) : perfError ? (
+          <ThemedText type="small" style={{ color: Brand.danger }}>
+            {perfError}
+          </ThemedText>
+        ) : (
+          <>
+            {/* Nota de archivo: los meses cerrados no se editan */}
+            {isArchivedPeriod && (
+              <ThemedText
+                type="small"
+                themeColor="textSecondary"
+                style={{ fontStyle: 'italic' }}>
+                🗄️ Periodo archivado (solo lectura): snapshot histórico del mes
+                cerrado.
+              </ThemedText>
+            )}
+
+            {/* Resumen global del mes */}
+            <View style={styles.settlementGrid}>
+              <View
+                style={[
+                  styles.settlementBox,
+                  { backgroundColor: theme.surfaceContainerHigh },
+                ]}>
+                <ThemedText type="small" themeColor="textSecondary">
+                  Total Facturado
+                </ThemedText>
+                <ThemedText type="subtitle">
+                  {formatCOP(monthlySummary.totalRevenue)}
+                </ThemedText>
+              </View>
+              <View
+                style={[
+                  styles.settlementBox,
+                  { backgroundColor: theme.surfaceContainerHigh },
+                ]}>
+                <ThemedText type="small" themeColor="textSecondary">
+                  Inversión en Repuestos
+                </ThemedText>
+                <ThemedText type="subtitle" style={{ color: Brand.warning }}>
+                  {formatCOP(monthlySummary.totalPartsCost)}
+                </ThemedText>
+              </View>
+              <View
+                style={[
+                  styles.settlementBox,
+                  { backgroundColor: theme.surfaceContainerHigh },
+                ]}>
+                <ThemedText type="small" themeColor="textSecondary">
+                  Comisiones por Pagar
+                </ThemedText>
+                <ThemedText type="subtitle" style={{ color: Brand.primary }}>
+                  {formatCOP(monthlySummary.totalCommissions)}
+                </ThemedText>
+              </View>
+              <View
+                style={[
+                  styles.settlementBox,
+                  { backgroundColor: theme.surfaceContainerHigh },
+                ]}>
+                <ThemedText type="small" themeColor="textSecondary">
+                  Utilidad Neta del Taller
+                </ThemedText>
+                <ThemedText type="subtitle" style={{ color: Brand.success }}>
+                  {formatCOP(monthlySummary.workshopNetProfit)}
+                </ThemedText>
+              </View>
+            </View>
+
+            {/* Tarjetas por técnico */}
+            {monthlySummary.technicians.length === 0 ? (
+              <ThemedText
+                type="small"
+                themeColor="textSecondary"
+                style={{ fontStyle: 'italic' }}>
+                Sin órdenes entregadas en{' '}
+                {selectedPeriod ? formatPeriodLabel(selectedPeriod) : 'este periodo'}.
+              </ThemedText>
+            ) : (
+              monthlySummary.technicians.map((t) => {
+                const ratePct = Math.round(t.commissionRate * 100);
+                return (
+                  <View
+                    key={t.technicianId ?? t.technicianName}
+                    style={[
+                      styles.techPerfCard,
+                      { backgroundColor: theme.surfaceContainerHigh },
+                    ]}>
+                    <View style={styles.techPerfHeader}>
+                      <ThemedText type="smallBold">{t.technicianName}</ThemedText>
+                      <View
+                        style={[
+                          styles.commissionBadge,
+                          { backgroundColor: `${Brand.primary}1a` },
+                        ]}>
+                        <ThemedText
+                          type="small"
+                          style={{ color: Brand.primary, fontWeight: '600' }}>
+                          {ratePct}% comisión
+                        </ThemedText>
+                      </View>
+                    </View>
+                    <ThemedText type="small" themeColor="textSecondary">
+                      Órdenes entregadas: {t.deliveredCount}
+                    </ThemedText>
+                    <View style={styles.techPerfGrid}>
+                      <View style={styles.techPerfMetric}>
+                        <ThemedText type="small" themeColor="textSecondary">
+                          Generado
+                        </ThemedText>
+                        <ThemedText type="smallBold">
+                          {formatCOP(t.totalRevenue)}
+                        </ThemedText>
+                      </View>
+                      <View style={styles.techPerfMetric}>
+                        <ThemedText type="small" themeColor="textSecondary">
+                          Repuestos
+                        </ThemedText>
+                        <ThemedText type="smallBold">
+                          {formatCOP(t.totalPartsCost)}
+                        </ThemedText>
+                      </View>
+                      <View style={styles.techPerfMetric}>
+                        <ThemedText type="small" themeColor="textSecondary">
+                          Producción neta
+                        </ThemedText>
+                        <ThemedText type="smallBold">
+                          {formatCOP(t.netProduction)}
+                        </ThemedText>
+                      </View>
+                    </View>
+                    <View
+                      style={[
+                        styles.liquidationRow,
+                        {
+                          backgroundColor: `${Brand.success}14`,
+                          borderColor: `${Brand.success}4d`,
+                        },
+                      ]}>
+                      <ThemedText type="small">Por liquidar al técnico</ThemedText>
+                      <ThemedText type="subtitle" style={{ color: Brand.success }}>
+                        {formatCOP(t.commissionTotal)}
+                      </ThemedText>
+                    </View>
+                    <ThemedText type="small" themeColor="textSecondary">
+                      Ganancia neta del taller sobre este técnico:{' '}
+                      {formatCOP(t.workshopNetProfit)}
+                    </ThemedText>
+                  </View>
+                );
+              })
+            )}
+          </>
+        )}
+      </ThemedView>
 
       {/* Financial Revenue Control Card */}
       <ThemedView type="backgroundElement" style={styles.card}>
@@ -973,5 +1247,66 @@ const styles = StyleSheet.create({
     gap: 2,
     alignItems: 'flex-end',
     minWidth: 70,
+  },
+  // ── Panel de Liquidación y Rendimiento Mensual ──
+  periodRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.two,
+  },
+  periodChip: {
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+    minHeight: TouchTarget.min,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: Shape.lg,
+    gap: 2,
+  },
+  settlementGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.two,
+  },
+  settlementBox: {
+    flexGrow: 1,
+    flexBasis: '45%',
+    padding: Spacing.three,
+    borderRadius: Shape.lg,
+    gap: Spacing.one,
+  },
+  techPerfCard: {
+    padding: Spacing.three,
+    borderRadius: Shape.lg,
+    gap: Spacing.two,
+  },
+  techPerfHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.two,
+    flexWrap: 'wrap',
+  },
+  commissionBadge: {
+    paddingHorizontal: Spacing.two,
+    paddingVertical: Spacing.one / 2,
+    borderRadius: Shape.full,
+  },
+  techPerfGrid: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+  },
+  techPerfMetric: {
+    flex: 1,
+    gap: 2,
+  },
+  liquidationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.two,
+    borderWidth: 1,
+    padding: Spacing.three,
+    borderRadius: Shape.sm,
   },
 });

@@ -11,6 +11,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Brand, Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { useRepair } from '@/context/repair-context';
+import { supabase } from '@/lib/supabase';
 
 const COMMON_ISSUES = [
   'Cambio de pantalla',
