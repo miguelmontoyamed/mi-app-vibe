@@ -4,6 +4,19 @@
 > Actualizar al finalizar cada tarea (ver `progress.md`).
 
 ## Estado Actual (Consolidado — verificado contra el código)
+- **RepairWorkflowStepper operativo en el detalle de orden (2026-08-22):**
+  diagrama interactivo `src/components/ui/repair-workflow-stepper.tsx` con los
+  4 estados reales del modelo (`Pendiente → En Proceso → Listo → Entregado`)
+  y rama especial `Cancelado / No Reparado` en acento error (flujo cerrado).
+  Nodos circulares de 40px con iconos del dashboard (hourglass/construct/
+  checkmark/checkmark-done), conectores que se colorean de success al superar
+  etapa, paleta semántica de `tokens.colors.status`, scroll horizontal seguro
+  (sin desbordes) y accesibilidad (role button, labels es-CO, activeOpacity
+  0.7). Integrado bajo el folio TRM en `job/[id].tsx`; tocar una etapa
+  POSTERIOR avanza la orden vía `updateRepairStatus` — solo dueño o técnico
+  asignado (`canEdit`), estados terminales bloqueados. NOTA de diseño: la spec
+  pedía 'recibido/diagnostico/esperando_repuesto'; se mapeó al modelo real
+  para no romper el constraint SQL ni la lógica de comisiones.
 - **Asignación y reasignación de técnico en órdenes operativa (2026-08-21):**
   - Al crear (`receive.tsx`): selector "Asignar a" con chips — el usuario actual
     primero (`(tú)`, default = comportamiento histórico) + el resto de miembros

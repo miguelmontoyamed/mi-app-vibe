@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { FormInput } from '@/components/ui/form-input';
 import { Screen } from '@/components/ui/screen';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { RepairWorkflowStepper } from '@/components/ui/repair-workflow-stepper';
 import { Brand, Shape, Spacing, statusStyle } from '@/constants/theme';
 import { useAuth, type User } from '@/context/auth-context';
 import { useRepair } from '@/context/repair-context';
@@ -20,7 +21,7 @@ export default function JobDetailScreen() {
   const router = useRouter();
   const theme = useTheme();
   const { currentUser, users } = useAuth();
-  const { repairs, cancelRepair, deleteRepair, updateRepair } = useRepair();
+  const { repairs, cancelRepair, deleteRepair, updateRepair, updateRepairStatus } = useRepair();
   const { id } = useLocalSearchParams<{ id: string }>();
   const scheme = useColorScheme();
 
@@ -216,6 +217,18 @@ export default function JobDetailScreen() {
           <ThemedText type="subtitle">{repair.id}</ThemedText>
           <StatusBadge status={repair.status} />
         </View>
+        <RepairWorkflowStepper
+          status={repair.status}
+          canEdit={
+            !isCancelled &&
+            currentUser != null &&
+            (currentUser.role === 'admin' ||
+              isAssignedToTechnician(repair, currentUser.id, currentUser.name))
+          }
+          onSelectStatus={(next) => {
+            void updateRepairStatus(repair.id, next);
+          }}
+        />
         <View style={[styles.divider, { backgroundColor: theme.border }]} />
         <View style={styles.sectionRow}>
           <ThemedText type="smallBold">Cliente:</ThemedText>

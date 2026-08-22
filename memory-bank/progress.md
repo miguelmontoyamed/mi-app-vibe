@@ -59,6 +59,7 @@
 ## Historial Reciente
 | Fecha | Cambio |
 |-------|--------|
+| 2026-08-22 | RepairWorkflowStepper: diagrama interactivo del flujo de la orden en `job/[id].tsx` (nodos 40px, conectores semánticos, rama cancelada en error, avance por toque con permisos dueño/técnico asignado vía `updateRepairStatus`) |
 | 2026-08-22 | Higiene: exportación contable DESCARTADA del backlog; foco en espera de siguiente módulo de mostrador (patrón 3x3 o modales MD3); `PENDIENTE.md` obsoleto eliminado |
 | 2026-08-21 | Contacto comercial real `3002011801` (+57 300 201 1801 / wa.me/573002011801): reemplaza los placeholders en banner comercial, PDF del recibo (web y nativo) y botón de soporte de Admin |
 | 2026-08-21 | NIT de longitud libre (1–15 base + DV): `nit.ts` acepta cualquier longitud con módulo 11 DIAN correcto y formatea agrupando de a 3 desde la derecha; `taller.tsx` ya no limita a 9 dígitos (DV se calcula en vivo mientras se digita); PDF/recibo lo muestran formateado sin cambios. +7 tests de contrato (bases de 8 y 13 dígitos) → 59/59 |
