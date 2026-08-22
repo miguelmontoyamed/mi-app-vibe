@@ -352,6 +352,8 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   grid: {
+    // Ancla los nodos/líneas absolutos al cuadrado (crítico en web).
+    position: 'relative',
     borderRadius: Shape.lg,
     borderWidth: 1,
     overflow: 'hidden',
@@ -391,6 +393,10 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   previewGrid: {
+    // Contexto de posicionamiento: en web los hijos `absolute` se anclan al
+    // ancestro posicionado más cercano; sin esto se escapan al documento.
+    position: 'relative',
+    overflow: 'hidden',
     borderRadius: Shape.md,
     borderWidth: 1,
   },
