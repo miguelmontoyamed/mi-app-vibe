@@ -213,7 +213,7 @@ export default function JobDetailScreen() {
       {/* Order summary */}
       <ThemedView type="backgroundElement" style={styles.card}>
         <View style={styles.rowBetween}>
-          <ThemedText type="subtitle">{repair.id}</ThemedText>
+          <ThemedText type="subtitle" numberOfLines={1} ellipsizeMode="tail" style={styles.folioTitle}>{repair.id}</ThemedText>
           <StatusBadge status={repair.status} />
         </View>
         <RepairWorkflowStepper
@@ -492,6 +492,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: Spacing.two,
+  },
+  folioTitle: {
+    flexShrink: 1,
+    minWidth: 0,
   },
   divider: {
     height: 1,

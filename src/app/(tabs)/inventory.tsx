@@ -305,10 +305,12 @@ const styles = StyleSheet.create({
     gap: Spacing.one,
   },
   stockBtn: {
+    // Touch target MD3/HIG: mínimo 44px (barrido visual universal).
     backgroundColor: Brand.secondary,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 44,
+    height: 44,
+    minHeight: 44,
+    borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
