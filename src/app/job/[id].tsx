@@ -9,6 +9,8 @@ import { FormInput } from '@/components/ui/form-input';
 import { Screen } from '@/components/ui/screen';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { RepairWorkflowStepper } from '@/components/ui/repair-workflow-stepper';
+import { PatternPreview } from '@/components/ui/device-security-input';
+import { parseDeviceSecurity, parsePatternSequence } from '@/utils/device-security';
 import { Brand, Shape, Spacing, statusStyle } from '@/constants/theme';
 import { useAuth, type User } from '@/context/auth-context';
 import { useRepair } from '@/context/repair-context';
@@ -60,6 +62,10 @@ export default function JobDetailScreen() {
   const isOwner = currentUser?.role === 'admin';
   const isCancelled = repair.status === 'Cancelado / No Reparado';
   const paid = repair.advancePayment ?? 0;
+  /** Seguridad del equipo: clave legible o secuencia del patrón 3x3. */
+  const deviceSecurity = parseDeviceSecurity(repair.unlockCode);
+  const patternSequence =
+    deviceSecurity.kind === 'pattern' ? parsePatternSequence(deviceSecurity.payload) : [];
   const partsCost = repair.partsCost ?? 0;
   const profit = profitForRepair(repair);
   const canCancelRepair = canCancel(repair.status);
@@ -251,6 +257,22 @@ export default function JobDetailScreen() {
           <View style={styles.sectionRow}>
             <ThemedText type="smallBold">IMEI / Serial:</ThemedText>
             <ThemedText type="small" style={styles.sectionValue}>🔢 {repair.imei}</ThemedText>
+          </View>
+        ) : null}
+        {deviceSecurity.kind === 'pin' || deviceSecurity.kind === 'password' ? (
+          <View style={styles.sectionRow}>
+            <ThemedText type="smallBold">Clave:</ThemedText>
+            <ThemedText type="small" style={styles.sectionValue}>🔑 {deviceSecurity.payload}</ThemedText>
+          </View>
+        ) : null}
+        {deviceSecurity.kind === 'pattern' ? (
+          <View style={[styles.sectionRow, styles.patternRow]}>
+            <ThemedText type="smallBold">Patrón:</ThemedText>
+            {patternSequence.length > 0 ? (
+              <PatternPreview sequence={patternSequence} size={72} />
+            ) : (
+              <ThemedText type="small" style={styles.sectionValue}>{repair.unlockCode}</ThemedText>
+            )}
           </View>
         ) : null}
         <View style={styles.sectionRow}>
@@ -476,6 +498,9 @@ const styles = StyleSheet.create({
   sectionValue: {
     flex: 1,
     textAlign: 'right',
+  },
+  patternRow: {
+    alignItems: 'center',
   },
   partsBtn: {
     marginTop: Spacing.one,

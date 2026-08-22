@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert, Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/ui/button';
+import { DeviceSecurityInput } from '@/components/ui/device-security-input';
 import { FormInput } from '@/components/ui/form-input';
 import { Screen } from '@/components/ui/screen';
 import { ThemedText } from '@/components/themed-text';
@@ -27,7 +28,6 @@ const MAX_LENGTHS = {
   phone: 20,
   device: 80,
   issue: 240,
-  unlockCode: 20,
   imei: 17,
   money: 10,
 } as const;
@@ -60,6 +60,8 @@ export default function ReceiveScreen() {
   const [device, setDevice] = useState('');
   const [issue, setIssue] = useState('');
   const [unlockCode, setUnlockCode] = useState('');
+  /** Remount del selector de seguridad para resetearlo tras guardar. */
+  const [securityKey, setSecurityKey] = useState(0);
   const [imei, setImei] = useState('');
   const [advancePayment, setAdvancePayment] = useState('');
   const [budget, setBudget] = useState('');
@@ -189,6 +191,7 @@ export default function ReceiveScreen() {
     setDevice('');
     setIssue('');
     setUnlockCode('');
+    setSecurityKey((k) => k + 1);
     setImei('');
     setAdvancePayment('');
     setBudget('');
@@ -264,28 +267,21 @@ export default function ReceiveScreen() {
           </View>
         </View>
 
-        <View style={styles.rowInputs}>
-          <View style={styles.rowInputItem}>
-            <FormInput
-              label="Código / Desbloqueo"
-              placeholder="Ej. PIN 1234 o Patrón"
-              value={unlockCode}
-              onChangeText={setUnlockCode}
-              maxLength={MAX_LENGTHS.unlockCode}
-            />
-          </View>
+        {/* Seguridad del dispositivo: patrón 3x3, PIN/contraseña o ninguna */}
+        <DeviceSecurityInput
+          key={securityKey}
+          defaultValue={unlockCode}
+          onChange={setUnlockCode}
+        />
 
-          <View style={styles.rowInputItem}>
-            <FormInput
-              label="Seña / Adelanto (COP)"
-              placeholder="Ej. 80000"
-              keyboardType="numeric"
-              value={advancePayment}
-              onChangeText={setAdvancePayment}
-              maxLength={MAX_LENGTHS.money}
-            />
-          </View>
-        </View>
+        <FormInput
+          label="Seña / Adelanto (COP)"
+          placeholder="Ej. 80000"
+          keyboardType="numeric"
+          value={advancePayment}
+          onChangeText={setAdvancePayment}
+          maxLength={MAX_LENGTHS.money}
+        />
 
         <FormInput
           label="IMEI / Número de Serie"

@@ -4,6 +4,20 @@
 > Actualizar al finalizar cada tarea (ver `progress.md`).
 
 ## Estado Actual (Consolidado — verificado contra el código)
+- **DeviceSecurityInput operativo en recepción (2026-08-22):** selector
+  interactivo de seguridad del equipo (`src/components/ui/device-security-
+  input.tsx`) con 3 modos por chips: 'Ninguna', 'PIN / Contraseña' (prefijo
+  automático: dígitos → 'PIN: x'; mixto → 'Contraseña: x') y 'Patrón' —
+  cuadrícula 3x3 táctil (tap nodo a nodo o ARRASTRE del trazo vía Responder
+  API con captura; nodos de 44px accesibles, líneas trigonométricas sin SVG,
+  botón Limpiar trazo) que genera 'Patrón: 1-2-5-8-9'. Se guarda en la
+  columna EXISTENTE `repairs.unlock_code` (sin migración ni cambios de RLS).
+  Lógica pura en `src/utils/device-security.ts` (+14 tests: contratos S1–S5,
+  seeds legacy 'Pass:'/'Patrón:', geometría) → suite 77/77. El detalle de la
+  orden (`job/[id].tsx`) muestra la clave legible (🔑) o una PatternPreview
+  compacta del trazo. Componente NO CONTROLADO: se resetea remontándolo con
+  `key` desde receive.tsx (evita setState en efectos). Invariante intacto:
+  unlockCode NUNCA se persiste en AsyncStorage.
 - **RepairWorkflowStepper operativo en el detalle de orden (2026-08-22):**
   diagrama interactivo `src/components/ui/repair-workflow-stepper.tsx` con los
   4 estados reales del modelo (`Pendiente → En Proceso → Listo → Entregado`)
