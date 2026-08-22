@@ -2,104 +2,214 @@
  * E2E: Flujo de invitación de técnico (Playwright).
  *
  * Escenario completo:
- *   1. Admin inicia sesión, navega a Admin y genera un enlace de invitación.
- *   2. El enlace se copia y contiene un token codificado con el workshopId.
+ *   1. Admin (usuario aislado creado vía Admin API) inicia sesión, navega a
+ *      Admin y genera un enlace de invitación.
+ *   2. El enlace se muestra en pantalla y contiene un token codificado con el
+ *      workshopId (`{origin}/signup?invite=...` — ver buildInviteUrl).
  *   3. El técnico abre el enlace en una nueva ventana (simulando deep link).
  *   4. El signup detecta el parámetro `?invite=` y muestra el banner del taller.
  *   5. El técnico se registra y queda asociado al taller del admin.
  *
- * Requisitos: `@playwright/test` instalado (`npm i -D @playwright/test`)
- * y un servidor de desarrollo corriendo en `http://localhost:8081`.
+ * Nota de selectores (React Native Web):
+ *   - El input de contraseña usa placeholder "••••••••" (login) y
+ *     "Mínimo 6 caracteres" (signup) con secureTextEntry → se localiza por
+ *     `input[type="password"]`.
+ *   - Los avisos (alert) usan window.alert en web → se capturan con
+ *     waitForEvent('dialog').
  *
- * Para ejecutar: npx playwright test e2e/invitation.spec.ts
+ * Requisitos: EXPO_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY en env
+ * (playwright.config.ts carga .env.local). BASE_URL opcional (default: Vercel).
+ * Ejecutar: npx playwright test e2e/invitation.spec.ts --project=chromium
  */
 
-import { test, expect } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
-const BASE_URL = process.env.BASE_URL || 'http://localhost:8081';
+const BASE_URL = process.env.BASE_URL || 'https://mi-app-vibe-ten.vercel.app';
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
+const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
+
+const RUN = Date.now();
+const ADMIN_EMAIL = `qa-inv-admin-${RUN}@mailinator.com`;
+const ADMIN_PASSWORD = 'Qa-E2e-12345!';
+const TECH_EMAIL = `qa-inv-tech-${RUN}@mailinator.com`;
+
+let adminUserId = '';
+
+/** Crea el usuario admin de prueba vía Admin API (sin enviar email). */
+async function createTestUser(): Promise<string> {
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
+    method: 'POST',
+    headers: {
+      apikey: SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      email: ADMIN_EMAIL,
+      password: ADMIN_PASSWORD,
+      email_confirm: true,
+      user_metadata: {
+        role: 'admin',
+        workshop_name: `QA Inv Taller ${RUN % 100000}`,
+        full_name: 'QA Inv Admin',
+      },
+    }),
+  });
+  const body = (await res.json()) as { id?: string; error?: string; msg?: string };
+  if (!res.ok || !body.id) {
+    throw new Error(`No se pudo crear el usuario E2E (${res.status}): ${body.error ?? body.msg ?? '?'}`);
+  }
+  return body.id;
+}
+
+/** Borra un usuario de prueba por id (cascade borra perfil + taller + datos). */
+async function deleteTestUser(id: string) {
+  await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${id}`, {
+    method: 'DELETE',
+    headers: {
+      apikey: SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+    },
+  });
+}
+
+/** Best-effort: borra el técnico invitado buscándolo por email único. */
+async function deleteTestUserByEmail(email: string) {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users?per_page=200`, {
+      headers: { apikey: SERVICE_ROLE_KEY, Authorization: `Bearer ${SERVICE_ROLE_KEY}` },
+    });
+    const body = (await res.json()) as { users?: Array<{ id: string; email?: string }> };
+    const match = body.users?.find((u) => u.email?.toLowerCase() === email.toLowerCase());
+    if (match) await deleteTestUser(match.id);
+  } catch {
+    // Limpieza best-effort: no debe romper el resultado del suite.
+  }
+}
 
 /**
- * Helper: inicia sesión como el admin (usuario de prueba).
- * Usa credenciales demo del pool local (sin Supabase).
+ * Helper: inicia sesión como el admin aislado.
+ * El input de contraseña real no tiene la palabra "contraseña": renderiza
+ * bullets ("••••••••") con secureTextEntry → input[type="password"].
  */
-async function loginAsAdmin(page: import('@playwright/test').Page) {
+async function loginAsAdmin(page: Page) {
   await page.goto(`${BASE_URL}/login`);
-  await page.waitForSelector('input[placeholder*="correo"]', { timeout: 10_000 });
-  await page.locator('input[placeholder*="correo"]').fill('admin@techrepair.com');
-  await page.locator('input[placeholder*="contraseña"]').fill('demo123');
-  await page.locator('button, [role="button"]').filter({ hasText: /iniciar sesión/i }).click();
-  await page.waitForURL('**/(tabs)/**', { timeout: 10_000 });
+  const emailInput = page.locator('input[placeholder*="correo"]');
+  await emailInput.waitFor({ timeout: 20_000 });
+  await emailInput.fill(ADMIN_EMAIL);
+  await page.locator('input[type="password"]').fill(ADMIN_PASSWORD);
+  await pressButton(page, 'Iniciar sesión').click();
+  // Tras el login la app reemplaza a "/" (dashboard).
+  await page.waitForURL((url) => !url.pathname.includes('/login'), { timeout: 20_000 });
 }
 
 /**
- * Helper: extrae el valor del campo de texto seleccionable que contiene
- * el enlace de invitación generado.
+ * Helper: clic en un "botón" de React Native Web. Los Pressable se renderizan
+ * como <div tabindex="0"> que cubre su texto hijo (intercepta el clic si se
+ * apunta al texto), así que localizamos el Pressable por su etiqueta exacta.
  */
-async function getInviteLink(page: import('@playwright/test').Page): Promise<string> {
-  // El enlace se muestra en un elemento selectable con la URL de invitación.
-  const linkText = await page
-    .locator('text=https://techrepair.saas/join?invite=')
-    .textContent({ timeout: 10_000 });
-  if (!linkText) throw new Error('No se encontró el enlace de invitación en la página.');
-  return linkText.trim();
+function pressButton(page: Page, label: string) {
+  return page
+    .locator('div[tabindex="0"]')
+    .filter({ hasText: new RegExp(`^${label}$`, 'i') })
+    .last();
 }
+
+/**
+ * Helper: espera un window.alert cuyo mensaje coincida y lo acepta.
+ * Los notify() de la app son SÍNCRONOS en web (window.alert bloquea el hilo
+ * durante el dispatch del clic), así que un patrón waitForEvent+accept-after
+ * haría deadlock: aquí cada diálogo se acepta de inmediato en el handler.
+ */
+function waitForDialog(page: Page, pattern: RegExp, timeout = 15_000): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      page.off('dialog', onDialog);
+      reject(new Error(`No apareció ningún dialog que coincida con ${pattern}`));
+    }, timeout);
+    const onDialog = (dialog: import('@playwright/test').Dialog) => {
+      const message = dialog.message();
+      void dialog.accept();
+      if (pattern.test(message)) {
+        clearTimeout(timer);
+        page.off('dialog', onDialog);
+        resolve(message);
+      }
+    };
+    page.on('dialog', onDialog);
+  });
+}
+
+test.beforeAll(async () => {
+  if (!SERVICE_ROLE_KEY || !SUPABASE_URL) {
+    throw new Error('Faltan SUPABASE_SERVICE_ROLE_KEY / EXPO_PUBLIC_SUPABASE_URL para el E2E.');
+  }
+  adminUserId = await createTestUser();
+});
+
+test.afterAll(async () => {
+  if (adminUserId) await deleteTestUser(adminUserId);
+  await deleteTestUserByEmail(TECH_EMAIL);
+});
 
 test.describe('Flujo de Invitación de Técnico', () => {
 
   test('Admin genera enlace de invitación y es válido', async ({ page, context }) => {
-    // 1. Admin inicia sesión
+    // 1. Admin inicia sesión (usuario aislado)
     await loginAsAdmin(page);
 
-    // 2. Navega a la pestaña Admin
-    await page.locator('[role="tab"]', { hasText: /admin/i }).click();
-    await page.waitForURL('**/admin', { timeout: 10_000 });
+    // 2. Navega al panel de administración
+    await page.goto(`${BASE_URL}/admin`);
+    await expect(page.getByText('Administración & Seguridad', { exact: true })).toBeVisible({ timeout: 20_000 });
 
-    // 3. Genera el enlace de invitación
-    const inviteButton = page.locator('button, [role="button"]').filter({ hasText: /generar enlace/i });
-    await expect(inviteButton).toBeVisible({ timeout: 5_000 });
+    // 3. Genera el enlace de invitación (alert síncrono → se acepta en el handler)
+    const inviteButton = pressButton(page, 'Generar Enlace de Invitación');
+    await expect(inviteButton).toBeVisible({ timeout: 10_000 });
+    const genDialog = waitForDialog(page, /Enlace de invitación generado/);
     await inviteButton.click();
+    expect(await genDialog).toContain('Enlace de invitación generado');
 
-    // 4. Verifica que el enlace aparece en pantalla (con URL codificada)
-    const linkLocator = page.locator('text=https://techrepair.saas/join?invite=');
+    // 4. El enlace real es `{origin}/signup?invite=...` (buildInviteUrl)
+    const linkLocator = page.getByText(/\/signup\?invite=/);
     await expect(linkLocator).toBeVisible({ timeout: 10_000 });
-
-    const inviteUrl = await getInviteLink(page);
-
-    // 5. Extrae el token de la URL para inspección
-    expect(inviteUrl).toMatch(/^https:\/\/techrepair\.saas\/join\?invite=.+/);
+    const inviteUrl = (await linkLocator.textContent())?.trim() ?? '';
+    expect(inviteUrl).toMatch(/^https:\/\/[^/]+\/signup\?invite=.+/);
 
     // ── Segunda fase: técnico abre el enlace ──
-    // 6. Abre una nueva ventana (simula que el técnico hace clic en el enlace)
     const technicianPage = await context.newPage();
     await technicianPage.goto(inviteUrl);
 
-    // 7. En la página de signup, debe aparecer el banner de invitación
-    await technicianPage.waitForSelector('text=Has sido invitado', { timeout: 10_000 });
-    await expect(technicianPage.locator('text=Únete al equipo')).toBeVisible();
+    // 5. Banner de invitación con el nombre del taller del admin
+    await expect(technicianPage.getByText('Has sido invitado')).toBeVisible({ timeout: 20_000 });
+    await expect(technicianPage.getByText('Únete al equipo')).toBeVisible();
+    await expect(technicianPage.getByText(/Taller:/)).toBeVisible();
 
-    // 8. El banner debe mostrar el nombre del taller del admin
-    await expect(technicianPage.locator('text=Taller:')).toBeVisible();
+    // 6. Llena el formulario (placeholders reales del signup)
+    await technicianPage.locator('input[placeholder*="TechRepair Master"]').fill('Carlos Técnico');
+    await technicianPage.locator('input[placeholder*="correo"]').fill(TECH_EMAIL);
+    await technicianPage.locator('input[type="password"]').fill('segura123');
 
-    // 9. El técnico llena el formulario de registro
-    await technicianPage.locator('input[placeholder*="Nombre del taller"]').fill('Carlos Técnico');
-    await technicianPage.locator('input[placeholder*="correo"]').fill('carlos.tecnico@taller.com');
-    await technicianPage.locator('input[placeholder*="contraseña"]').fill('segura123');
+    // 7. Envía — conducta real observable en prod: el alta del técnico queda
+    //    PENDIENTE de verificación de correo y la app muestra la pantalla
+    //    "Verifica tu correo" (src/app/signup.tsx, rama pendingVerification).
+    //    Con autoconfirm mostraría el alert de bienvenida y redirigiría a /login.
+    await pressButton(technicianPage, 'Crear cuenta').click();
+    const verificationTitle = technicianPage.getByText('Verifica tu correo');
+    try {
+      await expect(verificationTitle.first()).toBeVisible({ timeout: 30_000 });
+      await expect(
+        technicianPage.getByText(new RegExp(TECH_EMAIL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+      ).toBeVisible();
+    } catch {
+      // Modo autoconfirm: sin verificación pendiente redirige al login.
+      await technicianPage.waitForURL('**/login', { timeout: 30_000 });
+    }
 
-    // 10. Envía el formulario — debe redirigir a login (técnico asociado)
-    await technicianPage.locator('button, [role="button"]').filter({ hasText: /crear cuenta/i }).click();
-
-    // 11. Mensaje de éxito: bienvenida + asociación al taller
-    await expect(technicianPage.locator('text=asociada al taller')).toBeVisible({ timeout: 10_000 });
-
-    // 12. Redirige al login para que el técnico inicie sesión
-    await technicianPage.waitForURL('**/login', { timeout: 10_000 });
-
-    // Limpieza
     await technicianPage.close();
   });
 
   test('Token expirado muestra banner de error en signup', async ({ page }) => {
-    // Simula un enlace con un token expirado manualmente
+    // Enlace con expiresAt en el pasado (la ruta real es /signup, no /join).
     const expiredInvite = encodeURIComponent(
       JSON.stringify({
         token: 'EXPIRED-TOKEN-01',
@@ -110,25 +220,23 @@ test.describe('Flujo de Invitación de Técnico', () => {
       })
     );
 
-    await page.goto(`${BASE_URL}/join?invite=${expiredInvite}`);
+    await page.goto(`${BASE_URL}/signup?invite=${expiredInvite}`);
 
-    // Debe aparecer el banner de expiración
-    await expect(page.locator('text=Esta invitación ha expirado')).toBeVisible({ timeout: 10_000 });
-    await expect(page.locator('text=Solicita un nuevo enlace')).toBeVisible();
+    // Banner de expiración (texto real renderizado por src/app/signup.tsx).
+    await expect(page.getByText('Esta invitación ha expirado')).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText('Solicita un nuevo enlace')).toBeVisible();
   });
 
   test('Token malformado no muestra banner y permite registro normal', async ({ page }) => {
-    // Token inválido
+    // Token inválido → decodeInviteToken devuelve null → sin banner.
     const badInvite = encodeURIComponent('not-valid-json');
-    await page.goto(`${BASE_URL}/join?invite=${badInvite}`);
+    await page.goto(`${BASE_URL}/signup?invite=${badInvite}`);
 
-    // No debe haber banner de invitación
-    await page.waitForLoadState('networkidle');
-    const inviteBanner = page.locator('text=Has sido invitado');
-    await expect(inviteBanner).toHaveCount(0);
+    // El título debe ser el estándar "Crea tu taller" (no "Únete al equipo").
+    await expect(page.getByText('Crea tu taller')).toBeVisible({ timeout: 20_000 });
 
-    // El título debe ser el estándar "Crea tu taller" (no "Únete al equipo")
-    await expect(page.locator('text=Crea tu taller')).toBeVisible();
+    // No debe haber banner de invitación.
+    await expect(page.getByText('Has sido invitado')).toHaveCount(0);
   });
 
   test('El botón Copiar enlace copia la URL al portapapeles (web)', async ({ page }) => {

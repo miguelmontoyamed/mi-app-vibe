@@ -49,8 +49,11 @@ export default function LoginScreen() {
         router.replace('/');
       } else if (result.reason === 'unconfirmed') {
         setPendingVerification(email.trim().toLowerCase());
-      } else {
+      } else if (result.reason === 'invalid') {
         notify('Error de acceso', 'Correo o contraseña incorrectos.');
+      } else {
+        // Red/genérico ('unknown'): mensaje neutro, no culpar a las credenciales.
+        notify('Error de acceso', 'No se pudo iniciar sesión. Intenta de nuevo.');
       }
     } finally {
       setSubmitting(false);
