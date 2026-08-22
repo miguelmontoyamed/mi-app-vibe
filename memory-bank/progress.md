@@ -47,16 +47,19 @@
   (7/7 checks), desplegado en producción.
 
 ## En Desarrollo / Próximo (🔄)
+- **Foco operativo:** esperando definición de siguiente módulo de mostrador
+  (UI de patrón de desbloqueo 3x3 en recepción o estandarización de modales
+  MD3).
 - **Verificación funcional en vivo** del panel de liquidación (alternar mes
   archivado vs en curso) tras el deploy a producción.
 
 ## Pendiente (◻)
-- **Reportes financieros consolidados y exportación contable** (por servicio,
-  márgenes, proyecciones).
+- Ninguno. La "exportación contable" fue DESCARTADA del backlog (2026-08-22).
 
 ## Historial Reciente
 | Fecha | Cambio |
 |-------|--------|
+| 2026-08-22 | Higiene: exportación contable DESCARTADA del backlog; foco en espera de siguiente módulo de mostrador (patrón 3x3 o modales MD3); `PENDIENTE.md` obsoleto eliminado |
 | 2026-08-21 | Contacto comercial real `3002011801` (+57 300 201 1801 / wa.me/573002011801): reemplaza los placeholders en banner comercial, PDF del recibo (web y nativo) y botón de soporte de Admin |
 | 2026-08-21 | NIT de longitud libre (1–15 base + DV): `nit.ts` acepta cualquier longitud con módulo 11 DIAN correcto y formatea agrupando de a 3 desde la derecha; `taller.tsx` ya no limita a 9 dígitos (DV se calcula en vivo mientras se digita); PDF/recibo lo muestran formateado sin cambios. +7 tests de contrato (bases de 8 y 13 dígitos) → 59/59 |
 | 2026-08-21 | Liquidación en TIEMPO REAL: `public.repairs` agregada a la publicación `supabase_realtime` (migración `20260821220000`, aplicada en vivo) + suscripción `postgres_changes` en `admin.tsx` con debounce 800 ms → el panel se refresca solo ante entregas/ediciones/reasignaciones de cualquier miembro, sin recargar |

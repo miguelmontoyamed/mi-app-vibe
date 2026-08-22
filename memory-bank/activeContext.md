@@ -76,10 +76,10 @@
   eliminado ya no bloquea `fetchRepairs`; el cliente se auto-desloguea.
 
 ## Foco Operativo Inmediato (Sprint Actual)
-**Consolidación del módulo de liquidación mensual (COMPLETADO 2026-08-21):**
-el panel de rendimiento por técnico con histórico archivado ya está en
-producción. El desglose mensual se calcula por fecha real de entrega
-(`delivered_at`) y los meses cerrados se consumen de solo lectura.
+**Esperando definición de siguiente módulo de mostrador:** UI de patrón de
+desbloqueo 3x3 en recepción o estandarización de modales MD3. El módulo de
+liquidación mensual quedó consolidado y en producción (2026-08-21); la
+exportación contable fue DESCARTADA del backlog (2026-08-22).
 
 ## Decisiones Recientes
 - **Liquidación en tiempo real (2026-08-21):** el panel se suscribe a
