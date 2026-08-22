@@ -103,8 +103,7 @@
   eliminado ya no bloquea `fetchRepairs`; el cliente se auto-desloguea.
 
 ## Foco Operativo Inmediato (Sprint Actual)
-**Esperando definición de siguiente módulo de mostrador:** UI de patrón de
-desbloqueo 3x3 en recepción o estandarización de modales MD3. El módulo de
+**Verificación en vivo de flujos de mostrador y auditoría de enlaces nativos de WhatsApp:** ConfirmDialog MD3 + Liquid Glass ya está operativo en `job/[id].tsx` y `admin.tsx` (suite 11/11 RTL, 85/85 tests globales). Próximo: validar flujos de cancelación y eliminación en producción, y auditar botones de soporte de WhatsApp en receiving/admin screens. El módulo de
 liquidación mensual quedó consolidado y en producción (2026-08-21); la
 exportación contable fue DESCARTADA del backlog (2026-08-22).
 

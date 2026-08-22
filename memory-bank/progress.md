@@ -15,6 +15,11 @@
   por técnico, costos de repuestos en cada orden.
 - **Rediseño visual MD3 + Liquid Glass sutil:** tokens centralizados en
   `src/constants/theme.ts`, 44px, responsive.
+- **Modales de Confirmación MD3 + Liquid Glass (ConfirmDialog):** suite RTL 11/11
+  passing, integración en `job/[id].tsx` y `admin.tsx`, reemplazo de
+  `window.confirm`/`Alert` nativo, TypeScript limpio, 85/85 tests globales
+  pasando. Commit `feat(ui): implement standardized MD3 liquid glass confirmation
+  dialogs` (2026-08-22).
 - **Paywall y renovación Bre-B:** prueba de 90 días, tarifa 20.000 COP/mes,
   acumulación automática de tiempo, alerta a 10 días del vencimiento.
 - **Búsqueda multicriterio avanzada** (Folio TRM, IMEI, Teléfono, Cliente) en
