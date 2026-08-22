@@ -10,6 +10,7 @@ import { Screen } from '@/components/ui/screen';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { RepairWorkflowStepper } from '@/components/ui/repair-workflow-stepper';
 import { PatternPreview } from '@/components/ui/device-security-input';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { parseDeviceSecurity, parsePatternSequence } from '@/utils/device-security';
 import { Brand, Shape, Spacing, statusStyle } from '@/constants/theme';
 import { useAuth, type User } from '@/context/auth-context';
@@ -163,26 +164,18 @@ export default function JobDetailScreen() {
     }
   };
 
-  const handleDelete = () => {
-    const confirmDelete = async () => {
-      if (await deleteRepair(repair.id)) {
-        router.replace('/');
-      }
-    };
-    if (Platform.OS === 'web') {
-      if (window.confirm(`¿Eliminar DEFINITIVAMENTE la orden ${repair.id}?\n\nEsta acción no se puede deshacer.`)) {
-        void confirmDelete();
-      }
-      return;
+  /** Confirmación MD3 de eliminación (reemplaza window.confirm/Alert nativo). */
+  const [deleteDialogVisible, setDeleteDialogVisible] = useState(false);
+  const [deletingOrder, setDeletingOrder] = useState(false);
+
+  const handleDeleteConfirm = async () => {
+    setDeletingOrder(true);
+    const deleted = await deleteRepair(repair.id);
+    setDeletingOrder(false);
+    if (deleted) {
+      setDeleteDialogVisible(false);
+      router.replace('/');
     }
-    Alert.alert(
-      'Eliminar Orden',
-      `¿Eliminar DEFINITIVAMENTE la orden ${repair.id}?\n\nEsta acción no se puede deshacer.`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { text: 'Sí, eliminar', style: 'destructive', onPress: confirmDelete },
-      ]
-    );
   };
 
   return (
@@ -344,7 +337,7 @@ export default function JobDetailScreen() {
           <Button
             label="🗑️ Eliminar Orden"
             variant="danger"
-            onPress={handleDelete}
+            onPress={() => setDeleteDialogVisible(true)}
             style={styles.dangerBtn}
           />
         )}
@@ -450,6 +443,21 @@ export default function JobDetailScreen() {
           </ThemedView>
         </View>
       </Modal>
+
+      {/* Confirmación MD3 de eliminación (sustituye window.confirm/Alert) */}
+      <ConfirmDialog
+        visible={deleteDialogVisible}
+        title="Eliminar Orden"
+        message={`¿Eliminar DEFINITIVAMENTE la orden ${repair.id}? Esta acción no se puede deshacer.`}
+        confirmLabel="Sí, eliminar"
+        cancelLabel="Conservar"
+        variant="danger"
+        loading={deletingOrder}
+        onConfirm={() => {
+          void handleDeleteConfirm();
+        }}
+        onCancel={() => setDeleteDialogVisible(false)}
+      />
     </Screen>
   );
 }

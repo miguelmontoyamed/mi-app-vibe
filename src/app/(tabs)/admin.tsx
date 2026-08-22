@@ -12,6 +12,7 @@ import {
 import { useRouter } from 'expo-router';
 
 import { CommercialBanner } from '@/components/commercial-banner';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Screen } from '@/components/ui/screen';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -278,25 +279,23 @@ export default function AdminScreen() {
     }
   };
 
-  const handleDeleteTechnician = async (tech: (typeof users)[number]) => {
-    const confirmDelete = async () => {
-      const deleted = await deleteTechnician(tech.id);
-      if (deleted) {
-        notify('Técnico eliminado.');
-      } else {
-        notify('No se puede eliminar este técnico.');
-      }
-    };
-    if (Platform.OS === 'web') {
-      if (window.confirm(`¿Eliminar a ${tech.name} del taller?`)) {
-        await confirmDelete();
-      }
-    } else {
-      Alert.alert('Eliminar técnico', `¿Eliminar a ${tech.name} del taller?`, [
-        { text: 'Cancelar', style: 'cancel' },
-        { text: 'Eliminar', style: 'destructive', onPress: confirmDelete },
-      ]);
+  /** Confirmación MD3: marca el técnico a eliminar (reemplaza confirm nativo). */
+  const [techPendingDelete, setTechPendingDelete] = useState<(typeof users)[number] | null>(null);
+  const [techDeleting, setTechDeleting] = useState(false);
+
+  const handleDeleteTechnician = (tech: (typeof users)[number]) => {
+    setTechPendingDelete(tech);
+  };
+
+  const confirmDeleteTechnician = async () => {
+    if (!techPendingDelete) {
+      return;
     }
+    setTechDeleting(true);
+    const deleted = await deleteTechnician(techPendingDelete.id);
+    setTechDeleting(false);
+    setTechPendingDelete(null);
+    notify(deleted ? 'Técnico eliminado.' : 'No se puede eliminar este técnico.');
   };
 
   /** Abre WhatsApp para registrar el pago de la suscripción (renovación). */
@@ -954,6 +953,25 @@ export default function AdminScreen() {
           </Pressable>
         </View>
       </ThemedView>
+
+      {/* Confirmación MD3 de eliminación de técnico */}
+      <ConfirmDialog
+        visible={techPendingDelete !== null}
+        title="Eliminar técnico"
+        message={
+          techPendingDelete
+            ? `¿Eliminar a ${techPendingDelete.name} del taller? Su historial de órdenes se conserva.`
+            : ''
+        }
+        confirmLabel="Eliminar"
+        cancelLabel="Cancelar"
+        variant="danger"
+        loading={techDeleting}
+        onConfirm={() => {
+          void confirmDeleteTechnician();
+        }}
+        onCancel={() => setTechPendingDelete(null)}
+      />
     </Screen>
   );
 }
