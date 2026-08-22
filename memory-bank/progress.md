@@ -59,6 +59,7 @@
 ## Historial Reciente
 | Fecha | Cambio |
 |-------|--------|
+| 2026-08-22 | Admin: ALTA de técnicos SOLO vía enlace de invitación (se eliminó el formulario Nombre/Correo/Comisión y `createTechnician` del panel); panel queda para editar comisión y eliminar. Fix Safari/iOS: KPIs de Control de Ingresos se APILAN en <768px y `financeBox` con `minWidth:0` (WebKit min-width:auto partía los montos carácter a carácter) |
 | 2026-08-22 | DeviceSecurityInput: selector Patrón 3x3 (tap+arrastre, nodos 44px, líneas sin SVG) / PIN-Contraseña / Ninguna en recepción; guarda en `unlock_code` existente; detalle muestra clave 🔑 o PatternPreview del trazo; +14 tests → 77/77 |
 | 2026-08-22 | RepairWorkflowStepper: diagrama interactivo del flujo de la orden en `job/[id].tsx` (nodos 40px, conectores semánticos, rama cancelada en error, avance por toque con permisos dueño/técnico asignado vía `updateRepairStatus`) |
 | 2026-08-22 | Higiene: exportación contable DESCARTADA del backlog; foco en espera de siguiente módulo de mostrador (patrón 3x3 o modales MD3); `PENDIENTE.md` obsoleto eliminado |

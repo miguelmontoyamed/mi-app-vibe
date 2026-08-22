@@ -7,6 +7,7 @@ import {
   StyleSheet,
   TextInput,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 
@@ -14,7 +15,7 @@ import { CommercialBanner } from '@/components/commercial-banner';
 import { Screen } from '@/components/ui/screen';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Brand, Shape, Spacing, TouchTarget } from '@/constants/theme';
+import { BREAKPOINTS, Brand, Shape, Spacing, TouchTarget } from '@/constants/theme';
 import { useAuth, MAX_TECHNICIANS, type User } from '@/context/auth-context';
 import { useBilling } from '@/context/billing-context';
 import { useRepair } from '@/context/repair-context';
@@ -47,7 +48,6 @@ export default function AdminScreen() {
     logout,
     generateInviteLink,
     inviteLink,
-    createTechnician,
     deleteTechnician,
     updateTechnicianCommission,
   } = useAuth();
@@ -62,11 +62,11 @@ export default function AdminScreen() {
     refresh: refreshBilling,
   } = useBilling();
   const router = useRouter();
+  // Safari/WebKit: en pantallas angostas las 3 cajas flex no encogen (min-width
+  // auto) y los montos se parten carácter por carácter → apilamos en móvil.
+  const { width: viewportWidth } = useWindowDimensions();
+  const isWideViewport = viewportWidth >= BREAKPOINTS.mobile;
 
-  // Technician management form states
-  const [techName, setTechName] = useState('');
-  const [techEmail, setTechEmail] = useState('');
-  const [techCommission, setTechCommission] = useState('');
   // Inline commission editing state (per technician row)
   const [editingCommissionId, setEditingCommissionId] = useState<string | null>(null);
   const [commissionInput, setCommissionInput] = useState('');
@@ -193,8 +193,6 @@ export default function AdminScreen() {
     return null;
   }
 
-  const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-
   const notify = (message: string) => {
     if (Platform.OS === 'web') {
       window.alert(message);
@@ -298,38 +296,6 @@ export default function AdminScreen() {
         { text: 'Cancelar', style: 'cancel' },
         { text: 'Eliminar', style: 'destructive', onPress: confirmDelete },
       ]);
-    }
-  };
-
-  const handleAddTechnician = async () => {
-    if (!techName.trim() || !techEmail.trim()) {
-      notify('Complete todos los campos para agregar el técnico.');
-      return;
-    }
-    if (!EMAIL_REGEX.test(techEmail.trim())) {
-      notify('Ingrese un correo electrónico válido.');
-      return;
-    }
-    const result = await createTechnician(
-      techName.trim(),
-      techEmail.trim(),
-      Number(techCommission) / 100
-    );
-    if (result.ok) {
-      setTechName('');
-      setTechEmail('');
-      setTechCommission('');
-      notify(
-        'Técnico agregado al taller. Recibirá un correo de confirmación para activar su cuenta.'
-      );
-    } else if (result.reason === 'limit') {
-      notify(
-        `Límite alcanzado: el taller tiene el máximo de ${MAX_TECHNICIANS} técnicos permitidos.`
-      );
-    } else if (result.reason === 'email') {
-      notify('Ya existe un usuario con ese correo.');
-    } else {
-      notify(result.message ?? 'No se pudo agregar el técnico.');
     }
   };
 
@@ -578,53 +544,6 @@ export default function AdminScreen() {
                 );
               })
           )}
-
-          <View style={styles.techForm}>
-            <TextInput
-              style={[
-                styles.input,
-                { color: theme.text, borderColor: theme.backgroundElement },
-              ]}
-              placeholder="Nombre"
-              placeholderTextColor={theme.textSecondary}
-              value={techName}
-              onChangeText={setTechName}
-              maxLength={80}
-            />
-            <TextInput
-              style={[
-                styles.input,
-                { color: theme.text, borderColor: theme.backgroundElement },
-              ]}
-              placeholder="Correo"
-              placeholderTextColor={theme.textSecondary}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              value={techEmail}
-              onChangeText={setTechEmail}
-              maxLength={100}
-            />
-            <TextInput
-              style={[
-                styles.input,
-                { color: theme.text, borderColor: theme.backgroundElement },
-              ]}
-              placeholder="Comisión % (Ej: 30)"
-              placeholderTextColor={theme.textSecondary}
-              keyboardType="number-pad"
-              value={techCommission}
-              onChangeText={(t) => setTechCommission(t.replace(/[^0-9]/g, ''))}
-              maxLength={3}
-            />
-            <Pressable
-              style={({ pressed }) => [
-                styles.primaryButton,
-                pressed && styles.pressed,
-              ]}
-              onPress={handleAddTechnician}>
-              <ThemedText style={styles.buttonText}>Agregar Técnico</ThemedText>
-            </Pressable>
-          </View>
         </ThemedView>
       )}
 
@@ -842,7 +761,7 @@ export default function AdminScreen() {
       {/* Financial Revenue Control Card */}
       <ThemedView type="backgroundElement" style={styles.card}>
         <ThemedText type="subtitle">Control de Ingresos</ThemedText>
-        <View style={styles.financesGrid}>
+        <View style={[styles.financesGrid, !isWideViewport && styles.financesGridStack]}>
           <View style={[styles.financeBox, { backgroundColor: theme.surfaceContainerHigh }]}>
             <ThemedText type="small" themeColor="textSecondary">
               Ingresos Cobrados (Listo/Entregado)
@@ -1072,8 +991,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: Spacing.three,
   },
+  financesGridStack: {
+    flexDirection: 'column',
+    gap: Spacing.two,
+  },
   financeBox: {
     flex: 1,
+    minWidth: 0,
     padding: Spacing.three,
     borderRadius: Shape.lg,
     gap: Spacing.one,
@@ -1266,10 +1190,6 @@ const styles = StyleSheet.create({
     color: Brand.danger,
     fontWeight: '600',
     fontSize: 12,
-  },
-  techForm: {
-    gap: Spacing.two,
-    marginTop: Spacing.one,
   },
   periodHint: {
     marginBottom: Spacing.two,
