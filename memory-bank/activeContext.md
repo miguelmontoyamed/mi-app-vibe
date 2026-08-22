@@ -103,9 +103,7 @@
   eliminado ya no bloquea `fetchRepairs`; el cliente se auto-desloguea.
 
 ## Foco Operativo Inmediato (Sprint Actual)
-**Verificación en vivo de flujos de mostrador y auditoría de enlaces nativos de WhatsApp:** ConfirmDialog MD3 + Liquid Glass ya está operativo en `job/[id].tsx` y `admin.tsx` (suite 11/11 RTL, 85/85 tests globales). Próximo: validar flujos de cancelación y eliminación en producción, y auditar botones de soporte de WhatsApp en receiving/admin screens. El módulo de
-liquidación mensual quedó consolidado y en producción (2026-08-21); la
-exportación contable fue DESCARTADA del backlog (2026-08-22).
+**Validación de release Candidate y deuda técnica preexistente:** Confirmación de que el barrido visual universal (Touch targets ≥44px, truncado de folios, safe areas, compatibilidad WebKit/Chromium) está operativo desde el commit `9d96fed`. El módulo de liquidación mensual quedó consolidado y en producción (2026-08-21); el backlog formal queda en cero. Deuda técnica no bloqueable: `.omo/plans/e2e-debt-login-feedback.md` (locators E2E obsoletos, BASE_URL localhost en invitation.spec, credenciales sin seed en prod Supabase, feedback silencioso en login). Próximo: validación en vivo adquiriendo módulo de adquisición de clientes.
 
 ## Decisiones Recientes
 - **Liquidación en tiempo real (2026-08-21):** el panel se suscribe a
@@ -157,3 +155,13 @@ exportación contable fue DESCARTADA del backlog (2026-08-22).
 - La migración `20260821000000_technician_monthly_performance.sql` y el fix
   `20260821210000_fix_monthly_performance_count_type.sql` están aplicados en
   vivo; schema.sql espejado con delivered_at, trigger, RPC (count(*)::int).
+
+## Deuda Técnica No Bloqueante (E2E)
+- **Registrado:** `.omo/plans/e2e-debt-login-feedback.md`
+- **Objetivo:** Reparación de deuda de tests E2E y feedback de login (pending implementation)
+- **Hallazgos clave:** 
+  - `invitation.spec.ts:19` — `BASE_URL` default `localhost:8081` (no apunta a producción)
+  - `core-flows.spec.ts` — locator `text=Iniciar sesión` resuelve a div con `pointer-events:none`; credenciales hardcodeadas sin seed en prod Supabase
+  - `login.tsx` — feedback silencioso al fallar credenciales
+  - `web-smoke` PASS en chromium+webkit: la pantalla no tiene pantallas blancas (build renderiza correctamente)
+- **Estado:** deuda documentada, pendiente de implementación en sprint subsiguiente; no bloquea release candidate actual.

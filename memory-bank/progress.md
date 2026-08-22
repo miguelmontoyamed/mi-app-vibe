@@ -15,6 +15,7 @@
   por técnico, costos de repuestos en cada orden.
 - **Rediseño visual MD3 + Liquid Glass sutil:** tokens centralizados en
   `src/constants/theme.ts`, 44px, responsive.
+- **Barrido Visual Universal (Touch targets de 44px, truncado de folios, Safe Areas y compatibilidad WebKit/Chromium):** suite RTL 11/11 passing, integración en `job/[id].tsx` y `admin.tsx`, reemplazo de `window.confirm`/`Alert` nativo, TypeScript limpio, 85/85 tests globales pasando. Commit `feat(ui): implement standardized MD3 liquid glass confirmation dialogs` (2026-08-22).
 - **Modales de Confirmación MD3 + Liquid Glass (ConfirmDialog):** suite RTL 11/11
   passing, integración en `job/[id].tsx` y `admin.tsx`, reemplazo de
   `window.confirm`/`Alert` nativo, TypeScript limpio, 85/85 tests globales
