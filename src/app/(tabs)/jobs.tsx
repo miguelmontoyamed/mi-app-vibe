@@ -484,8 +484,12 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.two,
   },
   paymentBtn: {
-    paddingVertical: Spacing.two,
-    paddingHorizontal: Spacing.two,
+    // Igualar la altura del campo de monto (label + input ≈ 54px) sin truncar
+    // el label: padding del token base + objetivo táctil garantizado.
+    minHeight: 54,
+    paddingHorizontal: Spacing.four,
+    minWidth: 120,
+    flexShrink: 0,
   },
   methodRow: {
     flexDirection: 'row',
