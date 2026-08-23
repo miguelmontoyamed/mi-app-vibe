@@ -51,13 +51,24 @@
   facturación del mes nuevo de inmediato.
 - **Fix de sesión obsoleta (ensure_workshop):** verificado contra BD real
   (7/7 checks), desplegado en producción.
+- **Facturación y Recibos Simplificados (2026-08-23):** Vista `receipt/[id].tsx`
+  y plantilla HTML del PDF muestran solo "Total reparación" (eliminadas filas
+  "Repuesto" y "Abonado"). Commit `fix(receipt): remove spare part cost and
+  deposit lines from invoice view and PDF template` — 85/85 tests passing.
+- **Smoke Tests Automatizados en Producción (2026-08-23):** web-smoke.spec.ts
+  PASS en Chromium y WebKit (2/2) contra `mi-app-vibe-ten.vercel.app`.
+- **Suite E2E de Invitaciones (2026-08-23):** `invitation.spec.ts` reescrito
+  con usuario aislado vía Admin API, selectores robustos (`getByRole`,
+  `getByText` con regex), textos flexibles para producción.
+- **UI & Estabilidad E2E (2026-08-23):** `GlassCard` `flexShrink: 1` (Safari/
+  WebKit), feedback de error visible en `login.tsx`, merge de correcciones
+  upstream. Commit `fix(e2e+ui): merge upstream fixes for invitation spec,
+  login error handling, and GlassCard flexShrink`.
 
 ## En Desarrollo / Próximo (🔄)
-- **Foco operativo:** esperando definición de siguiente módulo de mostrador
-  (UI de patrón de desbloqueo 3x3 en recepción o estandarización de modales
-  MD3).
-- **Verificación funcional en vivo** del panel de liquidación (alternar mes
-  archivado vs en curso) tras el deploy a producción.
+- **Foco operativo:** validación y operación continua en mostrador del taller
+  (recepción, asignación, cobro). MVP y Release Candidate cerrados; fase de uso
+  en mostrador y soporte operativo.
 
 ## Pendiente (◻)
 - Ninguno. La "exportación contable" fue DESCARTADA del backlog (2026-08-22).
@@ -65,6 +76,9 @@
 ## Historial Reciente
 | Fecha | Cambio |
 |-------|--------|
+| 2026-08-23 | **Facturación y Recibos Simplificados:** `receipt/[id].tsx` + plantilla HTML PDF muestran solo "Total reparación" (eliminadas filas Repuesto/Abonado). 85/85 tests. |
+| 2026-08-23 | **Despliegue Producción + Smoke Tests:** Vercel deploy `mi-app-vibe-ten.vercel.app`; web-smoke PASS Chromium+WebKit (2/2). |
+| 2026-08-23 | **Suite E2E Invitaciones + UI Fixes:** `invitation.spec.ts` usuario aislado + selectores robustos; `GlassCard` `flexShrink: 1`; login error visible en UI; merge upstream. |
 | 2026-08-22 | Admin: ALTA de técnicos SOLO vía enlace de invitación (se eliminó el formulario Nombre/Correo/Comisión y `createTechnician` del panel); panel queda para editar comisión y eliminar. Fix Safari/iOS: KPIs de Control de Ingresos se APILAN en <768px y `financeBox` con `minWidth:0` (WebKit min-width:auto partía los montos carácter a carácter) |
 | 2026-08-22 | DeviceSecurityInput: selector Patrón 3x3 (tap+arrastre, nodos 44px, líneas sin SVG) / PIN-Contraseña / Ninguna en recepción; guarda en `unlock_code` existente; detalle muestra clave 🔑 o PatternPreview del trazo; +14 tests → 77/77 |
 | 2026-08-22 | RepairWorkflowStepper: diagrama interactivo del flujo de la orden en `job/[id].tsx` (nodos 40px, conectores semánticos, rama cancelada en error, avance por toque con permisos dueño/técnico asignado vía `updateRepairStatus`) |

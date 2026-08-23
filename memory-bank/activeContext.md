@@ -82,7 +82,7 @@
     Neta) y tarjetas por técnico con badge de %, métricas COP exactas y fila
     destacada "Por liquidar al técnico".
 - **Cierres de mes operativos** (snapshot mensual para verificación futura +
-   facturación inmediata del mes nuevo):
+  facturación inmediata del mes nuevo):
   - Tabla `public.monthly_closures` (workshop_id, period 'YYYY-MM', revenue,
     parts_cost, delivered_count, cancelled_count, total_count) con RLS de SOLO
     lectura por taller.
@@ -101,9 +101,22 @@
   alerta visual a 10 días del vencimiento).
 - **Fix de sesiones obsoletas aplicado y desplegado:** un JWT de un usuario
   eliminado ya no bloquea `fetchRepairs`; el cliente se auto-desloguea.
+- **Facturación y Recibos Simplificados (2026-08-23):** La vista
+  `src/app/receipt/[id].tsx` y la plantilla HTML para exportación térmica/PDF
+  (`expo-print`) muestran exclusivamente el "Total reparación", eliminando las
+  filas de desglose de costo de repuesto y abono de cara al cliente.
+- **UI & Estabilidad E2E (2026-08-23):** Integradas correcciones de contención
+  en `GlassCard` (`flexShrink: 1`), manejo de errores de login visible en UI
+  (`loginError` state), y suite E2E de invitaciones para técnicos con usuario
+  aislado y selectores robustos (`getByRole`, `getByText` con regex).
+- **Despliegue en Producción (2026-08-23):** Release Candidate verificado y
+  activo en Vercel (`mi-app-vibe-ten.vercel.app`) superando smoke tests en
+  Chromium y WebKit (Safari) — 2/2 PASS.
 
 ## Foco Operativo Inmediato (Sprint Actual)
-**Validación de release Candidate y deuda técnica preexistente:** Confirmación de que el barrido visual universal (Touch targets ≥44px, truncado de folios, safe areas, compatibilidad WebKit/Chromium) está operativo desde el commit `9d96fed`. El módulo de liquidación mensual quedó consolidado y en producción (2026-08-21); el backlog formal queda en cero. Deuda técnica no bloqueable: `.omo/plans/e2e-debt-login-feedback.md` (locators E2E obsoletos, BASE_URL localhost en invitation.spec, credenciales sin seed en prod Supabase, feedback silencioso en login). Próximo: validación en vivo adquiriendo módulo de adquisición de clientes.
+**Validación y operación continua en mostrador del taller, monitoreando la
+experiencia de recepción, asignación y cobro de servicios.** MVP y Release
+Candidate cerrados; fase de uso en mostrador y soporte operativo.
 
 ## Decisiones Recientes
 - **Liquidación en tiempo real (2026-08-21):** el panel se suscribe a
