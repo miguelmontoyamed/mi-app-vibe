@@ -146,9 +146,8 @@
   - Despliegue verificado: `mi-app-vibe-ten.vercel.app` con headers de seguridad activos.
 
 ## Foco Operativo Inmediato (Sprint Actual)
-**Validación y operación continua en mostrador del taller, monitoreando la
-experiencia de recepción, asignación y cobro de servicios.** MVP y Release
-Candidate cerrados; fase de uso en mostrador y soporte operativo.
+**Operación en Mostrador, Registro de Órdenes Reales y Validación Comercial.**
+Security Sweep completado (20 pts: Git/Secrets, HTTP Headers, Dep Audit); suite 105/105 PASS, tsc 0, deploy + headers activos. MVP/RC cerrados.
 
 ## Decisiones Recientes
 - **Liquidación en tiempo real (2026-08-21):** el panel se suscribe a
@@ -193,6 +192,7 @@ Candidate cerrados; fase de uso en mostrador y soporte operativo.
   `ensure_month_closure()` (SECURITY DEFINER), nunca desde el cliente.
 - El glass se aplica con moderación; en plataformas nativas se degrada a sólido.
 - Las anon keys son públicas por diseño (RLS es la barrera real).
+- **Deuda Técnica Diferida — Vulnerabilidades Transitivas Expo SDK 57 (2026-08-24):** `npm audit` reporta 16 vulnerabilidades residuales (4 high: `image-size` DoS, `nanoid` loop; 12 moderate: `uuid` bounds, `image-size` transitive) en dependencias de Expo (`metro`, `@expo/metro`, `@expo/config-plugins`, `expo-sharing`, `expo-splash-screen`). `npm audit fix --force` requiere downgrade a Expo 46 → breaking changes en SDK 57. Diferida para próxima actualización mayor de Expo (SDK 58+). Mitigación actual: headers `Permissions-Policy` restringen superficie de ataque; RLS aísla datos; no hay vectores de explotación conocidos en código propio.
 
 ## Próximo Paso Esperado
 - El panel de liquidación ya funciona en producción (fix 42804 aplicado en
