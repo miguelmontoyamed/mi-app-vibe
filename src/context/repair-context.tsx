@@ -11,6 +11,7 @@ import {
 } from '@/lib/supabase';
 import {
   applyPayment,
+  canCancel,
   isValidCancellation,
   type CancellationReason,
   type PaymentMethod,
@@ -567,7 +568,14 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
   const cancelRepair = async (id: string, motivo: string): Promise<boolean> => {
     const cleanMotivo = motivo.trim();
     const target = repairs.find((r) => r.id === id);
-    if (!target || !isValidCancellation(target.status, cleanMotivo)) return false;
+    if (!target) {
+      console.warn('[cancelRepair] Orden no encontrada en estado local:', id);
+      return false;
+    }
+    if (!isValidCancellation(target.status, cleanMotivo)) {
+      console.warn('[cancelRepair] Cancelación inválida:', { status: target.status, motivo: cleanMotivo, canCancel: canCancel(target.status), motivoValido: typeof cleanMotivo === 'string' && cleanMotivo.trim().length > 0 });
+      return false;
+    }
     const blockReason = requireWorkshop();
     if (blockReason) { notifyError(blockReason); return false; }
 
