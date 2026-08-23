@@ -61,12 +61,6 @@ export interface RepairItem {
    * mensual del panel de liquidación. Ausente en órdenes no entregadas.
    */
   deliveredAt?: string;
-  /** Referencia al repuesto del inventario usado (para trazabilidad y descuento de stock). */
-  inventoryPartId?: string;
-  /** Nombre del repuesto (snapshot al momento de la orden). */
-  inventoryPartName?: string;
-  /** Cantidad de unidades del repuesto usadas. */
-  inventoryPartQty?: number;
 }
 
 export interface InventoryPart {
@@ -142,12 +136,6 @@ interface RepairRow {
   /** Solo lectura: lo estampa el trigger trg_repairs_delivered_at (nunca se inserta desde el cliente). */
   delivered_at?: string | null;
   created_at?: string | null;
-  /** Referencia al repuesto del inventario (FK a public.inventory.id). */
-  inventory_part_id?: string | null;
-  /** Nombre del repuesto (snapshot). */
-  inventory_part_name?: string | null;
-  /** Cantidad de unidades usadas. */
-  inventory_part_qty?: number | null;
 }
 
 /** Fila de `public.inventory` tal como la devuelve Supabase (snake_case). */
@@ -185,9 +173,6 @@ function repairToRow(item: RepairItem, workshopId: string): RepairRow {
     motivo_cancelacion: item.motivoCancelacion ?? null,
     status: item.status,
     date: item.date,
-    inventory_part_id: item.inventoryPartId ?? null,
-    inventory_part_name: item.inventoryPartName ?? null,
-    inventory_part_qty: item.inventoryPartQty ?? 0,
   };
 }
 
@@ -211,9 +196,6 @@ function repairPatchToRow(patch: RepairPatch): Record<string, unknown> {
   if (patch.technicianName !== undefined) row.technician_name = patch.technicianName;
   if (patch.motivoCancelacion !== undefined) row.motivo_cancelacion = patch.motivoCancelacion;
   if (patch.status !== undefined) row.status = patch.status;
-  if (patch.inventoryPartId !== undefined) row.inventory_part_id = patch.inventoryPartId;
-  if (patch.inventoryPartName !== undefined) row.inventory_part_name = patch.inventoryPartName;
-  if (patch.inventoryPartQty !== undefined) row.inventory_part_qty = patch.inventoryPartQty;
   return row;
 }
 
@@ -240,9 +222,6 @@ function rowToRepair(row: RepairRow): RepairItem {
     status: row.status as RepairStatus,
     date: row.date ?? (row.created_at?.split('T')[0] ?? ''),
     deliveredAt: row.delivered_at ?? undefined,
-    inventoryPartId: row.inventory_part_id ?? undefined,
-    inventoryPartName: row.inventory_part_name ?? undefined,
-    inventoryPartQty: row.inventory_part_qty != null ? Number(row.inventory_part_qty) : undefined,
   };
 }
 
