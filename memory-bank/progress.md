@@ -3,6 +3,12 @@
 > Registro de avance del proyecto. Actualizar al finalizar cada tarea.
 
 ## Completado (✓)
+- **Sugerencia inteligente y autocompletado de repuestos en recepción:** selector
+  interactivo `PartAutocompleteInput` (`src/components/ui/part-autocomplete-input.tsx`)
+  integrado en `receive.tsx`. Sugiere piezas del inventario del taller en tiempo real por
+  nombre/categoría con insensibilidad a mayúsculas y acentos (`src/utils/part-search.ts`).
+  Carga automática del precio de inventario al seleccionar, con posibilidad de ingreso y edición
+  manual libre sin alterar el inventario ni descontar stock. Tests unitarios 94/94 y UI 17/17 PASS.
 - **Autenticación Supabase y roles:** email/password + Google OAuth (PKCE),
   sesiones persistentes, auto-refresh, auto-logueo de sesiones obsoletas y
   roles `admin` / `technician`.
@@ -76,6 +82,7 @@
 ## Historial Reciente
 | Fecha | Cambio |
 |-------|--------|
+| 2026-08-23 | PartAutocompleteInput: selector interactivo de repuestos con sugerencias en tiempo real desde el inventario del taller (nombre/categoría, sin distinción de tildes), auto-rellenado de precio en recepción (`receive.tsx`) y modo manual libre sin afectar el stock. Suite unitaria 94/94 y UI 17/17 PASS |
 | 2026-08-23 | **Facturación y Recibos Simplificados:** `receipt/[id].tsx` + plantilla HTML PDF muestran solo "Total reparación" (eliminadas filas Repuesto/Abonado). 85/85 tests. |
 | 2026-08-23 | **Despliegue Producción + Smoke Tests:** Vercel deploy `mi-app-vibe-ten.vercel.app`; web-smoke PASS Chromium+WebKit (2/2). |
 | 2026-08-23 | **Suite E2E Invitaciones + UI Fixes:** `invitation.spec.ts` usuario aislado + selectores robustos; `GlassCard` `flexShrink: 1`; login error visible en UI; merge upstream. |

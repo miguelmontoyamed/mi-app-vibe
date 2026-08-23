@@ -6,13 +6,13 @@ import { Alert, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { Button } from '@/components/ui/button';
 import { DeviceSecurityInput } from '@/components/ui/device-security-input';
 import { FormInput } from '@/components/ui/form-input';
+import { PartAutocompleteInput } from '@/components/ui/part-autocomplete-input';
 import { Screen } from '@/components/ui/screen';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Brand, Spacing } from '@/constants/theme';
 import { useAuth, type User } from '@/context/auth-context';
 import { useRepair } from '@/context/repair-context';
-import { supabase } from '@/lib/supabase';
 
 const COMMON_ISSUES = [
   'Cambio de pantalla',
@@ -52,13 +52,14 @@ function notify(message: string) {
 
 export default function ReceiveScreen() {
   const router = useRouter();
-  const { addRepair } = useRepair();
+  const { addRepair, inventory } = useRepair();
   const { currentUser, users } = useAuth();
 
   const [clientName, setClientName] = useState('');
   const [phone, setPhone] = useState('');
   const [device, setDevice] = useState('');
   const [issue, setIssue] = useState('');
+  const [partName, setPartName] = useState('');
   const [unlockCode, setUnlockCode] = useState('');
   /** Remount del selector de seguridad para resetearlo tras guardar. */
   const [securityKey, setSecurityKey] = useState(0);
@@ -84,6 +85,7 @@ export default function ReceiveScreen() {
           setPhone(data.phone);
           setDevice(data.device);
           setIssue(data.issue);
+          setPartName(data.partName || '');
           setUnlockCode(data.unlockCode || '');
           setImei(data.imei || '');
           setAdvancePayment(data.advancePayment != null ? String(data.advancePayment) : '');
@@ -173,6 +175,7 @@ export default function ReceiveScreen() {
           phone: phone.trim(),
           device: device.trim(),
           issue: issue.trim(),
+          partName: partName.trim(),
           imei: imei.trim(),
           advancePayment: advanceNum,
           budget: budgetNum,
@@ -190,6 +193,7 @@ export default function ReceiveScreen() {
     setPhone('');
     setDevice('');
     setIssue('');
+    setPartName('');
     setUnlockCode('');
     setSecurityKey((k) => k + 1);
     setImei('');
@@ -302,8 +306,19 @@ export default function ReceiveScreen() {
           maxLength={MAX_LENGTHS.money}
         />
 
+        {/* Repuesto requerido: autocompletado desde inventario con opción manual */}
+        <PartAutocompleteInput
+          value={partName}
+          onChangeText={setPartName}
+          inventory={inventory}
+          onSelectPart={(part) => {
+            setPartName(part.name);
+            setPartsCost(String(part.price));
+          }}
+        />
+
         <FormInput
-          label="Valor del Repuesto (opcional)"
+          label="Valor del Repuesto (COP)"
           placeholder="Ej. 45000"
           keyboardType="numeric"
           value={partsCost}

@@ -35,6 +35,9 @@ export default function JobDetailScreen() {
   const [reassignModalVisible, setReassignModalVisible] = useState(false);
   /** Miembro elegido en el modal de reasignación (null = aún sin elegir). */
   const [reassignTarget, setReassignTarget] = useState<User | null>(null);
+  /** Confirmación MD3 de eliminación (reemplaza window.confirm/Alert nativo). */
+  const [deleteDialogVisible, setDeleteDialogVisible] = useState(false);
+  const [deletingOrder, setDeletingOrder] = useState(false);
 
   const repair = repairs.find((r) => r.id === id);
 
@@ -163,10 +166,6 @@ export default function JobDetailScreen() {
       }
     }
   };
-
-  /** Confirmación MD3 de eliminación (reemplaza window.confirm/Alert nativo). */
-  const [deleteDialogVisible, setDeleteDialogVisible] = useState(false);
-  const [deletingOrder, setDeletingOrder] = useState(false);
 
   const handleDeleteConfirm = async () => {
     setDeletingOrder(true);

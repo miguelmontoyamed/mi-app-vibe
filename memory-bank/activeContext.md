@@ -4,6 +4,15 @@
 > Actualizar al finalizar cada tarea (ver `progress.md`).
 
 ## Estado Actual (Consolidado — verificado contra el código)
+- **Sugerencia inteligente y autocompletado de repuestos en recepción (2026-08-22):**
+  selector y autocompletado interactivo `PartAutocompleteInput` (`src/components/ui/part-autocomplete-input.tsx`)
+  en el formulario de recepción (`receive.tsx`). Al escribir, busca coincidencias en tiempo
+  real en el inventario del taller (`useRepair().inventory`) por nombre o categoría con
+  insensibilidad a mayúsculas y acentos (`src/utils/part-search.ts`).
+  Al seleccionar una sugerencia, rellena automáticamente el nombre y el campo "Valor del Repuesto" (`partsCost`).
+  Permite ingresar repuestos manuales y modificar libremente el precio sin afectar ni modificar
+  el stock del taller. Suite de tests unitarios (+9 tests en `src/utils/part-search.test.ts`
+  y pruebas de UI en `src/components/ui/__tests__/part-autocomplete-input.test.tsx`).
 - **DeviceSecurityInput operativo en recepción (2026-08-22):** selector
   interactivo de seguridad del equipo (`src/components/ui/device-security-
   input.tsx`) con 3 modos por chips: 'Ninguna', 'PIN / Contraseña' (prefijo

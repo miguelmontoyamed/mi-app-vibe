@@ -76,6 +76,10 @@ export default function AdminScreen() {
   const [supportType, setSupportType] = useState(SUPPORT_TYPES[0]);
   const [supportMessage, setSupportMessage] = useState('');
 
+  /** Confirmación MD3: marca el técnico a eliminar (reemplaza confirm nativo). */
+  const [techPendingDelete, setTechPendingDelete] = useState<(typeof users)[number] | null>(null);
+  const [techDeleting, setTechDeleting] = useState(false);
+
   // ── Panel de Liquidación y Rendimiento Mensual por Técnico ──
   /** Periodo elegido explícitamente por el usuario ('YYYY-MM'); null hasta que elige. */
   const [selectedPeriod, setSelectedPeriod] = useState<string | null>(null);
@@ -278,10 +282,6 @@ export default function AdminScreen() {
       notify(`Enlace de invitación:\n\n${inviteLink.url}`);
     }
   };
-
-  /** Confirmación MD3: marca el técnico a eliminar (reemplaza confirm nativo). */
-  const [techPendingDelete, setTechPendingDelete] = useState<(typeof users)[number] | null>(null);
-  const [techDeleting, setTechDeleting] = useState(false);
 
   const handleDeleteTechnician = (tech: (typeof users)[number]) => {
     setTechPendingDelete(tech);
