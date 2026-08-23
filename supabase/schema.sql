@@ -70,6 +70,10 @@ create table if not exists public.repairs (
   device text not null,
   issue text,
   budget numeric not null default 0,
+  parts_cost numeric not null default 0,
+  inventory_part_id uuid references public.inventory(id) on delete set null,
+  inventory_part_name text,
+  inventory_part_qty int not null default 0,
   advance_payment numeric not null default 0,
   payment_method text,
   unlock_code text,
@@ -80,6 +84,7 @@ create table if not exists public.repairs (
   status text not null default 'Pendiente'
     check (status in ('Pendiente','En Proceso','Listo','Entregado','Cancelado / No Reparado')),
   date date not null default current_date,
+  delivered_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   check (payment_method is null or payment_method in ('Efectivo','Transferencia','Tarjeta'))
@@ -156,6 +161,9 @@ alter table public.repairs add column if not exists issue text;
 alter table public.repairs add column if not exists updated_at timestamptz not null default now();
 -- Fecha real de entrega/cobro (panel de liquidación mensual por técnico).
 alter table public.repairs add column if not exists parts_cost numeric not null default 0;
+alter table public.repairs add column if not exists inventory_part_id uuid references public.inventory(id) on delete set null;
+alter table public.repairs add column if not exists inventory_part_name text;
+alter table public.repairs add column if not exists inventory_part_qty int not null default 0;
 alter table public.repairs add column if not exists delivered_at timestamptz;
 
 -- v2: cancelación con motivo en texto libre. Renombra la columna legacy

@@ -16,6 +16,12 @@ import {
   type PaymentMethod,
   type RepairStatus,
 } from '@/utils/repair-logic';
+import {
+  calculatePartsCost,
+  calculateRemainingStock,
+  calculateRestoredStock,
+  hasAvailableStock,
+} from '@/utils/inventory-parts';
 import { generateOrderId, ORDER_PREFIX } from '@/utils/order-generator';
 
 // Re-exported so existing consumers can keep importing from repair-context.
@@ -30,6 +36,12 @@ export interface RepairItem {
   budget: number;
   /** Valor del repuesto usado (COP). 0 = sin repuestos. Se resta del presupuesto para la utilidad. */
   partsCost?: number;
+  /** ID del repuesto del inventario vinculado (si proviene de public.inventory). */
+  inventoryPartId?: string;
+  /** Nombre del repuesto vinculado. */
+  inventoryPartName?: string;
+  /** Cantidad de piezas usadas del inventario. */
+  inventoryPartQty?: number;
   unlockCode?: string;
   imei?: string;
   /** Importe ya cobrado al cliente (anticipo + pagos parciales). */
@@ -82,6 +94,15 @@ interface RepairContextType {
   recordRepairPayment: (id: string, amount: number, method: PaymentMethod) => Promise<void>;
   addInventoryPart: (part: Omit<InventoryPart, 'id'>) => Promise<void>;
   updateInventoryStock: (id: string, delta: number) => Promise<void>;
+  /** Asigna un repuesto del inventario a la reparación y descuenta el stock automáticamente. */
+  assignInventoryPartToRepair: (
+    repairId: string,
+    partId: string,
+    quantity: number,
+    customPrice?: number
+  ) => Promise<boolean>;
+  /** Remueve el repuesto de inventario de la reparación y reintegra el stock. */
+  removeInventoryPartFromRepair: (repairId: string) => Promise<boolean>;
 }
 
 const RepairContext = createContext<RepairContextType | undefined>(undefined);
@@ -100,6 +121,9 @@ interface RepairRow {
   issue: string | null;
   budget: number | null;
   parts_cost: number | null;
+  inventory_part_id?: string | null;
+  inventory_part_name?: string | null;
+  inventory_part_qty?: number | null;
   advance_payment: number | null;
   payment_method: PaymentMethod | null;
   unlock_code: string | null;
@@ -137,6 +161,9 @@ function repairToRow(item: RepairItem, workshopId: string): RepairRow {
     issue: item.issue || null,
     budget: item.budget,
     parts_cost: item.partsCost ?? 0,
+    inventory_part_id: item.inventoryPartId ?? null,
+    inventory_part_name: item.inventoryPartName ?? null,
+    inventory_part_qty: item.inventoryPartQty ?? 0,
     advance_payment: item.advancePayment ?? 0,
     payment_method: item.paymentMethod ?? null,
     unlock_code: item.unlockCode ?? null,
@@ -158,6 +185,9 @@ function repairPatchToRow(patch: RepairPatch): Record<string, unknown> {
   if (patch.issue !== undefined) row.issue = patch.issue;
   if (patch.budget !== undefined) row.budget = patch.budget;
   if (patch.partsCost !== undefined) row.parts_cost = patch.partsCost;
+  if (patch.inventoryPartId !== undefined) row.inventory_part_id = patch.inventoryPartId;
+  if (patch.inventoryPartName !== undefined) row.inventory_part_name = patch.inventoryPartName;
+  if (patch.inventoryPartQty !== undefined) row.inventory_part_qty = patch.inventoryPartQty;
   if (patch.unlockCode !== undefined) row.unlock_code = patch.unlockCode;
   if (patch.imei !== undefined) row.imei = patch.imei;
   if (patch.advancePayment !== undefined) row.advance_payment = patch.advancePayment;
@@ -179,6 +209,9 @@ function rowToRepair(row: RepairRow): RepairItem {
     issue: row.issue ?? '',
     budget: Number(row.budget ?? 0),
     partsCost: row.parts_cost != null ? Number(row.parts_cost) : 0,
+    inventoryPartId: row.inventory_part_id ?? undefined,
+    inventoryPartName: row.inventory_part_name ?? undefined,
+    inventoryPartQty: row.inventory_part_qty != null && Number(row.inventory_part_qty) > 0 ? Number(row.inventory_part_qty) : undefined,
     unlockCode: row.unlock_code ?? undefined,
     imei: row.imei ?? undefined,
     advancePayment: row.advance_payment != null ? Number(row.advance_payment) : undefined,
@@ -505,6 +538,8 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
    * Cancela la reparación con un motivo obligatorio (texto libre). Devuelve
    * true si se aplicó la cancelación, false si el estado no lo permite o el
    * motivo está vacío.
+   * Si la orden tenía un repuesto de inventario asignado, reintegra automáticamente
+   * el stock al inventario.
    */
   const cancelRepair = async (id: string, motivo: string): Promise<boolean> => {
     const cleanMotivo = motivo.trim();
@@ -512,9 +547,56 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
     if (!target || !isValidCancellation(target.status, cleanMotivo)) return false;
     const blockReason = requireWorkshop();
     if (blockReason) { notifyError(blockReason); return false; }
-    const { error } = await supabase.from('repairs').update({ status: 'Cancelado / No Reparado', motivo_cancelacion: cleanMotivo }).eq('id', id);
-    if (error) { console.error(formatDbError('cancelRepair (update)', error)); notifyError(`No se pudo cancelar la orden: ${error.message}`); return false; }
-    setRepairs((prev) => prev.map((r) => r.id === id ? { ...r, status: 'Cancelado / No Reparado' as RepairStatus, motivoCancelacion: cleanMotivo } : r));
+
+    // Reintegrar stock al inventario si la orden tenía pieza vinculada
+    if (target.inventoryPartId) {
+      const prevPart = inventory.find((p) => p.id === target.inventoryPartId);
+      if (prevPart) {
+        const qty = target.inventoryPartQty ?? 1;
+        const restoredStock = calculateRestoredStock(prevPart.stock, qty);
+        const { error: stockErr } = await supabase
+          .from('inventory')
+          .update({ stock: restoredStock })
+          .eq('id', prevPart.id);
+        if (!stockErr) {
+          setInventory((prev) =>
+            prev.map((p) => (p.id === prevPart.id ? { ...p, stock: restoredStock } : p))
+          );
+        }
+      }
+    }
+
+    const { error } = await supabase
+      .from('repairs')
+      .update({
+        status: 'Cancelado / No Reparado',
+        motivo_cancelacion: cleanMotivo,
+        inventory_part_id: null,
+        inventory_part_name: null,
+        inventory_part_qty: 0,
+        parts_cost: 0,
+      })
+      .eq('id', id);
+    if (error) {
+      console.error(formatDbError('cancelRepair (update)', error));
+      notifyError(`No se pudo cancelar la orden: ${error.message}`);
+      return false;
+    }
+    setRepairs((prev) =>
+      prev.map((r) =>
+        r.id === id
+          ? {
+              ...r,
+              status: 'Cancelado / No Reparado' as RepairStatus,
+              motivoCancelacion: cleanMotivo,
+              inventoryPartId: undefined,
+              inventoryPartName: undefined,
+              inventoryPartQty: undefined,
+              partsCost: 0,
+            }
+          : r
+      )
+    );
     return true;
   };
 
@@ -575,6 +657,206 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
     setInventory((prev) => prev.map((p) => (p.id === id ? { ...p, stock } : p)));
   };
 
+  /**
+   * Asigna un repuesto de inventario a una orden de reparación, descontando
+   * automáticamente el stock de la pieza en la BD y reintegrando el stock
+   * de cualquier pieza previamente asignada.
+   */
+  const assignInventoryPartToRepair = async (
+    repairId: string,
+    partId: string,
+    quantity: number,
+    customPrice?: number
+  ): Promise<boolean> => {
+    const target = repairs.find((r) => r.id === repairId);
+    if (!target) {
+      notifyError('Orden de reparación no encontrada.');
+      return false;
+    }
+    const part = inventory.find((p) => p.id === partId);
+    if (!part) {
+      notifyError('Pieza de inventario no encontrada.');
+      return false;
+    }
+    const blockReason = requireWorkshop();
+    if (blockReason) {
+      notifyError(blockReason);
+      return false;
+    }
+
+    const prevPartId = target.inventoryPartId;
+    const prevQty = target.inventoryPartQty ?? 1;
+
+    // Caso 1: misma pieza, se ajusta la cantidad o precio
+    if (prevPartId && prevPartId === partId) {
+      const delta = quantity - prevQty;
+      if (delta > 0 && !hasAvailableStock(part.stock, delta)) {
+        notifyError(`Stock insuficiente de "${part.name}". Disponible adicional: ${part.stock}`);
+        return false;
+      }
+      const newPartStock = calculateRemainingStock(part.stock, delta);
+      const { error: invError } = await supabase
+        .from('inventory')
+        .update({ stock: newPartStock })
+        .eq('id', partId);
+      if (invError) {
+        console.error(formatDbError('assignInventoryPartToRepair (update inventory)', invError));
+        notifyError(`No se pudo actualizar el inventario: ${invError.message}`);
+        return false;
+      }
+
+      const partsCost = calculatePartsCost(part.price, quantity, customPrice);
+      const { error: repError } = await supabase
+        .from('repairs')
+        .update({
+          parts_cost: partsCost,
+          inventory_part_id: partId,
+          inventory_part_name: part.name,
+          inventory_part_qty: quantity,
+        })
+        .eq('id', repairId);
+      if (repError) {
+        console.error(formatDbError('assignInventoryPartToRepair (update repair)', repError));
+        notifyError(`No se pudo actualizar la orden: ${repError.message}`);
+        return false;
+      }
+
+      setInventory((prev) => prev.map((p) => (p.id === partId ? { ...p, stock: newPartStock } : p)));
+      setRepairs((prev) =>
+        prev.map((r) =>
+          r.id === repairId
+            ? {
+                ...r,
+                partsCost,
+                inventoryPartId: partId,
+                inventoryPartName: part.name,
+                inventoryPartQty: quantity,
+              }
+            : r
+        )
+      );
+      return true;
+    }
+
+    // Caso 2: pieza diferente o primera asignación
+    if (!hasAvailableStock(part.stock, quantity)) {
+      notifyError(`Stock insuficiente de "${part.name}". Stock disponible: ${part.stock}`);
+      return false;
+    }
+
+    // Si había una pieza previa diferente, devolvemos su stock
+    if (prevPartId) {
+      const prevPart = inventory.find((p) => p.id === prevPartId);
+      if (prevPart) {
+        const restoredStock = calculateRestoredStock(prevPart.stock, prevQty);
+        await supabase.from('inventory').update({ stock: restoredStock }).eq('id', prevPartId);
+        setInventory((prev) =>
+          prev.map((p) => (p.id === prevPartId ? { ...p, stock: restoredStock } : p))
+        );
+      }
+    }
+
+    // Descontar stock de la nueva pieza
+    const newPartStock = calculateRemainingStock(part.stock, quantity);
+    const { error: invError } = await supabase
+      .from('inventory')
+      .update({ stock: newPartStock })
+      .eq('id', partId);
+    if (invError) {
+      console.error(formatDbError('assignInventoryPartToRepair (deduct inventory)', invError));
+      notifyError(`No se pudo actualizar el inventario: ${invError.message}`);
+      return false;
+    }
+
+    const partsCost = calculatePartsCost(part.price, quantity, customPrice);
+    const { error: repError } = await supabase
+      .from('repairs')
+      .update({
+        parts_cost: partsCost,
+        inventory_part_id: partId,
+        inventory_part_name: part.name,
+        inventory_part_qty: quantity,
+      })
+      .eq('id', repairId);
+    if (repError) {
+      console.error(formatDbError('assignInventoryPartToRepair (update repair)', repError));
+      notifyError(`No se pudo actualizar la orden: ${repError.message}`);
+      return false;
+    }
+
+    setInventory((prev) => prev.map((p) => (p.id === partId ? { ...p, stock: newPartStock } : p)));
+    setRepairs((prev) =>
+      prev.map((r) =>
+        r.id === repairId
+          ? {
+              ...r,
+              partsCost,
+              inventoryPartId: partId,
+              inventoryPartName: part.name,
+              inventoryPartQty: quantity,
+            }
+          : r
+      )
+    );
+    return true;
+  };
+
+  /**
+   * Remueve el repuesto asignado a la orden, reintegrando el stock al inventario
+   * si la pieza provenía del inventario.
+   */
+  const removeInventoryPartFromRepair = async (repairId: string): Promise<boolean> => {
+    const target = repairs.find((r) => r.id === repairId);
+    if (!target) return false;
+    const blockReason = requireWorkshop();
+    if (blockReason) {
+      notifyError(blockReason);
+      return false;
+    }
+
+    if (target.inventoryPartId) {
+      const prevPart = inventory.find((p) => p.id === target.inventoryPartId);
+      if (prevPart) {
+        const qty = target.inventoryPartQty ?? 1;
+        const restoredStock = calculateRestoredStock(prevPart.stock, qty);
+        await supabase.from('inventory').update({ stock: restoredStock }).eq('id', prevPart.id);
+        setInventory((prev) =>
+          prev.map((p) => (p.id === prevPart.id ? { ...p, stock: restoredStock } : p))
+        );
+      }
+    }
+
+    const { error } = await supabase
+      .from('repairs')
+      .update({
+        parts_cost: 0,
+        inventory_part_id: null,
+        inventory_part_name: null,
+        inventory_part_qty: 0,
+      })
+      .eq('id', repairId);
+    if (error) {
+      console.error(formatDbError('removeInventoryPartFromRepair (update)', error));
+      notifyError(`No se pudo remover el repuesto: ${error.message}`);
+      return false;
+    }
+
+    setRepairs((prev) =>
+      prev.map((r) =>
+        r.id === repairId
+          ? {
+              ...r,
+              partsCost: 0,
+              inventoryPartId: undefined,
+              inventoryPartName: undefined,
+              inventoryPartQty: undefined,
+            }
+          : r
+      )
+    );
+    return true;
+  };
+
   return (
     <RepairContext.Provider
       value={{
@@ -591,6 +873,8 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
         recordRepairPayment,
         addInventoryPart,
         updateInventoryStock,
+        assignInventoryPartToRepair,
+        removeInventoryPartFromRepair,
       }}>
       {children}
     </RepairContext.Provider>

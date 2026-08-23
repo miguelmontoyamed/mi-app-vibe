@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -12,9 +12,10 @@ import { RepairWorkflowStepper } from '@/components/ui/repair-workflow-stepper';
 import { PatternPreview } from '@/components/ui/device-security-input';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { parseDeviceSecurity, parsePatternSequence } from '@/utils/device-security';
+import { filterInventoryParts } from '@/utils/inventory-parts';
 import { Brand, Shape, Spacing, statusStyle } from '@/constants/theme';
 import { useAuth, type User } from '@/context/auth-context';
-import { useRepair } from '@/context/repair-context';
+import { useRepair, type InventoryPart } from '@/context/repair-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useTheme } from '@/hooks/use-theme';
 import { formatCOP } from '@/utils/format';
@@ -24,14 +25,31 @@ export default function JobDetailScreen() {
   const router = useRouter();
   const theme = useTheme();
   const { currentUser, users } = useAuth();
-  const { repairs, cancelRepair, deleteRepair, updateRepair, updateRepairStatus } = useRepair();
+  const {
+    repairs,
+    inventory,
+    cancelRepair,
+    deleteRepair,
+    updateRepair,
+    updateRepairStatus,
+    assignInventoryPartToRepair,
+    removeInventoryPartFromRepair,
+  } = useRepair();
   const { id } = useLocalSearchParams<{ id: string }>();
   const scheme = useColorScheme();
 
   const [cancelModalVisible, setCancelModalVisible] = useState(false);
   const [cancelMotivo, setCancelMotivo] = useState('');
+  
+  // Modal de repuestos (inventario / manual)
   const [partsModalVisible, setPartsModalVisible] = useState(false);
-  const [partsInput, setPartsInput] = useState('');
+  const [partsTab, setPartsTab] = useState<'inventory' | 'manual'>('inventory');
+  const [selectedPartId, setSelectedPartId] = useState<string | null>(null);
+  const [partSearchQuery, setPartSearchQuery] = useState('');
+  const [partQuantity, setPartQuantity] = useState(1);
+  const [manualPartsInput, setManualPartsInput] = useState('');
+  const [savingParts, setSavingParts] = useState(false);
+
   const [reassignModalVisible, setReassignModalVisible] = useState(false);
   /** Miembro elegido en el modal de reasignación (null = aún sin elegir). */
   const [reassignTarget, setReassignTarget] = useState<User | null>(null);
@@ -76,7 +94,23 @@ export default function JobDetailScreen() {
   const cancelStyle = statusStyle(repair.status, scheme === 'dark' ? 'dark' : 'light');
 
   const openPartsModal = () => {
-    setPartsInput(partsCost > 0 ? String(partsCost) : '');
+    if (repair.inventoryPartId) {
+      setPartsTab('inventory');
+      setSelectedPartId(repair.inventoryPartId);
+      setPartQuantity(repair.inventoryPartQty ?? 1);
+      setManualPartsInput('');
+    } else if (partsCost > 0) {
+      setPartsTab('manual');
+      setSelectedPartId(null);
+      setPartQuantity(1);
+      setManualPartsInput(String(partsCost));
+    } else {
+      setPartsTab(inventory.length > 0 ? 'inventory' : 'manual');
+      setSelectedPartId(null);
+      setPartQuantity(1);
+      setManualPartsInput('');
+    }
+    setPartSearchQuery('');
     setPartsModalVisible(true);
   };
 
@@ -125,19 +159,57 @@ export default function JobDetailScreen() {
   };
 
   const handleSaveParts = async () => {
-    const trimmed = partsInput.trim();
-    const value = trimmed ? parseFloat(trimmed) : 0;
-    if (!Number.isFinite(value) || value < 0) {
-      if (Platform.OS === 'web') {
-        window.alert('Valor inválido\n\nIngrese un valor numérico mayor o igual a 0.');
+    setSavingParts(true);
+    try {
+      if (partsTab === 'inventory') {
+        if (!selectedPartId) {
+          if (Platform.OS === 'web') {
+            window.alert('Selecciona un repuesto del inventario o cambia a la pestaña Manual.');
+          } else {
+            Alert.alert('Aviso', 'Selecciona un repuesto del inventario o cambia a la pestaña Manual.');
+          }
+          return;
+        }
+        const ok = await assignInventoryPartToRepair(repair.id, selectedPartId, partQuantity);
+        if (ok) {
+          setPartsModalVisible(false);
+        }
       } else {
-        Alert.alert('Valor inválido', 'Ingrese un valor numérico mayor o igual a 0.');
+        const trimmed = manualPartsInput.trim();
+        const value = trimmed ? parseFloat(trimmed) : 0;
+        if (!Number.isFinite(value) || value < 0) {
+          if (Platform.OS === 'web') {
+            window.alert('Valor inválido\n\nIngrese un valor numérico mayor o igual a 0.');
+          } else {
+            Alert.alert('Valor inválido', 'Ingrese un valor numérico mayor o igual a 0.');
+          }
+          return;
+        }
+        // Si tenía repuesto de inventario antes, primero lo desvinculamos para devolver su stock
+        if (repair.inventoryPartId) {
+          await removeInventoryPartFromRepair(repair.id);
+        }
+        await updateRepair(repair.id, {
+          partsCost: value,
+          inventoryPartId: undefined,
+          inventoryPartName: undefined,
+          inventoryPartQty: undefined,
+        });
+        setPartsModalVisible(false);
       }
-      return;
+    } finally {
+      setSavingParts(false);
     }
-    await updateRepair(repair.id, { partsCost: value });
-    setPartsModalVisible(false);
-    setPartsInput('');
+  };
+
+  const handleRemovePart = async () => {
+    setSavingParts(true);
+    try {
+      await removeInventoryPartFromRepair(repair.id);
+      setPartsModalVisible(false);
+    } finally {
+      setSavingParts(false);
+    }
   };
 
   const openCancelModal = () => {
@@ -176,6 +248,12 @@ export default function JobDetailScreen() {
       router.replace('/');
     }
   };
+
+  const filteredParts = filterInventoryParts(inventory, partSearchQuery);
+  const selectedInventoryPart = inventory.find((p) => p.id === selectedPartId);
+  const availableMaxStock = selectedInventoryPart
+    ? selectedInventoryPart.stock + (repair.inventoryPartId === selectedInventoryPart.id ? (repair.inventoryPartQty ?? 1) : 0)
+    : 0;
 
   return (
     <Screen title="Detalle de Orden">
@@ -296,7 +374,9 @@ export default function JobDetailScreen() {
           <View style={styles.sectionRow}>
             <ThemedText type="smallBold">Repuesto:</ThemedText>
             <ThemedText type="small" style={styles.sectionValue}>
-              − {formatCOP(partsCost)}
+              {repair.inventoryPartName
+                ? `📦 ${repair.inventoryPartName} (${repair.inventoryPartQty ?? 1} ud) − ${formatCOP(partsCost)}`
+                : `− ${formatCOP(partsCost)}`}
             </ThemedText>
           </View>
         )}
@@ -307,7 +387,13 @@ export default function JobDetailScreen() {
           </ThemedText>
         </View>
         <Button
-          label={partsCost > 0 ? '✏️ Editar valor de repuesto' : '➕ Agregar valor de repuesto'}
+          label={
+            partsCost > 0
+              ? repair.inventoryPartName
+                ? '⚙️ Modificar repuesto de inventario'
+                : '✏️ Editar valor de repuesto'
+              : '➕ Usar repuesto de inventario'
+          }
           variant="secondary"
           onPress={openPartsModal}
           style={styles.partsBtn}
@@ -371,29 +457,177 @@ export default function JobDetailScreen() {
         </View>
       </Modal>
 
-      {/* Parts cost edit modal (admin y técnico asignado) */}
+      {/* Modal de Repuestos (Desde Inventario o Manual con descuento automático) */}
       <Modal
         visible={partsModalVisible}
         transparent
         animationType="fade"
         onRequestClose={() => setPartsModalVisible(false)}>
         <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
-          <ThemedView type="backgroundElement" style={styles.modalCard}>
-            <ThemedText type="subtitle">Valor del repuesto</ThemedText>
+          <ThemedView type="backgroundElement" style={[styles.modalCard, styles.partsModalCard]}>
+            <ThemedText type="subtitle">Asignar Repuesto</ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
-              Se resta del presupuesto para calcular la utilidad y la comisión
-              del técnico. Déjalo en 0 si no se usó repuesto.
+              El costo del repuesto se resta del presupuesto para la utilidad y comisión del técnico.
             </ThemedText>
-            <FormInput
-              label="Valor del repuesto (COP)"
-              placeholder="Ej. 45000"
-              keyboardType="numeric"
-              value={partsInput}
-              onChangeText={(t) => setPartsInput(t.replace(/[^0-9.]/g, ''))}
-            />
+
+            {/* Selector de pestañas */}
+            <View style={styles.tabHeader}>
+              <Pressable
+                onPress={() => setPartsTab('inventory')}
+                style={[styles.tabButton, partsTab === 'inventory' && styles.tabButtonActive]}>
+                <ThemedText
+                  type="smallBold"
+                  style={[styles.tabButtonText, partsTab === 'inventory' && styles.tabButtonTextActive]}>
+                  📦 Inventario ({inventory.length})
+                </ThemedText>
+              </Pressable>
+              <Pressable
+                onPress={() => setPartsTab('manual')}
+                style={[styles.tabButton, partsTab === 'manual' && styles.tabButtonActive]}>
+                <ThemedText
+                  type="smallBold"
+                  style={[styles.tabButtonText, partsTab === 'manual' && styles.tabButtonTextActive]}>
+                  💵 Valor Manual
+                </ThemedText>
+              </Pressable>
+            </View>
+
+            {partsTab === 'inventory' ? (
+              <View style={styles.inventoryTabBody}>
+                <FormInput
+                  label="Buscar en inventario"
+                  placeholder="Ej. Pantalla, Batería, etc..."
+                  value={partSearchQuery}
+                  onChangeText={setPartSearchQuery}
+                />
+
+                {inventory.length === 0 ? (
+                  <ThemedView type="backgroundElement" style={styles.emptyPartsNotice}>
+                    <ThemedText type="small" themeColor="textSecondary">
+                      No hay repuestos registrados en el inventario del taller. Regístralos en la pestaña Inventario o usa Valor Manual.
+                    </ThemedText>
+                  </ThemedView>
+                ) : filteredParts.length === 0 ? (
+                  <ThemedView type="backgroundElement" style={styles.emptyPartsNotice}>
+                    <ThemedText type="small" themeColor="textSecondary">
+                      No se encontraron piezas con “{partSearchQuery}”.
+                    </ThemedText>
+                  </ThemedView>
+                ) : (
+                  <ScrollView style={styles.partsListScroll} nestedScrollEnabled>
+                    {filteredParts.map((item) => {
+                      const isSelected = selectedPartId === item.id;
+                      const hasStock = item.stock > 0 || (repair.inventoryPartId === item.id);
+                      return (
+                        <Pressable
+                          key={item.id}
+                          disabled={!hasStock}
+                          onPress={() => {
+                            setSelectedPartId(item.id);
+                            if (partQuantity > item.stock && item.stock > 0) {
+                              setPartQuantity(1);
+                            }
+                          }}
+                          style={[
+                            styles.partItemCard,
+                            { borderColor: isSelected ? Brand.primary : theme.border },
+                            isSelected && styles.partItemCardSelected,
+                            !hasStock && styles.partItemCardDisabled,
+                          ]}>
+                          <View style={styles.partItemHeader}>
+                            <ThemedText type="smallBold" style={styles.partItemName}>
+                              {item.name}
+                            </ThemedText>
+                            <ThemedText type="smallBold" style={styles.partItemPrice}>
+                              {formatCOP(item.price)}
+                            </ThemedText>
+                          </View>
+                          <View style={styles.partItemFooter}>
+                            <ThemedText type="small" themeColor="textSecondary">
+                              {item.category || 'General'}
+                            </ThemedText>
+                            <View
+                              style={[
+                                styles.stockBadge,
+                                { backgroundColor: hasStock ? Brand.primary : '#EF4444' },
+                              ]}>
+                              <ThemedText type="smallBold" style={styles.stockBadgeText}>
+                                {hasStock ? `Stock: ${item.stock}` : 'Agotado (0)'}
+                              </ThemedText>
+                            </View>
+                          </View>
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+                )}
+
+                {/* Cantidad y resumen si hay pieza seleccionada */}
+                {selectedInventoryPart && (
+                  <View style={styles.quantitySection}>
+                    <ThemedText type="smallBold">Cantidad a utilizar:</ThemedText>
+                    <View style={styles.quantityControls}>
+                      <Pressable
+                        onPress={() => setPartQuantity((q) => Math.max(1, q - 1))}
+                        disabled={partQuantity <= 1}
+                        style={[styles.qtyBtn, partQuantity <= 1 && styles.qtyBtnDisabled]}>
+                        <ThemedText type="subtitle">−</ThemedText>
+                      </Pressable>
+                      <ThemedText type="subtitle" style={styles.qtyDisplay}>
+                        {partQuantity}
+                      </ThemedText>
+                      <Pressable
+                        onPress={() => setPartQuantity((q) => Math.min(availableMaxStock, q + 1))}
+                        disabled={partQuantity >= availableMaxStock}
+                        style={[styles.qtyBtn, partQuantity >= availableMaxStock && styles.qtyBtnDisabled]}>
+                        <ThemedText type="subtitle">+</ThemedText>
+                      </Pressable>
+                    </View>
+                    <ThemedText type="small" style={styles.deductPreview}>
+                      Total: {formatCOP(selectedInventoryPart.price * partQuantity)} (se descontarán {partQuantity} uds automáticamente)
+                    </ThemedText>
+                  </View>
+                )}
+              </View>
+            ) : (
+              <View style={styles.manualTabBody}>
+                <ThemedText type="small" themeColor="textSecondary">
+                  Ingresa el valor del repuesto si fue comprado fuera del taller o es un servicio tercerizado.
+                </ThemedText>
+                <FormInput
+                  label="Valor del repuesto (COP)"
+                  placeholder="Ej. 45000"
+                  keyboardType="numeric"
+                  value={manualPartsInput}
+                  onChangeText={(t) => setManualPartsInput(t.replace(/[^0-9.]/g, ''))}
+                />
+              </View>
+            )}
+
             <View style={styles.modalActions}>
-              <Button label="Cancelar" variant="secondary" onPress={() => setPartsModalVisible(false)} style={styles.modalBtn} />
-              <Button label="Guardar" variant="primary" onPress={handleSaveParts} style={styles.modalBtn} />
+              {partsCost > 0 && (
+                <Button
+                  label="Quitar"
+                  variant="danger"
+                  disabled={savingParts}
+                  onPress={handleRemovePart}
+                  style={styles.modalBtn}
+                />
+              )}
+              <Button
+                label="Cancelar"
+                variant="secondary"
+                disabled={savingParts}
+                onPress={() => setPartsModalVisible(false)}
+                style={styles.modalBtn}
+              />
+              <Button
+                label={savingParts ? 'Guardando...' : 'Aplicar'}
+                variant="primary"
+                disabled={savingParts || (partsTab === 'inventory' && !selectedPartId)}
+                onPress={handleSaveParts}
+                style={styles.modalBtn}
+              />
             </View>
           </ThemedView>
         </View>
@@ -569,8 +803,126 @@ const styles = StyleSheet.create({
   modalActions: {
     flexDirection: 'row',
     gap: Spacing.two,
+    marginTop: Spacing.two,
   },
   modalBtn: {
     flex: 1,
+  },
+  partsModalCard: {
+    maxHeight: '90%',
+  },
+  tabHeader: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.1)',
+    paddingBottom: Spacing.two,
+  },
+  tabButton: {
+    flex: 1,
+    paddingVertical: Spacing.two,
+    paddingHorizontal: Spacing.three,
+    borderRadius: Shape.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  tabButtonActive: {
+    backgroundColor: Brand.primary,
+  },
+  tabButtonText: {
+    color: '#94A3B8',
+  },
+  tabButtonTextActive: {
+    color: Brand.onBrand,
+  },
+  inventoryTabBody: {
+    gap: Spacing.two,
+  },
+  emptyPartsNotice: {
+    padding: Spacing.three,
+    borderRadius: Shape.md,
+    alignItems: 'center',
+  },
+  partsListScroll: {
+    maxHeight: 220,
+  },
+  partItemCard: {
+    borderWidth: 1.5,
+    borderRadius: Shape.md,
+    padding: Spacing.two,
+    marginBottom: Spacing.two,
+    gap: Spacing.one,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+  },
+  partItemCardSelected: {
+    backgroundColor: 'rgba(0, 168, 232, 0.12)',
+  },
+  partItemCardDisabled: {
+    opacity: 0.5,
+  },
+  partItemHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  partItemName: {
+    flex: 1,
+  },
+  partItemPrice: {
+    color: Brand.primary,
+  },
+  partItemFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  stockBadge: {
+    paddingHorizontal: Spacing.two,
+    paddingVertical: 2,
+    borderRadius: Shape.sm,
+  },
+  stockBadgeText: {
+    color: Brand.onBrand,
+    fontSize: 11,
+  },
+  quantitySection: {
+    gap: Spacing.one,
+    padding: Spacing.two,
+    borderRadius: Shape.md,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  quantityControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.three,
+  },
+  qtyBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: Shape.md,
+    backgroundColor: Brand.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  qtyBtnDisabled: {
+    opacity: 0.3,
+  },
+  qtyDisplay: {
+    minWidth: 40,
+    textAlign: 'center',
+  },
+  deductPreview: {
+    textAlign: 'center',
+    color: '#94A3B8',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  manualTabBody: {
+    gap: Spacing.two,
   },
 });

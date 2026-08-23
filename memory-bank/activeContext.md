@@ -4,6 +4,18 @@
 > Actualizar al finalizar cada tarea (ver `progress.md`).
 
 ## Estado Actual (Consolidado — verificado contra el código)
+- **Integración de Inventario con Órdenes de Reparación operativa (2026-08-23):**
+  modal interactivo en el detalle de la orden (`src/app/job/[id].tsx`) con
+  pestañas "Desde Inventario" y "Costo Manual". Permite seleccionar repuestos del
+  taller con indicador de stock en tiempo real, selector de cantidad `+ / -`,
+  cálculo automático del costo (`parts_cost`) y deducción/reintegro de stock en
+  `public.inventory` al asignar, cambiar o remover la pieza. Lógica pura testeada
+  en `src/utils/inventory-parts.ts` (+11 tests PASS: `hasAvailableStock`,
+  `calculateRemainingStock`, `calculateRestoredStock`, `calculatePartsCost`,
+  `filterInventoryParts`). Contexto extendido con `assignInventoryPartToRepair` y
+  `removeInventoryPartFromRepair` en `src/context/repair-context.tsx`. Esquema
+  espejado en `supabase/schema.sql` con `inventory_part_id`,
+  `inventory_part_name` e `inventory_part_qty`.
 - **Sugerencia inteligente y autocompletado de repuestos en recepción (2026-08-22):**
   selector y autocompletado interactivo `PartAutocompleteInput` (`src/components/ui/part-autocomplete-input.tsx`)
   en el formulario de recepción (`receive.tsx`). Al escribir, busca coincidencias en tiempo
@@ -13,6 +25,10 @@
   Permite ingresar repuestos manuales y modificar libremente el precio sin afectar ni modificar
   el stock del taller. Suite de tests unitarios (+9 tests en `src/utils/part-search.test.ts`
   y pruebas de UI en `src/components/ui/__tests__/part-autocomplete-input.test.tsx`).
+- **Aislamiento Seguro de Google OAuth Web (2026-08-23):** creación de
+  `src/lib/google-auth.web.ts` para evitar que `expo-auth-session` arroje error
+  fatal en web cuando `EXPO_PUBLIC_GOOGLE_CLIENT_ID` no está configurado en dev
+  local (en web el sign-in con Google utiliza la redirección directa de Supabase).
 - **DeviceSecurityInput operativo en recepción (2026-08-22):** selector
   interactivo de seguridad del equipo (`src/components/ui/device-security-
   input.tsx`) con 3 modos por chips: 'Ninguna', 'PIN / Contraseña' (prefijo

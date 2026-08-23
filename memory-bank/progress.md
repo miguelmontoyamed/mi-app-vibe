@@ -3,12 +3,21 @@
 > Registro de avance del proyecto. Actualizar al finalizar cada tarea.
 
 ## Completado (✓)
+- **Integración de Inventario con Órdenes de Reparación (`job/[id].tsx`):**
+  selector de repuestos con indicador de stock en vivo, selector de cantidad
+  `+ / -`, descuento y reintegro automático de stock en Supabase (`public.inventory`
+  y `public.repairs`), modal con pestañas "Desde Inventario" / "Costo Manual",
+  lógica pura testeada (`inventory-parts.ts`) con 11/11 tests unitarios PASS,
+  tipado estricto (0 errores `tsc`) y suite global 105/105 tests PASS (2026-08-23).
 - **Sugerencia inteligente y autocompletado de repuestos en recepción:** selector
   interactivo `PartAutocompleteInput` (`src/components/ui/part-autocomplete-input.tsx`)
   integrado en `receive.tsx`. Sugiere piezas del inventario del taller en tiempo real por
   nombre/categoría con insensibilidad a mayúsculas y acentos (`src/utils/part-search.ts`).
   Carga automática del precio de inventario al seleccionar, con posibilidad de ingreso y edición
   manual libre sin alterar el inventario ni descontar stock. Tests unitarios 94/94 y UI 17/17 PASS.
+- **Aislamiento Seguro de Google OAuth Web (`google-auth.web.ts`):** resolución
+  específica para web evitando fallos de `expo-auth-session` con Client ID vacío
+  en desarrollo local (2026-08-23).
 - **Autenticación Supabase y roles:** email/password + Google OAuth (PKCE),
   sesiones persistentes, auto-refresh, auto-logueo de sesiones obsoletas y
   roles `admin` / `technician`.

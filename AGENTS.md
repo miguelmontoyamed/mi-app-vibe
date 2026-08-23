@@ -35,3 +35,8 @@
 - **Fase 2 (Espera):** Detenerse y esperar confirmación explícita del usuario (`APROBAR REDISEÑO`).
 - **Fase 3 (Implementación):** Aplicar cambios visuales de forma modular, incremental y comprobable.
 - **Fase 4 (Validación):** Comprobar tipos (`npx tsc --noEmit`) y garantizar rollback seguro mediante Git.
+
+## 5. Motor de Ejecución Activo: Sisyphus — Ultraworker (Default Mode)
+- **Modo Operativo:** Activado permanentemente por defecto.
+- **Enfoque:** *Outcome-first, evidence-driven, surgical execution*.
+- **Ciclo de Entrega:** Descomposición atómica (`ulw-plan`), ejecución precisa (`ultrawork`) y validación rigurosa con evidencia (`ulw-loop`) respetando el 100% de las invariantes de TechRepair Master.
