@@ -1,11 +1,12 @@
 import { useRouter } from 'expo-router';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert, Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/ui/button';
 import { DeviceSecurityInput } from '@/components/ui/device-security-input';
 import { FormInput } from '@/components/ui/form-input';
+import { PartAutocompleteInput } from '@/components/ui/part-autocomplete-input';
 import { Screen } from '@/components/ui/screen';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -13,6 +14,7 @@ import { Brand, Spacing } from '@/constants/theme';
 import { useAuth, type User } from '@/context/auth-context';
 import { useRepair } from '@/context/repair-context';
 import { formatCOP } from '@/utils/format';
+import { matchInventoryPart, searchInventoryParts } from '@/utils/part-search';
 
 const COMMON_ISSUES = [
   'Cambio de pantalla',
@@ -22,7 +24,6 @@ const COMMON_ISSUES = [
   'Cortocircuito / No enciende',
 ];
 
-// Input constraints / validation
 const MAX_LENGTHS = {
   clientName: 80,
   phone: 20,
@@ -60,37 +61,30 @@ export default function ReceiveScreen() {
   const [device, setDevice] = useState('');
   const [issue, setIssue] = useState('');
   const [unlockCode, setUnlockCode] = useState('');
-  /** Remount del selector de seguridad para resetearlo tras guardar. */
   const [securityKey, setSecurityKey] = useState(0);
   const [imei, setImei] = useState('');
   const [advancePayment, setAdvancePayment] = useState('');
   const [budget, setBudget] = useState('');
   const [partsCost, setPartsCost] = useState('');
-  /** Repuesto seleccionado del inventario (id) */
-  const [selectedPartId, setSelectedPartId] = useState<string>('');
+  /** Repuesto seleccionado del inventario (id) - null si es manual */
+  const [selectedPartId, setSelectedPartId] = useState<string | null>(null);
   /** Cantidad del repuesto seleccionado */
   const [partQty, setPartQty] = useState(1);
-  /**
-   * Miembro del taller elegido para asumir la orden. `null` = el usuario
-   * actual (comportamiento por defecto, idéntico al histórico).
-   */
   const [assignedMember, setAssignedMember] = useState<User | null>(null);
 
-  // Repuestos con stock > 0 para el dropdown
+  // Repuestos con stock > 0 para sugerencias
   const availableParts = useMemo(
     () => inventory.filter((p) => p.stock > 0),
     [inventory]
   );
-  const selectedPart = useMemo(
-    () => inventory.find((p) => p.id === selectedPartId),
-    [inventory, selectedPartId]
-  );
-  // partsCost se calcula automáticamente si hay parte seleccionada
-  const computedPartsCost = selectedPart ? Number(selectedPart.price) * partQty : 0;
-  const isPartsCostAuto = selectedPartId !== '';
+
+  // El partsCost se calcula automáticamente si hay parte seleccionada del inventario
+  const computedPartsCost = selectedPartId
+    ? Number(availableParts.find((p) => p.id === selectedPartId)?.price ?? 0) * partQty
+    : 0;
+  const isPartsCostAuto = selectedPartId !== null;
 
   // Load saved receipt data when the form initializes.
-  // NOTE: unlockCode (device PIN) is intentionally NOT persisted — see handleSave.
   useEffect(() => {
     const loadLastReceipt = async () => {
       try {
@@ -106,7 +100,7 @@ export default function ReceiveScreen() {
           setAdvancePayment(data.advancePayment != null ? String(data.advancePayment) : '');
           setBudget(data.budget != null ? String(data.budget) : '');
           setPartsCost(data.partsCost != null ? String(data.partsCost) : '');
-          setSelectedPartId(data.selectedPartId || '');
+          setSelectedPartId(data.selectedPartId || null);
           setPartQty(data.partQty || 1);
         }
       } catch (error) {
@@ -116,14 +110,10 @@ export default function ReceiveScreen() {
     loadLastReceipt();
   }, []);
 
-  // Tabs only render when authenticated. Guard keeps typing safe (User | null).
   if (!currentUser) {
     return null;
   }
 
-  // Destinatarios posibles de la orden: el usuario actual primero ("tú") y
-  // después el resto de miembros activos del taller (dueño + técnicos).
-  // `users` ya viene filtrado por is_active desde auth-context.
   const memberOptions: { user: User; label: string }[] = [
     { user: currentUser, label: `${currentUser.name} (tú)` },
     ...users
@@ -131,6 +121,26 @@ export default function ReceiveScreen() {
       .map((u) => ({ user: u, label: u.name })),
   ];
   const resolvedAssignee = assignedMember ?? currentUser;
+
+  // Callback cuando el usuario selecciona un repuesto del autocomplete
+  const onSelectPart = useCallback((part: { id: string; name: string; price: number; stock: number }) => {
+    setSelectedPartId(part.id);
+    setPartsCost(part.name); // Mostramos el nombre en el input
+    setPartQty(1);
+  }, []);
+
+  // Callback cuando el usuario escribe en el autocomplete
+  const onPartTextChange = useCallback((text: string) => {
+    setPartsCost(text);
+    // Si el texto coincide exactamente con un repuesto del inventario, preseleccionar
+    const match = matchInventoryPart(availableParts, text);
+    if (match && text.trim().toLowerCase() === match.name.toLowerCase()) {
+      setSelectedPartId(match.id);
+      setPartQty(1);
+    } else {
+      setSelectedPartId(null); // Entrada manual
+    }
+  }, [availableParts]);
 
   const handleSave = async () => {
     if (
@@ -156,7 +166,7 @@ export default function ReceiveScreen() {
     }
 
     const advanceNum = advancePayment.trim() ? (parseMoney(advancePayment) ?? 0) : 0;
-    // partsCost: si hay parte seleccionada, usar el calculado; si no, usar el manual
+    // partsCost: si hay parte del inventario seleccionada, usar calculado; si no, manual
     const partsNum = isPartsCostAuto ? computedPartsCost : (partsCost.trim() ? (parseMoney(partsCost) ?? 0) : 0);
 
     const result = await addRepair({
@@ -172,22 +182,16 @@ export default function ReceiveScreen() {
       technicianName: resolvedAssignee.name,
       technicianId: resolvedAssignee.id,
       inventoryPartId: selectedPartId || undefined,
-      inventoryPartName: selectedPart?.name,
+      inventoryPartName: selectedPartId ? availableParts.find((p) => p.id === selectedPartId)?.name : undefined,
       inventoryPartQty: isPartsCostAuto ? partQty : 0,
     });
 
-    // La orden se guardó SOLO si Supabase confirmó el INSERT. Si la DB la
-    // rechazó (RLS, sesión, token o taller sin resolver), se muestra el error
-    // exacto y se conserva el formulario: NO se finge un éxito ni se navega.
     if (!result.ok) {
       console.error('[receive] addRepair falló: la orden NO se guardó en la nube.', result.error);
       notify(`No se pudo guardar la reparación en la nube: ${result.error ?? 'error desconocido'}`);
       return;
     }
 
-    // Persist non-sensitive receipt fields only.
-    // Security: device unlock codes/PINs must never be written to AsyncStorage
-    // (it is unencrypted at rest and exposed as localStorage on web).
     try {
       await AsyncStorage.setItem(
         'receiptData',
@@ -210,7 +214,6 @@ export default function ReceiveScreen() {
 
     notify(`¡Equipo recibido y asignado a ${resolvedAssignee.name}!`);
 
-    // Reset form
     setClientName('');
     setPhone('');
     setDevice('');
@@ -221,11 +224,10 @@ export default function ReceiveScreen() {
     setAdvancePayment('');
     setBudget('');
     setPartsCost('');
-    setSelectedPartId('');
+    setSelectedPartId(null);
     setPartQty(1);
     setAssignedMember(null);
 
-    // Navigate to jobs list
     router.push('/jobs');
   };
 
@@ -281,7 +283,6 @@ export default function ReceiveScreen() {
             maxLength={MAX_LENGTHS.issue}
             style={styles.textArea}
           />
-          {/* Preloaded Common Failures Chips */}
           <View style={styles.chipsRow}>
             {COMMON_ISSUES.map((commonIssue) => (
               <Pressable
@@ -294,7 +295,6 @@ export default function ReceiveScreen() {
           </View>
         </View>
 
-        {/* Seguridad del dispositivo: patrón 3x3, PIN/contraseña o ninguna */}
         <DeviceSecurityInput
           key={securityKey}
           defaultValue={unlockCode}
@@ -329,102 +329,69 @@ export default function ReceiveScreen() {
           maxLength={MAX_LENGTHS.money}
         />
 
-        {/* Selector de Repuesto del Inventario */}
-        <View style={styles.partSelectorGroup}>
-          <ThemedText type="smallBold">Repuesto del Inventario (opcional)</ThemedText>
-          <View style={styles.chipsRow}>
-            <Pressable
-              key="none"
-              onPress={() => setSelectedPartId('')}
-              style={[
-                styles.chip,
-                selectedPartId === '' && styles.chipSelected,
-              ]}>
-              <ThemedText
-                style={[
-                  styles.chipText,
-                  selectedPartId === '' && styles.chipTextSelected,
-                ]}>
-                Sin repuesto
-              </ThemedText>
-            </Pressable>
-            {availableParts.map((part) => (
+        {/* Repuesto: Autocomplete con sugerencias de inventario + entrada manual */}
+        <PartAutocompleteInput
+          label="Repuesto / Pieza Requerida (opcional)"
+          value={partsCost}
+          onChangeText={onPartTextChange}
+          inventory={availableParts}
+          onSelectPart={onSelectPart}
+          placeholder="Escribe para buscar en inventario o escribe manual..."
+          maxLength={100}
+        />
+
+        {selectedPartId && (
+          <View style={styles.partQtyRow}>
+            <ThemedText type="small" themeColor="textSecondary">
+              Cantidad:
+            </ThemedText>
+            <View style={styles.qtyControls}>
               <Pressable
-                key={part.id}
-                onPress={() => {
-                  setSelectedPartId(part.id);
-                  setPartQty(1);
-                }}
-                style={[
-                  styles.chip,
-                  selectedPartId === part.id && styles.chipSelected,
-                ]}>
-                <ThemedText
-                  style={[
-                    styles.chipText,
-                    selectedPartId === part.id && styles.chipTextSelected,
-                  ]}>
-                  {part.name} — Stock: {part.stock} — ${part.price.toLocaleString('es-CO')}/u
+                onPress={() => setPartQty(Math.max(1, partQty - 1))}
+                style={styles.qtyBtn}
+                disabled={partQty <= 1}
+                accessibilityLabel="Disminuir cantidad">
+                <ThemedText type="smallBold" style={styles.qtyBtnText}>
+                  −
                 </ThemedText>
               </Pressable>
-            ))}
-          </View>
-          {selectedPart && (
-            <View style={styles.partQtyRow}>
-              <ThemedText type="small" themeColor="textSecondary">
-                Cantidad:
+              <ThemedText type="smallBold" style={styles.qtyValue}>
+                {partQty}
               </ThemedText>
-              <View style={styles.qtyControls}>
-                <Pressable
-                  onPress={() => setPartQty(Math.max(1, partQty - 1))}
-                  style={styles.qtyBtn}
-                  disabled={partQty <= 1}
-                  accessibilityLabel="Disminuir cantidad">
-                  <ThemedText type="smallBold" style={styles.qtyBtnText}>
-                    −
-                  </ThemedText>
-                </Pressable>
-                <ThemedText type="smallBold" style={styles.qtyValue}>
-                  {partQty}
+              <Pressable
+                onPress={() => {
+                  const part = availableParts.find((p) => p.id === selectedPartId);
+                  setPartQty(Math.min(partQty + 1, part?.stock ?? 99));
+                }}
+                style={styles.qtyBtn}
+                disabled={partQty >= (availableParts.find((p) => p.id === selectedPartId)?.stock ?? 99)}
+                accessibilityLabel="Aumentar cantidad">
+                <ThemedText type="smallBold" style={styles.qtyBtnText}>
+                  +
                 </ThemedText>
-                <Pressable
-                  onPress={() =>
-                    setPartQty(Math.min(partQty + 1, selectedPart.stock))
-                  }
-                  style={styles.qtyBtn}
-                  disabled={partQty >= selectedPart.stock}
-                  accessibilityLabel="Aumentar cantidad">
-                  <ThemedText type="smallBold" style={styles.qtyBtnText}>
-                    +
-                  </ThemedText>
-                </Pressable>
-              </View>
-              <ThemedText type="small" themeColor="textSecondary" style={styles.partSubtotal}>
-                Subtotal: {formatCOP(computedPartsCost)}
-              </ThemedText>
+              </Pressable>
             </View>
-          )}
-        </View>
+            <ThemedText type="small" themeColor="textSecondary" style={styles.partSubtotal}>
+              Subtotal: {formatCOP(computedPartsCost)}
+            </ThemedText>
+          </View>
+        )}
 
         {isPartsCostAuto ? (
           <ThemedView type="backgroundElement" style={styles.autoPartsCostInfo}>
             <ThemedText type="small" style={styles.autoPartsCostText}>
-              ✓ Valor del repuesto calculado automáticamente: {formatCOP(computedPartsCost)}
-              ({selectedPart?.name} × {partQty} = ${selectedPart?.price.toLocaleString('es-CO')} × {partQty})
+              ✓ Repuesto de inventario: {availableParts.find((p) => p.id === selectedPartId)?.name}
+              × {partQty} = {formatCOP(computedPartsCost)} — Se descontará stock automáticamente
             </ThemedText>
           </ThemedView>
-        ) : (
-          <FormInput
-            label="Valor del Repuesto (opcional)"
-            placeholder="Ej. 45000"
-            keyboardType="numeric"
-            value={partsCost}
-            onChangeText={setPartsCost}
-            maxLength={MAX_LENGTHS.money}
-          />
-        )}
+        ) : partsCost.trim().length > 0 ? (
+          <ThemedView type="backgroundElement" style={[styles.autoPartsCostInfo, styles.manualPartsCostInfo]}>
+            <ThemedText type="small" style={styles.autoPartsCostText}>
+              ✍️ Repuesto manual: "{partsCost}" — Valor: {formatCOP(parseMoney(partsCost) ?? 0)} — No afecta inventario
+            </ThemedText>
+          </ThemedView>
+        ) : null}
 
-        {/* Asignación: quién asume la orden (por defecto el usuario actual). */}
         <View style={styles.assignGroup}>
           <ThemedText type="smallBold">Asignar a</ThemedText>
           <View style={styles.chipsRow}>
@@ -460,8 +427,6 @@ const styles = StyleSheet.create({
     fontSize: 34,
     lineHeight: 40,
   },
-  // Verified responsive: maxWidth 600 centers the form inside Screen's
-  // MaxContentWidth (1200) container; header and chipsRow wrap correctly.
   formContainer: {
     width: '100%',
     maxWidth: 600,
@@ -494,9 +459,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     lineHeight: 16,
-  },
-  partSelectorGroup: {
-    gap: Spacing.two,
   },
   partQtyRow: {
     flexDirection: 'row',
@@ -538,6 +500,10 @@ const styles = StyleSheet.create({
     backgroundColor: Brand.secondary + '20',
     borderWidth: 1,
     borderColor: Brand.primary,
+  },
+  manualPartsCostInfo: {
+    borderColor: Brand.warning,
+    backgroundColor: Brand.warning + '20',
   },
   autoPartsCostText: {
     color: Brand.primary,
