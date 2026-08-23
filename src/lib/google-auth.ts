@@ -145,7 +145,7 @@ export function useGoogleSignIn(): {
   const [error, setError] = useState<string | null>(null);
 
   const [request, , promptAsync] = Google.useAuthRequest({
-    webClientId: GOOGLE_CLIENT_ID || undefined,
+    webClientId: GOOGLE_CLIENT_ID || (Platform.OS === 'web' ? 'disabled' : undefined),
     // Google deprecated the implicit flow: force Code + PKCE on web too.
     responseType: ResponseType.Code,
     scopes: ['openid', 'email', 'profile'],
