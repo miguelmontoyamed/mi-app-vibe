@@ -54,9 +54,6 @@ if (!repair) {
     );
   }
 
-const paid = repair.advancePayment ?? 0;
-const partsCost = repair.partsCost ?? 0;
-
   /** Datos estructurados del recibo, compartidos por ambas plataformas. */
   const pdfData: ReceiptPdfData = {
     brand: profile?.name || 'TechRepair Master',
@@ -73,8 +70,8 @@ const partsCost = repair.partsCost ?? 0;
     issue: repair.issue,
     technicianName: repair.technicianName || 'General',
     budget: repair.budget,
-    partsCost,
-    paid,
+    partsCost: 0,
+    paid: 0,
     attendedBy: currentUser?.name || repair.technicianName || '-',
     whatsappContact: CONTACT_WHATSAPP,
   };
@@ -89,8 +86,6 @@ const partsCost = repair.partsCost ?? 0;
     const nitLine = profile ? `NIT: ${formatNit(profile.nit)}<br/>` : '';
     const addressLine = profile?.address ? `${escapeHtml(profile.address)}<br/>` : '';
     const phoneLine = profile ? `Tel: ${escapeHtml(profile.phone)}` : '';
-    const paidRow = paid > 0 ? `<div class="row"><strong>Abonado:</strong><span>− ${formatCOP(paid)}</span></div>` : '';
-    const partsRow = partsCost > 0 ? `<div class="row"><strong>Repuesto:</strong><span>− ${formatCOP(partsCost)}</span></div>` : '';
     const imeiRow = repair.imei
       ? `<div class="row"><strong>IMEI / Serial:</strong><span>${escapeHtml(repair.imei)}</span></div>`
       : '';
@@ -138,8 +133,6 @@ const partsCost = repair.partsCost ?? 0;
   <div class="divider"></div>
   <h2>Valor a pagar</h2>
   <div class="row"><strong>Total reparación:</strong><span>${formatCOP(repair.budget)}</span></div>
-  ${partsRow}
-  ${paidRow}
   <div class="divider"></div>
   <div class="footer">
     <div class="row"><strong>Atendido por:</strong><span>${escapeHtml(attendedBy)}</span></div>
@@ -291,18 +284,6 @@ const partsCost = repair.partsCost ?? 0;
             <ThemedText type="smallBold">Total reparación:</ThemedText>
             <ThemedText type="smallBold">{formatCOP(repair.budget)}</ThemedText>
           </View>
-          {partsCost > 0 && (
-            <View style={styles.sectionRow}>
-              <ThemedText type="small">Repuesto:</ThemedText>
-              <ThemedText type="small">− {formatCOP(partsCost)}</ThemedText>
-            </View>
-          )}
-          {paid > 0 && (
-            <View style={styles.sectionRow}>
-              <ThemedText type="small">Abonado:</ThemedText>
-              <ThemedText type="small">− {formatCOP(paid)}</ThemedText>
-            </View>
-          )}
         </View>
 
         <View style={[styles.divider, { backgroundColor: theme.border }]} />
