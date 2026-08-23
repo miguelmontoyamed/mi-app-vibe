@@ -3,6 +3,12 @@
 > Registro de avance del proyecto. Actualizar al finalizar cada tarea.
 
 ## Completado (✓)
+- **Security & Hardening Sweep (2026-08-24):** Auditoría de 20 puntos completada:
+  - Secrets & Git: `.gitignore` cubre `.env`, `.env.local`, `.env*.local`; `src/` sin `service_role` ni credenciales hardcodeadas; solo `EXPO_PUBLIC_SUPABASE_ANON_KEY` en bundle.
+  - HTTP Security Headers en `vercel.json`: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `X-XSS-Protection: 1; mode=block`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: camera=(), microphone=(), geolocation=()`.
+  - Dependency audit: `npm audit fix` → 16 vulnerabilidades residuales (4 high, 12 moderate) en dependencias transitivas de Expo (`image-size`, `uuid`, `nanoid`); `npm audit fix --force` requiere breaking changes en Expo SDK 57 → diferido.
+  - `npx tsc --noEmit`: 0 errores; `npm test`: 105/105 PASS.
+  - Despliegue verificado: `mi-app-vibe-ten.vercel.app` con headers de seguridad activos.
 - **Integración de Inventario con Órdenes de Reparación (`job/[id].tsx`):**
   selector de repuestos con indicador de stock en vivo, selector de cantidad
   `+ / -`, descuento y reintegro automático de stock en Supabase (`public.inventory`
@@ -92,6 +98,7 @@
 ## Historial Reciente
 | Fecha | Cambio |
 |-------|--------|
+| 2026-08-24 | **Security & Hardening Sweep (20 pts):** `.gitignore` ok, `src/` sin secrets, `vercel.json` con 5 headers de seguridad (nosniff, DENY, XSS, Referrer, Permissions), `npm audit fix` (16 residuales en Expo deps), tsc 0 errores, 105/105 tests, deploy Vercel + headers activos. |
 | 2026-08-24 | **Autocompletado repuestos con fallback manual:** `PartAutocompleteInput` en `receive.tsx` — sugerencias tiempo real (stock > 0), selección → autocompleta nombre + precio × qty, subtotal, descuento stock atómico; sin coincidencia exacta → campo "Valor Manual (COP)" numérico, sin tocar inventario. Separación `partName` / `manualPartsCost`. 105/105 tests, deploy + smoke Chromium+WebKit 2/2. |
 | 2026-08-23 | PartAutocompleteInput: selector interactivo de repuestos con sugerencias en tiempo real desde el inventario del taller (nombre/categoría, sin distinción de tildes), auto-rellenado de precio en recepción (`receive.tsx`) y modo manual libre sin afectar el stock. Suite unitaria 94/94 y UI 17/17 PASS |
 | 2026-08-23 | **Facturación y Recibos Simplificados:** `receipt/[id].tsx` + plantilla HTML PDF muestran solo "Total reparación" (eliminadas filas Repuesto/Abonado). 85/85 tests. |

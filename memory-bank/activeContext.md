@@ -138,6 +138,12 @@
 - **Despliegue en Producción (2026-08-23):** Release Candidate verificado y
   activo en Vercel (`mi-app-vibe-ten.vercel.app`) superando smoke tests en
   Chromium y WebKit (Safari) — 2/2 PASS.
+- **Security & Hardening Sweep (2026-08-24):** Auditoría completa de 20 puntos aplicada:
+  - Secrets & Git: `.gitignore` cubre `.env`, `.env.local`, `.env*.local`; `src/` sin `service_role` ni credenciales hardcodeadas; solo `EXPO_PUBLIC_SUPABASE_ANON_KEY` en bundle.
+  - HTTP Security Headers en `vercel.json`: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `X-XSS-Protection: 1; mode=block`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: camera=(), microphone=(), geolocation=()`.
+  - Dependency audit: `npm audit fix` → 16 vulnerabilidades residuales (4 high, 12 moderate) en dependencias transitivas de Expo (`image-size`, `uuid`, `nanoid`); `npm audit fix --force` requiere breaking changes en Expo SDK 57 → diferido.
+  - `npx tsc --noEmit`: 0 errores; `npm test`: 105/105 PASS.
+  - Despliegue verificado: `mi-app-vibe-ten.vercel.app` con headers de seguridad activos.
 
 ## Foco Operativo Inmediato (Sprint Actual)
 **Validación y operación continua en mostrador del taller, monitoreando la
