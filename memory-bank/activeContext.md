@@ -16,15 +16,16 @@
   `removeInventoryPartFromRepair` en `src/context/repair-context.tsx`. Esquema
   espejado en `supabase/schema.sql` con `inventory_part_id`,
   `inventory_part_name` e `inventory_part_qty`.
-- **Sugerencia inteligente y autocompletado de repuestos en recepción (2026-08-22):**
-  selector y autocompletado interactivo `PartAutocompleteInput` (`src/components/ui/part-autocomplete-input.tsx`)
-  en el formulario de recepción (`receive.tsx`). Al escribir, busca coincidencias en tiempo
-  real en el inventario del taller (`useRepair().inventory`) por nombre o categoría con
-  insensibilidad a mayúsculas y acentos (`src/utils/part-search.ts`).
-  Al seleccionar una sugerencia, rellena automáticamente el nombre y el campo "Valor del Repuesto" (`partsCost`).
-  Permite ingresar repuestos manuales y modificar libremente el precio sin afectar ni modificar
-  el stock del taller. Suite de tests unitarios (+9 tests en `src/utils/part-search.test.ts`
-  y pruebas de UI en `src/components/ui/__tests__/part-autocomplete-input.test.tsx`).
+- **Autocompletado inteligente de repuestos en Recepción con fallback manual (2026-08-24):**
+  `PartAutocompleteInput` (`src/components/ui/part-autocomplete-input.tsx`) integrado en `receive.tsx`.
+  Sugerencias en tiempo real del inventario del taller (stock > 0) por nombre/categoría con insensibilidad a tildes/mayúsculas
+  (`src/utils/part-search.ts`). Al seleccionar sugerencia → autocompleta nombre, setea `selectedPartId`, qty=1, calcula
+  `partsCost = precio × qty`, muestra subtotal y badge verde "Se descontará stock".
+  Si el texto NO coincide exacto con inventario → `selectedPartId = null`, aparece campo "Valor del Repuesto Manual (COP)"
+  con badge amarillo "Repuesto manual — No afecta inventario". Al guardar: `addRepair` valida stock si hay inventario,
+  descuenta vía `updateInventoryStock(-qty)`, guarda `inventoryPartId/Name/Qty`; si manual → `inventoryPartId=null`,
+  `partsCost = manualPartsCost`, no toca inventario. Separación limpia: `partName` (autocomplete) vs `manualPartsCost` (numérico).
+  Tests unitarios `part-search.ts` (9 tests) + `inventory-parts.ts` (6 tests) → suite 105/105 PASS.
 - **Aislamiento Seguro de Google OAuth Web (2026-08-23):** creación de
   `src/lib/google-auth.web.ts` para evitar que `expo-auth-session` arroje error
   fatal en web cuando `EXPO_PUBLIC_GOOGLE_CLIENT_ID` no está configurado en dev

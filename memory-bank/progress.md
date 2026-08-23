@@ -9,12 +9,13 @@
   y `public.repairs`), modal con pestañas "Desde Inventario" / "Costo Manual",
   lógica pura testeada (`inventory-parts.ts`) con 11/11 tests unitarios PASS,
   tipado estricto (0 errores `tsc`) y suite global 105/105 tests PASS (2026-08-23).
-- **Sugerencia inteligente y autocompletado de repuestos en recepción:** selector
-  interactivo `PartAutocompleteInput` (`src/components/ui/part-autocomplete-input.tsx`)
-  integrado en `receive.tsx`. Sugiere piezas del inventario del taller en tiempo real por
-  nombre/categoría con insensibilidad a mayúsculas y acentos (`src/utils/part-search.ts`).
-  Carga automática del precio de inventario al seleccionar, con posibilidad de ingreso y edición
-  manual libre sin alterar el inventario ni descontar stock. Tests unitarios 94/94 y UI 17/17 PASS.
+- **Autocompletado inteligente de repuestos en Recepción con fallback manual (2026-08-24):**
+  `PartAutocompleteInput` en `receive.tsx` — sugerencias tiempo real del inventario (stock > 0)
+  por nombre/categoría insensible a tildes. Selección → autocompleta nombre, qty=1, precio = precio × qty,
+  subtotal en vivo, badge verde "Se descontará stock", descuento atómico al guardar.
+  Texto sin coincidencia exacta → modo manual: campo "Valor del Repuesto Manual (COP)" numérico,
+  badge amarillo "Repuesto manual — No afecta inventario", no toca stock. Separación `partName` vs `manualPartsCost`.
+  Tests `part-search.ts` (9) + `inventory-parts.ts` (6) → suite 105/105 PASS, deploy Vercel + smoke tests Chromium+WebKit 2/2.
 - **Aislamiento Seguro de Google OAuth Web (`google-auth.web.ts`):** resolución
   específica para web evitando fallos de `expo-auth-session` con Client ID vacío
   en desarrollo local (2026-08-23).
@@ -91,6 +92,7 @@
 ## Historial Reciente
 | Fecha | Cambio |
 |-------|--------|
+| 2026-08-24 | **Autocompletado repuestos con fallback manual:** `PartAutocompleteInput` en `receive.tsx` — sugerencias tiempo real (stock > 0), selección → autocompleta nombre + precio × qty, subtotal, descuento stock atómico; sin coincidencia exacta → campo "Valor Manual (COP)" numérico, sin tocar inventario. Separación `partName` / `manualPartsCost`. 105/105 tests, deploy + smoke Chromium+WebKit 2/2. |
 | 2026-08-23 | PartAutocompleteInput: selector interactivo de repuestos con sugerencias en tiempo real desde el inventario del taller (nombre/categoría, sin distinción de tildes), auto-rellenado de precio en recepción (`receive.tsx`) y modo manual libre sin afectar el stock. Suite unitaria 94/94 y UI 17/17 PASS |
 | 2026-08-23 | **Facturación y Recibos Simplificados:** `receipt/[id].tsx` + plantilla HTML PDF muestran solo "Total reparación" (eliminadas filas Repuesto/Abonado). 85/85 tests. |
 | 2026-08-23 | **Despliegue Producción + Smoke Tests:** Vercel deploy `mi-app-vibe-ten.vercel.app`; web-smoke PASS Chromium+WebKit (2/2). |
