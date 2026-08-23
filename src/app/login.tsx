@@ -36,12 +36,15 @@ export default function LoginScreen() {
   const [submitting, setSubmitting] = useState(false);
   // Correo pendiente de confirmación: bloquea el login y pide verificar.
   const [pendingVerification, setPendingVerification] = useState<string | null>(null);
+  // Error visible en la UI (feedback de error visible)
+  const [loginError, setLoginError] = useState<string | null>(null);
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
-      notify('Campos incompletos', 'Ingresa tu correo y tu contraseña.');
+      setLoginError('Ingresa tu correo y tu contraseña.');
       return;
     }
+    setLoginError(null);
     setSubmitting(true);
     try {
       const result = await login(email, password);
@@ -49,11 +52,8 @@ export default function LoginScreen() {
         router.replace('/');
       } else if (result.reason === 'unconfirmed') {
         setPendingVerification(email.trim().toLowerCase());
-      } else if (result.reason === 'invalid') {
-        notify('Error de acceso', 'Correo o contraseña incorrectos.');
       } else {
-        // Red/genérico ('unknown'): mensaje neutro, no culpar a las credenciales.
-        notify('Error de acceso', 'No se pudo iniciar sesión. Intenta de nuevo.');
+        setLoginError('Correo o contraseña incorrectos.');
       }
     } finally {
       setSubmitting(false);
@@ -182,6 +182,11 @@ export default function LoginScreen() {
           style={styles.primary}
           disabled={submitting}
         />
+        {loginError ? (
+          <ThemedText type="small" style={styles.loginError}>
+            {loginError}
+          </ThemedText>
+        ) : null}
         <Button
           label={googleInProgress ? 'Conectando con Google…' : 'Continuar con Google'}
           variant="secondary"
@@ -247,6 +252,10 @@ const styles = StyleSheet.create({
     height: StyleSheet.hairlineWidth,
   },
   googleError: {
+    color: Brand.danger,
+    textAlign: 'center',
+  },
+  loginError: {
     color: Brand.danger,
     textAlign: 'center',
   },

@@ -55,10 +55,11 @@ export function GlassCard({ style, accent, elevation = 1, ...rest }: GlassCardPr
 const styles = StyleSheet.create({
   base: {
     borderWidth: 1,
-    // Anti-stretch Safari iOS (skill §4): las tarjetas dentro de listas usan
-    // height auto + alignSelf stretch + flexGrow 0. Nunca flex:1 ni height 100%.
+    // Anti-stretch Safari iOS: las tarjetas dentro de listas usan
+    // height auto + alignSelf stretch + flexGrow 0. flexShrink: 1 permite
+    // compresión natural en WebKit/Safari sin forzar altura fija.
     flexGrow: 0,
-    flexShrink: 0,
+    flexShrink: 1,
     alignSelf: 'stretch',
     height: 'auto',
   },
