@@ -40,6 +40,7 @@ export default function JobDetailScreen() {
 
   const [cancelModalVisible, setCancelModalVisible] = useState(false);
   const [cancelMotivo, setCancelMotivo] = useState('');
+  const [cancellingOrder, setCancellingOrder] = useState(false);
   
   // Modal de repuestos (inventario / manual)
   const [partsModalVisible, setPartsModalVisible] = useState(false);
@@ -227,15 +228,20 @@ export default function JobDetailScreen() {
       }
       return;
     }
-    if (await cancelRepair(repair.id, cleanMotivo)) {
-      setCancelModalVisible(false);
-      setCancelMotivo('');
-    } else {
-      if (Platform.OS === 'web') {
-        window.alert('No se pudo cancelar\n\nLa orden no está en un estado que permita marcarla como no realizada.');
+    setCancellingOrder(true);
+    try {
+      if (await cancelRepair(repair.id, cleanMotivo)) {
+        setCancelModalVisible(false);
+        setCancelMotivo('');
       } else {
-        Alert.alert('No se pudo cancelar', 'La orden no está en un estado que permita marcarla como no realizada.');
+        if (Platform.OS === 'web') {
+          window.alert('No se pudo cancelar\n\nLa orden no está en un estado que permita marcarla como no realizada.');
+        } else {
+          Alert.alert('No se pudo cancelar', 'La orden no está en un estado que permita marcarla como no realizada.');
+        }
       }
+    } finally {
+      setCancellingOrder(false);
     }
   };
 
@@ -450,8 +456,8 @@ export default function JobDetailScreen() {
               style={styles.motivoInput}
             />
             <View style={styles.modalActions}>
-              <Button label="Cancelar" variant="secondary" onPress={() => setCancelModalVisible(false)} style={styles.modalBtn} />
-              <Button label="Confirmar" variant="danger" onPress={handleConfirmCancel} style={styles.modalBtn} />
+              <Button label="Cancelar" variant="secondary" onPress={() => setCancelModalVisible(false)} style={styles.modalBtn} disabled={cancellingOrder} />
+              <Button label={cancellingOrder ? 'Cancelando...' : 'Confirmar'} variant="danger" onPress={handleConfirmCancel} style={styles.modalBtn} disabled={cancellingOrder} />
             </View>
           </ThemedView>
         </View>

@@ -50,6 +50,13 @@ export const ACTIVE_STATUSES: readonly RepairStatus[] = [
   'Listo',
 ];
 
+/** Statuses that allow cancellation (used for cancel/bloqueos). 
+ * Pedido: solo Pendiente y En Proceso; Listo y Entregado NO cancelables. */
+export const CANCELLABLE_STATUSES: readonly RepairStatus[] = [
+  'Pendiente',
+  'En Proceso',
+];
+
 /** Minimal structural shape of a repair, enough for the pure logic below. */
 export interface RepairLike {
   id: string;
@@ -190,9 +197,9 @@ export function applyPayment(
   };
 }
 
-/** A job can only be cancelled from an open (non-delivered) status. */
+/** A job can only be cancelled from Pendiente or En Proceso (not Listo, Entregado, Cancelado). */
 export function canCancel(status: RepairStatus): boolean {
-  return ACTIVE_STATUSES.includes(status);
+  return CANCELLABLE_STATUSES.includes(status);
 }
 
 /**

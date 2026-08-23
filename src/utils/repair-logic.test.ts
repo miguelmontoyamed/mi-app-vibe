@@ -147,10 +147,14 @@ describe('applyPayment', () => {
 });
 
 describe('canCancel / isValidCancellation', () => {
-  it('permite cancelar desde Pendiente, En Proceso y Listo', () => {
+  it('permite cancelar desde Pendiente y En Proceso', () => {
     assert.equal(canCancel('Pendiente'), true);
     assert.equal(canCancel('En Proceso'), true);
-    assert.equal(canCancel('Listo'), true);
+  });
+  it('NO permite cancelar desde Listo, Entregado ni Cancelado', () => {
+    assert.equal(canCancel('Listo'), false);
+    assert.equal(canCancel('Entregado'), false);
+    assert.equal(canCancel('Cancelado / No Reparado'), false);
   });
   it('NO permite cancelar desde Entregado ni Cancelado', () => {
     assert.equal(canCancel('Entregado'), false);

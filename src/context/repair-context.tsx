@@ -607,7 +607,8 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
         inventory_part_qty: 0,
         parts_cost: 0,
       })
-      .eq('id', id);
+      .eq('id', id)
+      .select();
     if (error) {
       console.error(formatDbError('cancelRepair (update)', error));
       notifyError(`No se pudo cancelar la orden: ${error.message}`);
