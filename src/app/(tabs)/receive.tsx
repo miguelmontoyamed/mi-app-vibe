@@ -65,10 +65,13 @@ export default function ReceiveScreen() {
   const [imei, setImei] = useState('');
   const [advancePayment, setAdvancePayment] = useState('');
   const [budget, setBudget] = useState('');
-  const [partsCost, setPartsCost] = useState('');
+  /** Nombre/descripción del repuesto (autocomplete input) */
+  const [partName, setPartName] = useState('');
+  /** Costo manual del repuesto (solo cuando NO está en inventario) */
+  const [manualPartsCost, setManualPartsCost] = useState('');
   /** Repuesto seleccionado del inventario (id) - null si es manual */
   const [selectedPartId, setSelectedPartId] = useState<string | null>(null);
-  /** Cantidad del repuesto seleccionado */
+  /** Cantidad del repuesto seleccionado del inventario */
   const [partQty, setPartQty] = useState(1);
   const [assignedMember, setAssignedMember] = useState<User | null>(null);
 
@@ -99,7 +102,8 @@ export default function ReceiveScreen() {
           setImei(data.imei || '');
           setAdvancePayment(data.advancePayment != null ? String(data.advancePayment) : '');
           setBudget(data.budget != null ? String(data.budget) : '');
-          setPartsCost(data.partsCost != null ? String(data.partsCost) : '');
+          setPartName(data.partName || '');
+          setManualPartsCost(data.manualPartsCost || '');
           setSelectedPartId(data.selectedPartId || null);
           setPartQty(data.partQty || 1);
         }
@@ -125,22 +129,29 @@ export default function ReceiveScreen() {
   // Callback cuando el usuario selecciona un repuesto del autocomplete
   const onSelectPart = useCallback((part: { id: string; name: string; price: number; stock: number }) => {
     setSelectedPartId(part.id);
-    setPartsCost(part.name); // Mostramos el nombre en el input
+    setPartName(part.name); // Mostramos el nombre en el input
+    setManualPartsCost(''); // Limpiamos costo manual
     setPartQty(1);
   }, []);
 
   // Callback cuando el usuario escribe en el autocomplete
   const onPartTextChange = useCallback((text: string) => {
-    setPartsCost(text);
+    setPartName(text);
     // Si el texto coincide exactamente con un repuesto del inventario, preseleccionar
     const match = matchInventoryPart(availableParts, text);
     if (match && text.trim().toLowerCase() === match.name.toLowerCase()) {
       setSelectedPartId(match.id);
+      setManualPartsCost(''); // Limpiamos costo manual
       setPartQty(1);
     } else {
       setSelectedPartId(null); // Entrada manual
     }
   }, [availableParts]);
+
+  // Costo final del repuesto para enviar a addRepair
+  const finalPartsCost = isPartsCostAuto
+    ? computedPartsCost
+    : (manualPartsCost.trim() ? (parseMoney(manualPartsCost) ?? 0) : 0);
 
   const handleSave = async () => {
     if (
@@ -166,8 +177,6 @@ export default function ReceiveScreen() {
     }
 
     const advanceNum = advancePayment.trim() ? (parseMoney(advancePayment) ?? 0) : 0;
-    // partsCost: si hay parte del inventario seleccionada, usar calculado; si no, manual
-    const partsNum = isPartsCostAuto ? computedPartsCost : (partsCost.trim() ? (parseMoney(partsCost) ?? 0) : 0);
 
     const result = await addRepair({
       clientName: clientName.trim(),
@@ -175,7 +184,7 @@ export default function ReceiveScreen() {
       device: device.trim(),
       issue: issue.trim(),
       budget: budgetNum,
-      partsCost: partsNum,
+      partsCost: finalPartsCost,
       unlockCode: unlockCode.trim() || 'No especificado',
       imei: imei.trim() || undefined,
       advancePayment: advanceNum,
@@ -203,7 +212,8 @@ export default function ReceiveScreen() {
           imei: imei.trim(),
           advancePayment: advanceNum,
           budget: budgetNum,
-          partsCost: partsNum,
+          partName: partName.trim(),
+          manualPartsCost: manualPartsCost.trim(),
           selectedPartId: selectedPartId || undefined,
           partQty: isPartsCostAuto ? partQty : undefined,
         })
@@ -223,7 +233,8 @@ export default function ReceiveScreen() {
     setImei('');
     setAdvancePayment('');
     setBudget('');
-    setPartsCost('');
+    setPartName('');
+    setManualPartsCost('');
     setSelectedPartId(null);
     setPartQty(1);
     setAssignedMember(null);
@@ -332,7 +343,7 @@ export default function ReceiveScreen() {
         {/* Repuesto: Autocomplete con sugerencias de inventario + entrada manual */}
         <PartAutocompleteInput
           label="Repuesto / Pieza Requerida (opcional)"
-          value={partsCost}
+          value={partName}
           onChangeText={onPartTextChange}
           inventory={availableParts}
           onSelectPart={onSelectPart}
@@ -384,12 +395,22 @@ export default function ReceiveScreen() {
               × {partQty} = {formatCOP(computedPartsCost)} — Se descontará stock automáticamente
             </ThemedText>
           </ThemedView>
-        ) : partsCost.trim().length > 0 ? (
-          <ThemedView type="backgroundElement" style={[styles.autoPartsCostInfo, styles.manualPartsCostInfo]}>
-            <ThemedText type="small" style={styles.autoPartsCostText}>
-              ✍️ Repuesto manual: "{partsCost}" — Valor: {formatCOP(parseMoney(partsCost) ?? 0)} — No afecta inventario
-            </ThemedText>
-          </ThemedView>
+        ) : partName.trim().length > 0 ? (
+          <>
+            <ThemedView type="backgroundElement" style={[styles.autoPartsCostInfo, styles.manualPartsCostInfo]}>
+              <ThemedText type="small" style={styles.autoPartsCostText}>
+                ✍️ Repuesto manual: "{partName}" — No afecta inventario
+              </ThemedText>
+            </ThemedView>
+            <FormInput
+              label="Valor del Repuesto Manual (COP)"
+              placeholder="Ej. 150000"
+              keyboardType="numeric"
+              value={manualPartsCost}
+              onChangeText={setManualPartsCost}
+              maxLength={MAX_LENGTHS.money}
+            />
+          </>
         ) : null}
 
         <View style={styles.assignGroup}>
