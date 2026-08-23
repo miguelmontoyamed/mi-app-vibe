@@ -165,6 +165,10 @@ alter table public.repairs add column if not exists inventory_part_id uuid refer
 alter table public.repairs add column if not exists inventory_part_name text;
 alter table public.repairs add column if not exists inventory_part_qty int not null default 0;
 alter table public.repairs add column if not exists delivered_at timestamptz;
+-- Referencia a repuesto del inventario usado en la orden (descuento automático de stock).
+alter table public.repairs add column if not exists inventory_part_id uuid references public.inventory(id) on delete set null;
+alter table public.repairs add column if not exists inventory_part_name text;
+alter table public.repairs add column if not exists inventory_part_qty int not null default 0;
 
 -- v2: cancelación con motivo en texto libre. Renombra la columna legacy
 -- `cancellation_reason` (CHECK de lista fija) a `motivo_cancelacion` (sin CHECK).

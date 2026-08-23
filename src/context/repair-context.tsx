@@ -61,6 +61,12 @@ export interface RepairItem {
    * mensual del panel de liquidación. Ausente en órdenes no entregadas.
    */
   deliveredAt?: string;
+  /** Referencia al repuesto del inventario usado (para trazabilidad y descuento de stock). */
+  inventoryPartId?: string;
+  /** Nombre del repuesto (snapshot al momento de la orden). */
+  inventoryPartName?: string;
+  /** Cantidad de unidades del repuesto usadas. */
+  inventoryPartQty?: number;
 }
 
 export interface InventoryPart {
@@ -136,6 +142,12 @@ interface RepairRow {
   /** Solo lectura: lo estampa el trigger trg_repairs_delivered_at (nunca se inserta desde el cliente). */
   delivered_at?: string | null;
   created_at?: string | null;
+  /** Referencia al repuesto del inventario (FK a public.inventory.id). */
+  inventory_part_id?: string | null;
+  /** Nombre del repuesto (snapshot). */
+  inventory_part_name?: string | null;
+  /** Cantidad de unidades usadas. */
+  inventory_part_qty?: number | null;
 }
 
 /** Fila de `public.inventory` tal como la devuelve Supabase (snake_case). */
@@ -173,6 +185,9 @@ function repairToRow(item: RepairItem, workshopId: string): RepairRow {
     motivo_cancelacion: item.motivoCancelacion ?? null,
     status: item.status,
     date: item.date,
+    inventory_part_id: item.inventoryPartId ?? null,
+    inventory_part_name: item.inventoryPartName ?? null,
+    inventory_part_qty: item.inventoryPartQty ?? 0,
   };
 }
 
@@ -196,6 +211,9 @@ function repairPatchToRow(patch: RepairPatch): Record<string, unknown> {
   if (patch.technicianName !== undefined) row.technician_name = patch.technicianName;
   if (patch.motivoCancelacion !== undefined) row.motivo_cancelacion = patch.motivoCancelacion;
   if (patch.status !== undefined) row.status = patch.status;
+  if (patch.inventoryPartId !== undefined) row.inventory_part_id = patch.inventoryPartId;
+  if (patch.inventoryPartName !== undefined) row.inventory_part_name = patch.inventoryPartName;
+  if (patch.inventoryPartQty !== undefined) row.inventory_part_qty = patch.inventoryPartQty;
   return row;
 }
 
@@ -222,6 +240,9 @@ function rowToRepair(row: RepairRow): RepairItem {
     status: row.status as RepairStatus,
     date: row.date ?? (row.created_at?.split('T')[0] ?? ''),
     deliveredAt: row.delivered_at ?? undefined,
+    inventoryPartId: row.inventory_part_id ?? undefined,
+    inventoryPartName: row.inventory_part_name ?? undefined,
+    inventoryPartQty: row.inventory_part_qty != null ? Number(row.inventory_part_qty) : undefined,
   };
 }
 
@@ -483,6 +504,21 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
 
     const item: RepairItem = { ...newRep, id, status: 'Pendiente', date: new Date().toISOString().split('T')[0] };
 
+    // Si se seleccionó un repuesto del inventario, validar stock y descontar
+    if (item.inventoryPartId && item.inventoryPartQty && item.inventoryPartQty > 0) {
+      const part = inventory.find((p) => p.id === item.inventoryPartId);
+      if (!part) {
+        return { ok: false, error: 'El repuesto seleccionado ya no existe en el inventario.' };
+      }
+      if (part.stock < item.inventoryPartQty) {
+        return { ok: false, error: `Stock insuficiente: solo quedan ${part.stock} unidad(es) de "${part.name}".` };
+      }
+      // Calcular partsCost automáticamente: precio * cantidad
+      item.partsCost = Number(part.price) * item.inventoryPartQty;
+      // Snapshot del nombre por si el repuesto se renombra después
+      item.inventoryPartName = part.name;
+    }
+
     const { data, error } = await supabase.from('repairs').insert(repairToRow(item, wid)).select('id');
     if (error) {
       if (String(error.code) === '23505') {
@@ -502,6 +538,10 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
           console.error('[repair-context] ' + msg);
           return { ok: false, error: msg };
         }
+        // Descontar stock del inventario si se usó un repuesto (reintento)
+        if (retryItem.inventoryPartId && retryItem.inventoryPartQty && retryItem.inventoryPartQty > 0) {
+          await updateInventoryStock(retryItem.inventoryPartId, -retryItem.inventoryPartQty);
+        }
         setRepairs((prev) => [retryItem, ...prev]);
         return { ok: true };
       }
@@ -512,6 +552,10 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
       const msg = 'No se pudo confirmar la reparación en la base de datos (respuesta vacía tras INSERT).';
       console.error('[repair-context] ' + msg);
       return { ok: false, error: msg };
+    }
+    // Descontar stock del inventario si se usó un repuesto
+    if (item.inventoryPartId && item.inventoryPartQty && item.inventoryPartQty > 0) {
+      await updateInventoryStock(item.inventoryPartId, -item.inventoryPartQty);
     }
     setRepairs((prev) => [item, ...prev]);
     return { ok: true };
