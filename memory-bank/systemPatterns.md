@@ -4,8 +4,8 @@
 - **Frontend:** React Native + Expo SDK 57 + `expo-router` (file-based routing).
 - **Web:** React Native Web, desplegado en Vercel.
 - **Backend:** Supabase (Auth, Postgres + RLS, Storage, Realtime).
-- **Navegación:** estructura de tabs en `src/app/(tabs)/` + rutas de detalle
-  (`job/[id]`, `receipt/[id]`).
+- **Navegación:** estructura de tabs en `src/app/(tabs)/` (Inicio, Recepción, Trabajos, Clientes, Inventario, Equipos, Admin) + rutas de detalle (`job/[id]`, `receipt/[id]`, `device-receipt/[id]`).
+- **Módulo de Equipos (Trade-in & Reventa):** `public.devices` con aislamiento contable total respecto a `repairs` (su utilidad no altera balances del taller ni producción de técnicos).
 
 ## Control de Acceso (RBAC)
 Los roles viven en `profiles.role` (por taller). Las RLS policies leen el rol del
