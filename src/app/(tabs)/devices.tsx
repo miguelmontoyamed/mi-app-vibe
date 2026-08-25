@@ -58,7 +58,10 @@ export default function DevicesScreen() {
   const router = useRouter();
   const theme = useTheme();
   const { width } = useWindowDimensions();
-  const isTablet = width >= BREAKPOINTS.mobile;
+  const isDesktop = width >= BREAKPOINTS.tablet; // 1024px
+  const isTablet = width >= BREAKPOINTS.mobile; // 768px
+  const kpiCardBasis = isDesktop ? '31%' : isTablet ? '48%' : '100%';
+
   const { currentUser } = useAuth();
   const isAdmin = currentUser?.role === 'admin';
 
@@ -217,16 +220,18 @@ export default function DevicesScreen() {
         </ThemedText>
       </View>
 
-      {/* KPI Cards de Resumen Comercial (Aisladas del taller) */}
-      <View style={[styles.kpiRow, isTablet && styles.kpiRowTablet]}>
-        <GlassCard accent={KpiAccent.progress} style={styles.kpiCard}>
+      {/* KPI Cards de Resumen Comercial con flexBasis y flexShrink: 0 */}
+      <View style={styles.kpiGrid}>
+        <GlassCard
+          accent={KpiAccent.progress}
+          style={[styles.kpiCard, { flexBasis: kpiCardBasis }]}>
           <View style={styles.kpiHeader}>
             <Ionicons name="phone-portrait-outline" size={20} color={Brand.primary} />
             <ThemedText type="small" themeColor="textSecondary">
               En Stock
             </ThemedText>
           </View>
-          <ThemedText type="title" style={{ color: Brand.primary }}>
+          <ThemedText type="title" style={styles.kpiNumberPrimary}>
             {metrics.totalInStock}
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
@@ -234,14 +239,16 @@ export default function DevicesScreen() {
           </ThemedText>
         </GlassCard>
 
-        <GlassCard accent={KpiAccent.ready} style={styles.kpiCard}>
+        <GlassCard
+          accent={KpiAccent.ready}
+          style={[styles.kpiCard, { flexBasis: kpiCardBasis }]}>
           <View style={styles.kpiHeader}>
             <Ionicons name="checkmark-circle-outline" size={20} color="#059669" />
             <ThemedText type="small" themeColor="textSecondary">
               Equipos Vendidos
             </ThemedText>
           </View>
-          <ThemedText type="title" style={{ color: '#059669' }}>
+          <ThemedText type="title" style={styles.kpiNumberSuccess}>
             {metrics.totalSold}
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
@@ -249,14 +256,16 @@ export default function DevicesScreen() {
           </ThemedText>
         </GlassCard>
 
-        <GlassCard accent={KpiAccent.ready} style={styles.kpiCard}>
+        <GlassCard
+          accent={KpiAccent.ready}
+          style={[styles.kpiCard, { flexBasis: kpiCardBasis }]}>
           <View style={styles.kpiHeader}>
             <Ionicons name="trending-up-outline" size={20} color="#2563eb" />
             <ThemedText type="small" themeColor="textSecondary">
               Utilidad Comercial
             </ThemedText>
           </View>
-          <ThemedText type="title" style={{ color: '#2563eb' }}>
+          <ThemedText type="title" style={styles.kpiNumberBlue}>
             {formatCOP(metrics.totalProfit)}
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
@@ -265,13 +274,13 @@ export default function DevicesScreen() {
         </GlassCard>
       </View>
 
-      {/* Layout Principal Tablet 2 Columnas (40% / 60%) y Móvil apilado */}
-      <View style={[styles.mainRow, isTablet && styles.mainRowTablet]}>
-        {/* Columna Izquierda: Formulario de Compra / Stock */}
+      {/* Layout Principal: 2 columnas en Desktop (>=1024px) y Apilado en Tablet/Móvil */}
+      <View style={[styles.mainRow, isDesktop && styles.mainRowDesktop]}>
+        {/* Columna Formulario de Compra / Stock */}
         {isAdmin && (
           <ThemedView
             type="backgroundElement"
-            style={[styles.formCard, isTablet && styles.formCardTablet]}>
+            style={[styles.formCard, isDesktop && styles.formCardDesktop]}>
             <ThemedText type="subtitle" style={styles.formTitle}>
               Registrar Compra de Equipo
             </ThemedText>
@@ -338,14 +347,14 @@ export default function DevicesScreen() {
                         style={[
                           styles.condChip,
                           isSelected
-                            ? { backgroundColor: Brand.primary }
+                            ? { backgroundColor: Brand.primary, borderColor: Brand.primary }
                             : { backgroundColor: theme.surfaceContainer, borderColor: theme.border },
                         ]}>
                         <ThemedText
                           type="small"
                           style={{
                             color: isSelected ? Brand.onBrand : theme.textSecondary,
-                            fontWeight: isSelected ? '700' : '400',
+                            fontWeight: isSelected ? '700' : '500',
                           }}>
                           {cond}
                         </ThemedText>
@@ -401,8 +410,8 @@ export default function DevicesScreen() {
           </ThemedView>
         )}
 
-        {/* Columna Derecha: Búsqueda, Filtros y Lista de Equipos */}
-        <View style={[styles.listColumn, isTablet && styles.listColumnTablet]}>
+        {/* Columna Búsqueda, Filtros y Lista de Equipos */}
+        <View style={[styles.listColumn, isDesktop && styles.listColumnDesktop]}>
           <FormInput
             label="Buscar equipos o ventas"
             placeholder="Buscar por IMEI, modelo, cliente o folio..."
@@ -425,7 +434,7 @@ export default function DevicesScreen() {
                   style={[
                     styles.filterChip,
                     isSelected
-                      ? { backgroundColor: Brand.primary }
+                      ? { backgroundColor: Brand.primary, borderColor: Brand.primary }
                       : { backgroundColor: theme.surfaceContainer, borderColor: theme.border },
                   ]}>
                   <ThemedText
@@ -441,7 +450,7 @@ export default function DevicesScreen() {
             })}
           </ScrollView>
 
-          {/* Listado de Tarjetas */}
+          {/* Listado de Tarjetas de Equipos */}
           <View style={styles.devicesList}>
             {filtered.length === 0 ? (
               <ThemedView type="backgroundElement" style={styles.emptyContainer}>
@@ -474,7 +483,7 @@ export default function DevicesScreen() {
                   <ThemedView key={device.id} type="backgroundElement" style={styles.deviceCard}>
                     {/* Encabezado del Equipo */}
                     <View style={styles.deviceHeader}>
-                      <View style={{ flex: 1 }}>
+                      <View style={styles.deviceTitleBlock}>
                         <ThemedText type="subtitle">
                           {formatDeviceName(device.brand, device.model, device.storageCapacity, device.color)}
                         </ThemedText>
@@ -631,14 +640,14 @@ export default function DevicesScreen() {
                                   style={[
                                     styles.condChip,
                                     isSelected
-                                      ? { backgroundColor: Brand.primary }
+                                      ? { backgroundColor: Brand.primary, borderColor: Brand.primary }
                                       : { backgroundColor: theme.surfaceContainerHigh, borderColor: theme.border },
                                   ]}>
                                   <ThemedText
                                     type="small"
                                     style={{
                                       color: isSelected ? Brand.onBrand : theme.textSecondary,
-                                      fontWeight: isSelected ? '700' : '400',
+                                      fontWeight: isSelected ? '700' : '500',
                                     }}>
                                     {pm}
                                   </ThemedText>
@@ -713,6 +722,7 @@ export default function DevicesScreen() {
 
 const styles = StyleSheet.create({
   header: {
+    width: '100%',
     gap: Spacing.one,
     paddingVertical: Spacing.two,
     paddingHorizontal: Spacing.two,
@@ -721,58 +731,83 @@ const styles = StyleSheet.create({
     fontSize: 34,
     lineHeight: 40,
   },
-  kpiRow: {
-    flexDirection: 'column',
-    gap: Spacing.three,
-    marginBottom: Spacing.three,
-  },
-  kpiRowTablet: {
+  kpiGrid: {
+    width: '100%',
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.three,
+    marginBottom: Spacing.two,
   },
   kpiCard: {
-    flex: 1,
+    flexGrow: 1,
+    flexShrink: 0,
+    minWidth: 220,
     padding: Spacing.three,
-    borderRadius: Shape.md,
+    borderRadius: Shape.lg,
     gap: Spacing.half,
   },
   kpiHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.one,
+    minWidth: 0,
+  },
+  kpiNumberPrimary: {
+    color: Brand.primary,
+    fontSize: 26,
+    lineHeight: 30,
+  },
+  kpiNumberSuccess: {
+    color: '#059669',
+    fontSize: 26,
+    lineHeight: 30,
+  },
+  kpiNumberBlue: {
+    color: '#2563eb',
+    fontSize: 26,
+    lineHeight: 30,
   },
   mainRow: {
+    width: '100%',
     gap: Spacing.four,
   },
-  mainRowTablet: {
+  mainRowDesktop: {
     flexDirection: 'row',
     alignItems: 'flex-start',
   },
   formCard: {
+    width: '100%',
     padding: Spacing.four,
     borderRadius: Shape.xl,
     gap: Spacing.three,
   },
-  formCardTablet: {
-    width: '40%',
+  formCardDesktop: {
+    width: '42%',
+    minWidth: 320,
   },
   formTitle: {
     marginBottom: Spacing.one,
   },
   formGrid: {
+    width: '100%',
     gap: Spacing.two,
   },
   formRow: {
+    width: '100%',
     flexDirection: 'row',
     gap: Spacing.two,
   },
   formCol: {
     flex: 1,
+    minWidth: 0,
   },
   conditionSection: {
+    width: '100%',
     gap: Spacing.one,
     marginVertical: 4,
   },
   conditionChips: {
+    width: '100%',
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: Spacing.one,
@@ -781,18 +816,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.one,
     borderRadius: Shape.full,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1,
+    minHeight: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   addBtn: {
+    width: '100%',
     marginTop: Spacing.two,
   },
   listColumn: {
+    width: '100%',
     gap: Spacing.three,
   },
-  listColumnTablet: {
+  listColumnDesktop: {
     flex: 1,
+    minWidth: 320,
   },
   searchInput: {
+    width: '100%',
     paddingVertical: Spacing.two,
   },
   filtersScroll: {
@@ -805,7 +847,7 @@ const styles = StyleSheet.create({
     minHeight: TouchTarget.min,
     justifyContent: 'center',
     borderRadius: Shape.full,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1,
     overflow: 'hidden',
   },
   filterChipText: {
@@ -813,10 +855,12 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   devicesList: {
+    width: '100%',
     gap: Spacing.three,
     paddingBottom: Spacing.six,
   },
   emptyContainer: {
+    width: '100%',
     padding: Spacing.six,
     borderRadius: Shape.lg,
     alignItems: 'center',
@@ -827,21 +871,28 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   deviceCard: {
+    width: '100%',
     padding: Spacing.four,
     borderRadius: Shape.xl,
     gap: Spacing.two,
   },
   deviceHeader: {
+    width: '100%',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     gap: Spacing.two,
+  },
+  deviceTitleBlock: {
+    flex: 1,
+    minWidth: 0,
   },
   statusBadge: {
     paddingHorizontal: Spacing.two,
     paddingVertical: 4,
     borderRadius: Shape.sm,
     borderWidth: 1,
+    alignSelf: 'flex-start',
   },
   cardDivider: {
     height: StyleSheet.hairlineWidth,
@@ -849,16 +900,21 @@ const styles = StyleSheet.create({
     marginVertical: 2,
   },
   metaRow: {
+    width: '100%',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: Spacing.one,
   },
   soldCard: {
-    padding: Spacing.two,
+    width: '100%',
+    padding: Spacing.three,
     borderRadius: Shape.md,
     gap: Spacing.one,
   },
   inlineSellBox: {
+    width: '100%',
     padding: Spacing.three,
     borderRadius: Shape.lg,
     borderWidth: 1,
@@ -866,17 +922,20 @@ const styles = StyleSheet.create({
     marginTop: Spacing.one,
   },
   sellProfitBadge: {
+    width: '100%',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: Spacing.half,
   },
   inlineSellActions: {
+    width: '100%',
     flexDirection: 'row',
     gap: Spacing.two,
     marginTop: Spacing.two,
   },
   cardActions: {
+    width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.two,
