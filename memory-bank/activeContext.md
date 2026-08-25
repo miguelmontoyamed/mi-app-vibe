@@ -142,12 +142,20 @@
   - Secrets & Git: `.gitignore` cubre `.env`, `.env.local`, `.env*.local`; `src/` sin `service_role` ni credenciales hardcodeadas; solo `EXPO_PUBLIC_SUPABASE_ANON_KEY` en bundle.
   - HTTP Security Headers en `vercel.json`: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `X-XSS-Protection: 1; mode=block`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: camera=(), microphone=(), geolocation=()`.
   - Dependency audit: `npm audit fix` → 16 vulnerabilidades residuales (4 high, 12 moderate) en dependencias transitivas de Expo (`image-size`, `uuid`, `nanoid`); `npm audit fix --force` requiere breaking changes en Expo SDK 57 → diferido.
-  - `npx tsc --noEmit`: 0 errores; `npm test`: 105/105 PASS.
+  - `npx tsc --noEmit`: 0 errores; `npm test`: 106/106 PASS.
   - Despliegue verificado: `mi-app-vibe-ten.vercel.app` con headers de seguridad activos.
+- **Fix cancelRepair + Modal Submission (2026-08-24):** Botón "Confirmar" en modal "Marcar como No Realizado" (`job/[id].tsx`) operativo:
+  - Validación motivo obligatorio + alerta si vacío
+  - Estado `isSubmitting` (`cancellingOrder`) con "Cancelando..." + botón deshabilitado
+  - `await cancelRepair(id, cleanMotivo)` con try/finally + manejo error
+  - En éxito: cierra modal, limpia input, UI actualiza a 'Cancelado / No Reparado'
+  - En fallo: alerta con error exacto
+- **Blindaje cancelRepair (`repair-context.tsx`):** Payload estricto a Supabase (`status`, `motivo_cancelacion`, `inventory_part_*`, `parts_cost`), uso de `.select()` para confirmar BD, logging defensivo con diagnóstico (estado, motivo, canCancel, motivoValido), reintegro stock atómico si había repuesto
+- **Reglas de Cancelación (`repair-logic.ts`):** Nueva constante `CANCELLABLE_STATUSES = ['Pendiente', 'En Proceso']`; `canCancel` usa esta constante → 'Listo', 'Entregado', 'Cancelado' = NO cancelables; `isValidCancellation` valida motivo con `trim().length > 0`; tests 106/106 PASS (`canCancel('Listo') = false`)
 
 ## Foco Operativo Inmediato (Sprint Actual)
 **Operación en Mostrador, Registro de Órdenes Reales y Validación Comercial.**
-Security Sweep completado (20 pts: Git/Secrets, HTTP Headers, Dep Audit); suite 105/105 PASS, tsc 0, deploy + headers activos. MVP/RC cerrados.
+Security Sweep completado (20 pts: Git/Secrets, HTTP Headers, Dep Audit); cancelRepair + modal submission operativos; suite 106/106 PASS, tsc 0, deploy + headers activos. MVP/RC cerrados.
 
 ## Decisiones Recientes
 - **Liquidación en tiempo real (2026-08-21):** el panel se suscribe a

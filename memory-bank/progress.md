@@ -3,13 +3,29 @@
 > Registro de avance del proyecto. Actualizar al finalizar cada tarea.
 
 ## Completado (✓)
+- **Fix cancelRepair + Modal Submission (2026-08-24):** Botón "Confirmar" en modal "Marcar como No Realizado" (`job/[id].tsx`) ahora con:
+  - Validación de motivo obligatorio + alerta informativa si vacío
+  - Estado `isSubmitting` (`cancellingOrder`) con feedback visual "Cancelando..." + botón deshabilitado
+  - Invocación `await cancelRepair(id, cleanMotivo)` con manejo de error try/finally
+  - En éxito: cierra modal, limpia input, UI actualiza a 'Cancelado / No Reparado' con recuadro de motivo
+  - En fallo: alerta con mensaje exacto del error
+- **Blindaje cancelRepair (`repair-context.tsx`):**
+  - Payload estricto a Supabase: solo `status: 'Cancelado / No Reparado'`, `motivo_cancelacion`, `inventory_part_*`, `parts_cost`
+  - Uso de `.select()` para confirmar actualización en BD
+  - Logging defensivo con diagnóstico detallado (estado, motivo, canCancel, motivoValido)
+  - Reintegro de stock atómico si había repuesto de inventario
+- **Reglas de Cancelación (`repair-logic.ts`):**
+  - Nueva constante `CANCELLABLE_STATUSES = ['Pendiente', 'En Proceso']` (solo estos 2 estados)
+  - `canCancel` usa esta constante → 'Listo', 'Entregado', 'Cancelado' = NO cancelables
+  - `isValidCancellation` valida motivo con `trim().length > 0`
+  - Tests actualizados: 106/106 PASS (`canCancel('Listo') = false`, `'Listo'` NO cancelable)
+- **Despliegue:** Vercel `dpl_FsbNY83EVT11bQqUsYv1yxsMdzyS` + headers seguridad + smoke tests 2/2
 - **Security & Hardening Sweep (2026-08-24):** Auditoría de 20 puntos completada:
   - Secrets & Git: `.gitignore` cubre `.env`, `.env.local`, `.env*.local`; `src/` sin `service_role` ni credenciales hardcodeadas; solo `EXPO_PUBLIC_SUPABASE_ANON_KEY` en bundle.
   - HTTP Security Headers en `vercel.json`: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `X-XSS-Protection: 1; mode=block`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: camera=(), microphone=(), geolocation=()`.
   - Dependency audit: `npm audit fix` → 16 vulnerabilidades residuales (4 high, 12 moderate) en dependencias transitivas de Expo (`image-size`, `uuid`, `nanoid`); `npm audit fix --force` requiere breaking changes en Expo SDK 57 → diferido.
-  - `npx tsc --noEmit`: 0 errores; `npm test`: 105/105 PASS.
+  - `npx tsc --noEmit`: 0 errores; `npm test`: 106/106 PASS.
   - Despliegue verificado: `mi-app-vibe-ten.vercel.app` con headers de seguridad activos.
-- **Integración de Inventario con Órdenes de Reparación (`job/[id].tsx`):**
   selector de repuestos con indicador de stock en vivo, selector de cantidad
   `+ / -`, descuento y reintegro automático de stock en Supabase (`public.inventory`
   y `public.repairs`), modal con pestañas "Desde Inventario" / "Costo Manual",
