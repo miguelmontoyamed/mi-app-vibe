@@ -150,8 +150,9 @@
   - `await cancelRepair(id, cleanMotivo)` con try/finally + manejo error
   - En éxito: cierra modal, limpia input, UI actualiza a 'Cancelado / No Reparado'
   - En fallo: alerta con error exacto
-- **Blindaje cancelRepair (`repair-context.tsx`):** Payload estricto a Supabase (`status`, `motivo_cancelacion`, `inventory_part_*`, `parts_cost`), uso de `.select()` para confirmar BD, logging defensivo con diagnóstico (estado, motivo, canCancel, motivoValido), reintegro stock atómico si había repuesto
-- **Reglas de Cancelación (`repair-logic.ts`):** Nueva constante `CANCELLABLE_STATUSES = ['Pendiente', 'En Proceso']`; `canCancel` usa esta constante → 'Listo', 'Entregado', 'Cancelado' = NO cancelables; `isValidCancellation` valida motivo con `trim().length > 0`; tests 106/106 PASS (`canCancel('Listo') = false`)
+- **Blindaje cancelRepair y deleteRepair (`repair-context.tsx`):** Payload estricto a Supabase (`status`, `motivo_cancelacion`, `inventory_part_*`, `parts_cost`, `budget: 0`, `advance_payment: 0`). Reintegro automático de inventario al cancelar o eliminar una orden de la base de datos de manera atómica para evitar descuadre de inventario y fugas de ganancias.
+- **Reglas de Cancelación (`repair-logic.ts`):** Nueva constante `CANCELLABLE_STATUSES = ['Pendiente', 'En Proceso']`; `canCancel` usa esta constante -> 'Listo', 'Entregado', 'Cancelado' = NO cancelables; `isValidCancellation` valida motivo con `trim().length > 0`; tests 106/106 PASS (`canCancel('Listo') = false`)
+- **Migración faltante aplicada en vivo (2026-08-24):** Creada la migración `20260824220000_repairs_cancel_reason_status.sql` (agregando `motivo_cancelacion` y permitiendo el estado 'Cancelado / No Reparado' en el check constraint `repairs_status_check`). Aplicada directamente en producción usando la cadena de conexión de la base de datos vía script.
 
 ## Foco Operativo Inmediato (Sprint Actual)
 **Operación en Mostrador, Registro de Órdenes Reales y Validación Comercial.**
