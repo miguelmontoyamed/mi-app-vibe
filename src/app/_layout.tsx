@@ -9,6 +9,7 @@ import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { AuthProvider, useAuth } from '@/context/auth-context';
 import { BillingProvider } from '@/context/billing-context';
+import { DeviceProvider } from '@/context/device-context';
 import { RepairProvider } from '@/context/repair-context';
 import { WorkshopProvider, useWorkshop } from '@/context/workshop-context';
 
@@ -33,13 +34,6 @@ function RootNavigator() {
   }, [hydrated, workshopHydrated, isAuthenticated, workshopExpired, router]);
 
   // Esperar la restauración de la sesión de Supabase ANTES de montar el router.
-  // Si el Stack se monta con `isAuthenticated=false` (estado inicial) y la
-  // sesión se restaura después, el guard no re-navega y el usuario queda
-  // atrapado en /login tras un reload. Montar solo con `hydrated` garantiza que
-  // la primera render del guard ya decide con la sesión real
-  // (AnimatedSplashOverlay cubre la pausa). Igual con el estado del taller:
-  // esperar `workshopHydrated` evita un flash de la zona protegida a un taller
-  // expirado antes de que el paywall tome el control.
   if (!hydrated || !workshopHydrated) {
     return null;
   }
@@ -49,6 +43,7 @@ function RootNavigator() {
       <Stack.Protected guard={isAuthenticated && !workshopExpired}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="receipt/[id]" options={{ headerShown: false }} />
+        <Stack.Screen name="device-receipt/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="job/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="taller" options={{ headerShown: false }} />
         <Stack.Screen name="super-admin" options={{ headerShown: false }} />
@@ -68,16 +63,18 @@ export default function TabLayout() {
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <ErrorBoundary>
         <AuthProvider>
-        <RepairProvider>
-          <WorkshopProvider>
-            <BillingProvider>
-            <RootNavigator />
-            <AnimatedSplashOverlay />
-            </BillingProvider>
-          </WorkshopProvider>
-        </RepairProvider>
-      </AuthProvider>
+          <RepairProvider>
+            <DeviceProvider>
+              <WorkshopProvider>
+                <BillingProvider>
+                  <RootNavigator />
+                  <AnimatedSplashOverlay />
+                </BillingProvider>
+              </WorkshopProvider>
+            </DeviceProvider>
+          </RepairProvider>
+        </AuthProvider>
       </ErrorBoundary>
     </ThemeProvider>
   );
-}
+}

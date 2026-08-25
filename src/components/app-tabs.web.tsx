@@ -79,6 +79,11 @@ export default function AppTabs() {
               Inventario
             </TabButton>
           </TabTrigger>
+          <TabTrigger name="devices" href="/devices" asChild>
+            <TabButton bottom={!isDesktop} icon={{ ios: 'iphone', web: 'smartphone' }}>
+              Equipos
+            </TabButton>
+          </TabTrigger>
           {/* RBAC: el tab Admin solo se muestra al dueño (admin). */}
           {isAdmin && (
             <TabTrigger name="admin" href="/admin" asChild>

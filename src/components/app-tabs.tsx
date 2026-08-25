@@ -253,6 +253,15 @@ export default function AppTabs() {
         }}
       />
       <Tabs.Screen
+        name="devices"
+        options={{
+          title: 'Equipos',
+          tabBarIcon: ({ focused, color, size }) => (
+            <Ionicons name={focused ? 'phone-portrait' : 'phone-portrait-outline'} color={color} size={size} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="admin"
         redirect={!isAdmin}
         options={{

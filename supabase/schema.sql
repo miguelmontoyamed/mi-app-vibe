@@ -104,6 +104,49 @@ create table if not exists public.inventory (
 );
 
 -- ------------------------------------------------------------------
+-- 5.1) Compra y Venta de Equipos / Dispositivos (Trade-in & Refurbished)
+-- ------------------------------------------------------------------
+create table if not exists public.devices (
+  id uuid primary key default gen_random_uuid(),
+  workshop_id uuid not null references public.workshops(id) on delete cascade,
+  
+  -- Compra / Stock
+  brand text not null,
+  model text not null,
+  color text,
+  storage_capacity text,
+  imei text not null,
+  condition text not null default 'Usado',
+  distributor text not null,
+  purchase_price numeric not null default 0,
+  supplier_warranty_months int not null default 0,
+  supplier_warranty_notes text,
+  purchase_date date not null default current_date,
+  purchase_notes text,
+  
+  -- Venta
+  status text not null default 'En Stock' check (status in ('En Stock', 'Vendido')),
+  sale_price numeric,
+  sale_date date,
+  client_id uuid references public.clients(id) on delete set null,
+  client_name text,
+  client_phone text,
+  client_document text,
+  client_warranty_months int default 0,
+  client_warranty_expiry date,
+  payment_method text check (payment_method is null or payment_method in ('Efectivo','Transferencia','Tarjeta')),
+  invoice_folio text,
+  sale_notes text,
+  
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_devices_workshop on public.devices(workshop_id);
+create index if not exists idx_devices_status on public.devices(workshop_id, status);
+create index if not exists idx_devices_imei on public.devices(workshop_id, imei);
+
+-- ------------------------------------------------------------------
 -- 6) Perfil del taller (membrete) para los recibos PDF
 --    Una fila por taller. `workshop_id` es UNIQUE (una sola fila por taller).
 -- ------------------------------------------------------------------
