@@ -230,15 +230,15 @@ export default function JobDetailScreen() {
     }
     setCancellingOrder(true);
     try {
-      if (await cancelRepair(repair.id, cleanMotivo)) {
-        setCancelModalVisible(false);
-        setCancelMotivo('');
+      await cancelRepair(repair.id, cleanMotivo);
+      setCancelModalVisible(false);
+      setCancelMotivo('');
+    } catch (error: any) {
+      const errorMessage = error?.message || 'Error desconocido';
+      if (Platform.OS === 'web') {
+        window.alert(`No se pudo cancelar\n\n${errorMessage}`);
       } else {
-        if (Platform.OS === 'web') {
-          window.alert('No se pudo cancelar\n\nLa orden no está en un estado que permita marcarla como no realizada.');
-        } else {
-          Alert.alert('No se pudo cancelar', 'La orden no está en un estado que permita marcarla como no realizada.');
-        }
+        Alert.alert('No se pudo cancelar', errorMessage);
       }
     } finally {
       setCancellingOrder(false);

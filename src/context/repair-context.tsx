@@ -89,7 +89,7 @@ interface RepairContextType {
     patch: Partial<Omit<RepairItem, 'id' | 'date' | 'status' | 'motivoCancelacion'>>
   ) => Promise<void>;
   /** Cancela la reparación exigiendo un motivo (texto libre); devuelve true si se aplicó. */
-  cancelRepair: (id: string, motivo: string) => Promise<boolean>;
+  cancelRepair: (id: string, motivo: string) => Promise<void>;
   /** Elimina definitivamente una orden (solo dueño). Devuelve true si existía. */
   deleteRepair: (id: string) => Promise<boolean>;
   recordRepairPayment: (id: string, amount: number, method: PaymentMethod) => Promise<void>;
@@ -565,19 +565,19 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
    * Si la orden tenía un repuesto de inventario asignado, reintegra automáticamente
    * el stock al inventario.
    */
-  const cancelRepair = async (id: string, motivo: string): Promise<boolean> => {
+  const cancelRepair = async (id: string, motivo: string): Promise<void> => {
     const cleanMotivo = motivo.trim();
     const target = repairs.find((r) => r.id === id);
     if (!target) {
-      console.warn('[cancelRepair] Orden no encontrada en estado local:', id);
-      return false;
+      throw new Error('Orden no encontrada en estado local.');
     }
     if (!isValidCancellation(target.status, cleanMotivo)) {
-      console.warn('[cancelRepair] Cancelación inválida:', { status: target.status, motivo: cleanMotivo, canCancel: canCancel(target.status), motivoValido: typeof cleanMotivo === 'string' && cleanMotivo.trim().length > 0 });
-      return false;
+      throw new Error('La orden no está en un estado que permita marcarla como no realizada.');
     }
     const blockReason = requireWorkshop();
-    if (blockReason) { notifyError(blockReason); return false; }
+    if (blockReason) {
+      throw new Error(blockReason);
+    }
 
     // Reintegrar stock al inventario si la orden tenía pieza vinculada
     if (target.inventoryPartId) {
@@ -609,11 +609,12 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
       })
       .eq('id', id)
       .select();
+      
     if (error) {
       console.error(formatDbError('cancelRepair (update)', error));
-      notifyError(`No se pudo cancelar la orden: ${error.message}`);
-      return false;
+      throw new Error(`Error BD: ${error.message}`);
     }
+    
     setRepairs((prev) =>
       prev.map((r) =>
         r.id === id
@@ -629,7 +630,6 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
           : r
       )
     );
-    return true;
   };
 
   /** Elimina definitivamente una orden. SOLO el dueño/admin del taller.
