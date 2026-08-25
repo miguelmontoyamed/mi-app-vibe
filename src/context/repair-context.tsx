@@ -606,6 +606,8 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
         inventory_part_name: null,
         inventory_part_qty: 0,
         parts_cost: 0,
+        budget: 0,
+        advance_payment: 0,
       })
       .eq('id', id)
       .select();
@@ -626,6 +628,8 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
               inventoryPartName: undefined,
               inventoryPartQty: undefined,
               partsCost: 0,
+              budget: 0,
+              advancePayment: 0,
             }
           : r
       )
@@ -635,13 +639,33 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
   /** Elimina definitivamente una orden. SOLO el dueño/admin del taller.
    *  Devuelve true si existía y fue eliminada de la nube. */
   const deleteRepair = async (id: string): Promise<boolean> => {
-    if (!repairs.some((r) => r.id === id)) return false;
+    const target = repairs.find((r) => r.id === id);
+    if (!target) return false;
     if (currentUser?.role !== 'admin') {
       notifyError('Solo el dueño del taller puede eliminar órdenes.');
       return false;
     }
     const blockReason = requireWorkshop();
     if (blockReason) { notifyError(blockReason); return false; }
+
+    // Reintegrar stock al inventario si la orden tenía pieza vinculada
+    if (target.inventoryPartId) {
+      const prevPart = inventory.find((p) => p.id === target.inventoryPartId);
+      if (prevPart) {
+        const qty = target.inventoryPartQty ?? 1;
+        const restoredStock = calculateRestoredStock(prevPart.stock, qty);
+        const { error: stockErr } = await supabase
+          .from('inventory')
+          .update({ stock: restoredStock })
+          .eq('id', prevPart.id);
+        if (!stockErr) {
+          setInventory((prev) =>
+            prev.map((p) => (p.id === prevPart.id ? { ...p, stock: restoredStock } : p))
+          );
+        }
+      }
+    }
+
     const { data, error } = await supabase.from('repairs').delete().eq('id', id).select('id');
     if (error) {
       console.error(formatDbError('deleteRepair (delete)', error));
