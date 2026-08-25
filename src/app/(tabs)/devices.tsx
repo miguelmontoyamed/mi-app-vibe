@@ -1,9 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Alert,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -12,13 +11,13 @@ import {
   useWindowDimensions,
 } from 'react-native';
 
-import { GlassCard } from '@/components/ui/glass-card';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
 import { FormInput } from '@/components/ui/form-input';
+import { GlassCard } from '@/components/ui/glass-card';
 import { Screen } from '@/components/ui/screen';
-import { Brand, BREAKPOINTS, Shape, Spacing } from '@/constants/theme';
+import { Brand, BREAKPOINTS, KpiAccent, Shape, Spacing, TouchTarget } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { useDevices } from '@/context/device-context';
 import { useTheme } from '@/hooks/use-theme';
@@ -34,15 +33,7 @@ import {
   formatDeviceName,
   isDeviceWarrantyActive,
 } from '@/utils/device-logic';
-import { formatCOP } from '@/utils/format';
-
-function notify(message: string) {
-  if (Platform.OS === 'web') {
-    window.alert(message);
-  } else {
-    Alert.alert('Aviso', message);
-  }
-}
+import { formatCOP, parseCOPInput } from '@/utils/format';
 
 const CONDITIONS: DeviceCondition[] = [
   'Nuevo',
@@ -53,21 +44,31 @@ const CONDITIONS: DeviceCondition[] = [
 
 const PAYMENT_METHODS: DevicePaymentMethod[] = ['Efectivo', 'Transferencia', 'Tarjeta'];
 
+const STATUS_FILTERS: (DeviceStatus | 'Todos')[] = ['Todos', 'En Stock', 'Vendido'];
+
+function notify(message: string) {
+  if (Platform.OS === 'web') {
+    window.alert(message);
+  } else {
+    Alert.alert('Aviso', message);
+  }
+}
+
 export default function DevicesScreen() {
   const router = useRouter();
   const theme = useTheme();
   const { width } = useWindowDimensions();
-  const isTablet = width >= BREAKPOINTS.tablet;
+  const isTablet = width >= BREAKPOINTS.mobile;
   const { currentUser } = useAuth();
   const isAdmin = currentUser?.role === 'admin';
 
   const { devices, metrics, addDevice, sellDevice, deleteDevice } = useDevices();
 
+  // Estados de búsqueda y filtros
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<DeviceStatus | 'Todos'>('Todos');
+  const [selectedFilter, setSelectedFilter] = useState<DeviceStatus | 'Todos'>('Todos');
 
-  // Modal de Compra / Registro de Equipo
-  const [buyModalVisible, setBuyModalVisible] = useState(false);
+  // Formulario de Compra / Entrada de Stock
   const [brand, setBrand] = useState('');
   const [model, setModel] = useState('');
   const [color, setColor] = useState('');
@@ -80,9 +81,8 @@ export default function DevicesScreen() {
   const [purchaseNotes, setPurchaseNotes] = useState('');
   const [isSubmittingBuy, setIsSubmittingBuy] = useState(false);
 
-  // Modal de Venta de Equipo
-  const [sellModalVisible, setSellModalVisible] = useState(false);
-  const [selectedDeviceToSell, setSelectedDeviceToSell] = useState<Device | null>(null);
+  // Formulario Inline de Venta (expandido por ID)
+  const [sellingDeviceId, setSellingDeviceId] = useState<string | null>(null);
   const [clientName, setClientName] = useState('');
   const [clientPhone, setClientPhone] = useState('');
   const [clientDocument, setClientDocument] = useState('');
@@ -92,31 +92,20 @@ export default function DevicesScreen() {
   const [saleNotes, setSaleNotes] = useState('');
   const [isSubmittingSale, setIsSubmittingSale] = useState(false);
 
-  const filtered = filterDevices(devices, searchQuery, statusFilter);
+  const filtered = useMemo(
+    () => filterDevices(devices, searchQuery, selectedFilter),
+    [devices, searchQuery, selectedFilter]
+  );
 
-  const handleOpenBuyModal = () => {
-    setBrand('');
-    setModel('');
-    setColor('');
-    setStorageCapacity('128GB');
-    setImei('');
-    setCondition('Usado - Excelente');
-    setDistributor('');
-    setPurchasePrice('');
-    setSupplierWarrantyMonths('1');
-    setPurchaseNotes('');
-    setBuyModalVisible(true);
-  };
-
-  const handleSaveBuy = async () => {
+  const handleAddDevice = async () => {
     if (!brand.trim() || !model.trim() || !imei.trim() || !distributor.trim() || !purchasePrice.trim()) {
-      notify('Por favor complete los campos obligatorios: Marca, Modelo, IMEI, Distribuidor y Costo.');
+      notify('Completa los campos obligatorios: Marca, Modelo, IMEI, Distribuidor y Costo.');
       return;
     }
 
-    const priceNum = parseFloat(purchasePrice.replace(/[^0-9.]/g, ''));
+    const priceNum = parseCOPInput(purchasePrice) ?? parseFloat(purchasePrice.replace(/[^0-9.]/g, ''));
     if (isNaN(priceNum) || priceNum <= 0) {
-      notify('Ingrese un costo de compra válido en COP.');
+      notify('Ingresa un costo de compra válido en COP.');
       return;
     }
 
@@ -138,15 +127,27 @@ export default function DevicesScreen() {
       });
 
       if (created) {
-        setBuyModalVisible(false);
+        setBrand('');
+        setModel('');
+        setColor('');
+        setStorageCapacity('128GB');
+        setImei('');
+        setDistributor('');
+        setPurchasePrice('');
+        setSupplierWarrantyMonths('1');
+        setPurchaseNotes('');
       }
     } finally {
       setIsSubmittingBuy(false);
     }
   };
 
-  const handleOpenSellModal = (device: Device) => {
-    setSelectedDeviceToSell(device);
+  const handleOpenSell = (device: Device) => {
+    if (sellingDeviceId === device.id) {
+      setSellingDeviceId(null);
+      return;
+    }
+    setSellingDeviceId(device.id);
     setClientName('');
     setClientPhone('');
     setClientDocument('');
@@ -154,20 +155,17 @@ export default function DevicesScreen() {
     setClientWarrantyMonths('3');
     setPaymentMethod('Efectivo');
     setSaleNotes('');
-    setSellModalVisible(true);
   };
 
-  const handleSaveSale = async () => {
-    if (!selectedDeviceToSell) return;
-
+  const handleConfirmSale = async (device: Device) => {
     if (!clientName.trim() || !salePrice.trim()) {
-      notify('Por favor ingrese el nombre del cliente y el precio de venta.');
+      notify('Por favor ingresa el nombre del cliente y el precio de venta.');
       return;
     }
 
-    const priceNum = parseFloat(salePrice.replace(/[^0-9.]/g, ''));
+    const priceNum = parseCOPInput(salePrice) ?? parseFloat(salePrice.replace(/[^0-9.]/g, ''));
     if (isNaN(priceNum) || priceNum <= 0) {
-      notify('Ingrese un precio de venta válido en COP.');
+      notify('Ingresa un precio de venta válido en COP.');
       return;
     }
 
@@ -175,7 +173,7 @@ export default function DevicesScreen() {
 
     setIsSubmittingSale(true);
     try {
-      const success = await sellDevice(selectedDeviceToSell.id, {
+      const success = await sellDevice(device.id, {
         clientName: clientName.trim(),
         clientPhone: clientPhone.trim() || undefined,
         clientDocument: clientDocument.trim() || undefined,
@@ -186,8 +184,7 @@ export default function DevicesScreen() {
       });
 
       if (success) {
-        setSellModalVisible(false);
-        setSelectedDeviceToSell(null);
+        setSellingDeviceId(null);
       }
     } finally {
       setIsSubmittingSale(false);
@@ -195,47 +192,35 @@ export default function DevicesScreen() {
   };
 
   const handleDeleteDevice = (device: Device) => {
-    const message = `¿Deseas eliminar el registro de este equipo (${device.brand} ${device.model} - IMEI: ${device.imei})?`;
+    const message = `¿Deseas eliminar el registro de ${device.brand} ${device.model} (IMEI: ${device.imei})?`;
     if (Platform.OS === 'web') {
       if (window.confirm(message)) {
         void deleteDevice(device.id);
       }
     } else {
-      Alert.alert('Eliminar Equipo', message, [
+      Alert.alert('Eliminar Registro', message, [
         { text: 'Cancelar', style: 'cancel' },
         { text: 'Eliminar', style: 'destructive', onPress: () => void deleteDevice(device.id) },
       ]);
     }
   };
 
-  const currentEstimatedProfit = selectedDeviceToSell && salePrice
-    ? calculateDeviceProfit(parseFloat(salePrice.replace(/[^0-9.]/g, '')), selectedDeviceToSell.purchasePrice)
-    : 0;
-
   return (
     <Screen>
-      {/* Encabezado */}
+      {/* Encabezado estándar del proyecto */}
       <View style={styles.header}>
-        <View>
-          <ThemedText type="title" style={styles.title}>
-            Compra y Venta de Equipos
-          </ThemedText>
-          <ThemedText themeColor="textSecondary">
-            Gestión comercial de teléfonos, IMEI, garantías y facturación
-          </ThemedText>
-        </View>
-        <Button
-          label="+ Registrar Compra"
-          variant="primary"
-          onPress={handleOpenBuyModal}
-          style={styles.buyButton}
-        />
+        <ThemedText type="title" style={styles.title}>
+          Compra y Venta de Equipos
+        </ThemedText>
+        <ThemedText themeColor="textSecondary">
+          Control de celulares, stock por IMEI, garantías y facturación comercial
+        </ThemedText>
       </View>
 
-      {/* Tarjetas de Métricas de Venta de Equipos (Aisladas) */}
-      <View style={[styles.metricsRow, isTablet && styles.metricsRowTablet]}>
-        <GlassCard style={styles.metricCard}>
-          <View style={styles.metricHeader}>
+      {/* KPI Cards de Resumen Comercial (Aisladas del taller) */}
+      <View style={[styles.kpiRow, isTablet && styles.kpiRowTablet]}>
+        <GlassCard accent={KpiAccent.progress} style={styles.kpiCard}>
+          <View style={styles.kpiHeader}>
             <Ionicons name="phone-portrait-outline" size={20} color={Brand.primary} />
             <ThemedText type="small" themeColor="textSecondary">
               En Stock
@@ -245,12 +230,12 @@ export default function DevicesScreen() {
             {metrics.totalInStock}
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
-            Inversión: {formatCOP(metrics.totalInvestedStock)}
+            Invertido: {formatCOP(metrics.totalInvestedStock)}
           </ThemedText>
         </GlassCard>
 
-        <GlassCard style={styles.metricCard}>
-          <View style={styles.metricHeader}>
+        <GlassCard accent={KpiAccent.ready} style={styles.kpiCard}>
+          <View style={styles.kpiHeader}>
             <Ionicons name="checkmark-circle-outline" size={20} color="#059669" />
             <ThemedText type="small" themeColor="textSecondary">
               Equipos Vendidos
@@ -260,12 +245,12 @@ export default function DevicesScreen() {
             {metrics.totalSold}
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
-            Ventas: {formatCOP(metrics.totalRevenueSold)}
+            Total Ventas: {formatCOP(metrics.totalRevenueSold)}
           </ThemedText>
         </GlassCard>
 
-        <GlassCard style={styles.metricCard}>
-          <View style={styles.metricHeader}>
+        <GlassCard accent={KpiAccent.ready} style={styles.kpiCard}>
+          <View style={styles.kpiHeader}>
             <Ionicons name="trending-up-outline" size={20} color="#2563eb" />
             <ThemedText type="small" themeColor="textSecondary">
               Utilidad Comercial
@@ -280,495 +265,573 @@ export default function DevicesScreen() {
         </GlassCard>
       </View>
 
-      {/* Barra de Búsqueda y Filtros */}
-      <View style={styles.searchSection}>
-        <FormInput
-          label="Buscar Equipo o Venta"
-          placeholder="Buscar por IMEI, Modelo, Cliente o Folio..."
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          style={styles.searchInput}
-        />
+      {/* Layout Principal Tablet 2 Columnas (40% / 60%) y Móvil apilado */}
+      <View style={[styles.mainRow, isTablet && styles.mainRowTablet]}>
+        {/* Columna Izquierda: Formulario de Compra / Stock */}
+        {isAdmin && (
+          <ThemedView
+            type="backgroundElement"
+            style={[styles.formCard, isTablet && styles.formCardTablet]}>
+            <ThemedText type="subtitle" style={styles.formTitle}>
+              Registrar Compra de Equipo
+            </ThemedText>
 
-        <View style={styles.filterChips}>
-          {(['Todos', 'En Stock', 'Vendido'] as (DeviceStatus | 'Todos')[]).map((st) => {
-            const isSelected = statusFilter === st;
-            return (
-              <Pressable
-                key={st}
-                onPress={() => setStatusFilter(st)}
-                style={[
-                  styles.chip,
-                  {
-                    backgroundColor: isSelected ? Brand.primary : theme.surfaceContainer,
-                    borderColor: isSelected ? Brand.primary : theme.border,
-                  },
-                ]}>
-                <ThemedText
-                  type="smallBold"
-                  style={{ color: isSelected ? '#ffffff' : theme.textSecondary }}>
-                  {st}
+            <View style={styles.formGrid}>
+              <View style={styles.formRow}>
+                <View style={styles.formCol}>
+                  <FormInput
+                    label="Marca *"
+                    placeholder="Ej. Apple"
+                    value={brand}
+                    onChangeText={setBrand}
+                  />
+                </View>
+                <View style={styles.formCol}>
+                  <FormInput
+                    label="Modelo *"
+                    placeholder="Ej. iPhone 13 Pro"
+                    value={model}
+                    onChangeText={setModel}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.formRow}>
+                <View style={styles.formCol}>
+                  <FormInput
+                    label="Capacidad"
+                    placeholder="Ej. 128GB"
+                    value={storageCapacity}
+                    onChangeText={setStorageCapacity}
+                  />
+                </View>
+                <View style={styles.formCol}>
+                  <FormInput
+                    label="Color"
+                    placeholder="Ej. Azul Sierra"
+                    value={color}
+                    onChangeText={setColor}
+                  />
+                </View>
+              </View>
+
+              <FormInput
+                label="IMEI / Serial *"
+                placeholder="Número de IMEI del equipo"
+                value={imei}
+                onChangeText={setImei}
+                keyboardType="numeric"
+              />
+
+              {/* Selector de Condición con Chips */}
+              <View style={styles.conditionSection}>
+                <ThemedText type="smallBold" themeColor="textSecondary">
+                  Condición del Equipo:
                 </ThemedText>
-              </Pressable>
-            );
-          })}
-        </View>
-      </View>
-
-      {/* Listado de Equipos */}
-      {filtered.length === 0 ? (
-        <ThemedView type="backgroundElement" style={styles.emptyContainer}>
-          <Ionicons name="phone-portrait-outline" size={48} color={theme.textSecondary} />
-          <ThemedText type="subtitle">No hay equipos para mostrar</ThemedText>
-          <ThemedText themeColor="textSecondary" style={{ textAlign: 'center' }}>
-            {searchQuery
-              ? 'No se encontraron resultados con ese criterio de búsqueda.'
-              : 'Presiona "+ Registrar Compra" para ingresar tu primer celular al stock.'}
-          </ThemedText>
-        </ThemedView>
-      ) : (
-        <View style={styles.listGrid}>
-          {filtered.map((device) => {
-            const isSold = device.status === 'Vendido';
-            const profit = isSold
-              ? calculateDeviceProfit(device.salePrice, device.purchasePrice)
-              : 0;
-            const warrantyActive = isSold
-              ? isDeviceWarrantyActive(device.clientWarrantyExpiry)
-              : true;
-
-            return (
-              <GlassCard key={device.id} style={styles.deviceCard}>
-                <View style={styles.cardHeader}>
-                  <View style={{ flex: 1 }}>
-                    <ThemedText type="subtitle">
-                      {formatDeviceName(device.brand, device.model, device.storageCapacity, device.color)}
-                    </ThemedText>
-                    <ThemedText type="small" themeColor="textSecondary">
-                      IMEI: <ThemedText type="smallBold">{device.imei}</ThemedText> • {device.condition}
-                    </ThemedText>
-                  </View>
-                  <View
-                    style={[
-                      styles.statusBadge,
-                      {
-                        backgroundColor: isSold ? 'rgba(37,99,235,0.1)' : 'rgba(5,150,105,0.1)',
-                      },
-                    ]}>
-                    <ThemedText
-                      type="smallBold"
-                      style={{ color: isSold ? '#2563eb' : '#059669' }}>
-                      {device.status}
-                    </ThemedText>
-                  </View>
-                </View>
-
-                <View style={[styles.cardDivider, { backgroundColor: theme.border }]} />
-
-                {/* Detalles de Compra / Stock */}
-                <View style={styles.infoRow}>
-                  <ThemedText type="small" themeColor="textSecondary">
-                    Distribuidor: {device.distributor}
-                  </ThemedText>
-                  <ThemedText type="small" themeColor="textSecondary">
-                    Costo: <ThemedText type="smallBold">{formatCOP(device.purchasePrice)}</ThemedText>
-                  </ThemedText>
-                </View>
-
-                {/* Detalles de Venta si está vendido */}
-                {isSold ? (
-                  <View style={styles.soldSection}>
-                    <View style={styles.infoRow}>
-                      <ThemedText type="smallBold" style={{ color: Brand.primary }}>
-                        Folio: {device.invoiceFolio || 'VNT-0000'}
-                      </ThemedText>
-                      <ThemedText type="small">
-                        Vendido: <ThemedText type="smallBold">{formatCOP(device.salePrice || 0)}</ThemedText>
-                      </ThemedText>
-                    </View>
-                    <View style={styles.infoRow}>
-                      <ThemedText type="small" themeColor="textSecondary">
-                        Cliente: {device.clientName}
-                      </ThemedText>
-                      <ThemedText type="smallBold" style={{ color: '#059669' }}>
-                        Utilidad: +{formatCOP(profit)}
-                      </ThemedText>
-                    </View>
-                    <View style={styles.infoRow}>
-                      <ThemedText type="small" themeColor="textSecondary">
-                        Garantía ({device.clientWarrantyMonths}m): {device.clientWarrantyExpiry}
-                      </ThemedText>
-                      <ThemedText
-                        type="smallBold"
-                        style={{ color: warrantyActive ? '#059669' : '#dc2626' }}>
-                        {warrantyActive ? 'Vigente' : 'Expirada'}
-                      </ThemedText>
-                    </View>
-                  </View>
-                ) : (
-                  <View style={styles.inStockInfo}>
-                    <ThemedText type="small" themeColor="textSecondary">
-                      Garantía Proveedor: {device.supplierWarrantyMonths} meses
-                    </ThemedText>
-                    <ThemedText type="small" style={{ color: '#059669' }}>
-                      Listo para vender
-                    </ThemedText>
-                  </View>
-                )}
-
-                {/* Botones de Acción */}
-                <View style={styles.cardActions}>
-                  {!isSold ? (
-                    <Button
-                      label="💵 Vender Equipo"
-                      variant="primary"
-                      onPress={() => handleOpenSellModal(device)}
-                      style={styles.cardBtn}
-                    />
-                  ) : (
-                    <Button
-                      label="📄 Ver Factura / Enviar"
-                      variant="primary"
-                      onPress={() =>
-                        router.push({
-                          pathname: '/device-receipt/[id]',
-                          params: { id: device.id },
-                        })
-                      }
-                      style={styles.cardBtn}
-                    />
-                  )}
-
-                  {isAdmin && (
-                    <Pressable
-                      onPress={() => handleDeleteDevice(device)}
-                      style={styles.deleteIconButton}>
-                      <Ionicons name="trash-outline" size={18} color="#dc2626" />
-                    </Pressable>
-                  )}
-                </View>
-              </GlassCard>
-            );
-          })}
-        </View>
-      )}
-
-      {/* MODAL: Registrar Compra / Ingreso de Equipo */}
-      <Modal visible={buyModalVisible} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <ThemedView type="backgroundElement" style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <ThemedText type="subtitle">Registrar Compra de Equipo</ThemedText>
-              <Pressable onPress={() => setBuyModalVisible(false)}>
-                <Ionicons name="close" size={24} color={theme.text} />
-              </Pressable>
-            </View>
-
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <View style={styles.formGrid}>
-                <FormInput
-                  label="Marca *"
-                  placeholder="Ej: Apple, Samsung, Xiaomi"
-                  value={brand}
-                  onChangeText={setBrand}
-                />
-                <FormInput
-                  label="Modelo *"
-                  placeholder="Ej: iPhone 13 Pro Max, Galaxy S23"
-                  value={model}
-                  onChangeText={setModel}
-                />
-                <FormInput
-                  label="Capacidad / Memoria"
-                  placeholder="Ej: 128GB, 256GB"
-                  value={storageCapacity}
-                  onChangeText={setStorageCapacity}
-                />
-                <FormInput
-                  label="Color"
-                  placeholder="Ej: Azul Sierra, Negro grafito"
-                  value={color}
-                  onChangeText={setColor}
-                />
-                <FormInput
-                  label="IMEI / Serial *"
-                  placeholder="Número de IMEI del equipo"
-                  value={imei}
-                  onChangeText={setImei}
-                  keyboardType="numeric"
-                />
-                
-                {/* Selector de Condición */}
-                <View style={styles.fieldGroup}>
-                  <ThemedText type="smallBold" style={styles.fieldLabel}>Condición del Equipo</ThemedText>
-                  <View style={styles.chipsRow}>
-                    {CONDITIONS.map((cond) => (
+                <View style={styles.conditionChips}>
+                  {CONDITIONS.map((cond) => {
+                    const isSelected = condition === cond;
+                    return (
                       <Pressable
                         key={cond}
                         onPress={() => setCondition(cond)}
                         style={[
-                          styles.chipSmall,
-                          {
-                            backgroundColor: condition === cond ? Brand.primary : theme.surfaceContainer,
-                            borderColor: condition === cond ? Brand.primary : theme.border,
-                          },
+                          styles.condChip,
+                          isSelected
+                            ? { backgroundColor: Brand.primary }
+                            : { backgroundColor: theme.surfaceContainer, borderColor: theme.border },
                         ]}>
                         <ThemedText
                           type="small"
-                          style={{ color: condition === cond ? '#ffffff' : theme.textSecondary }}>
+                          style={{
+                            color: isSelected ? Brand.onBrand : theme.textSecondary,
+                            fontWeight: isSelected ? '700' : '400',
+                          }}>
                           {cond}
                         </ThemedText>
                       </Pressable>
-                    ))}
-                  </View>
+                    );
+                  })}
                 </View>
-
-                <FormInput
-                  label="Distribuidor / Proveedor *"
-                  placeholder="Nombre de quien te vendió el equipo"
-                  value={distributor}
-                  onChangeText={setDistributor}
-                />
-                <FormInput
-                  label="Costo de Compra (COP) *"
-                  placeholder="Ej: 1800000"
-                  value={purchasePrice}
-                  onChangeText={setPurchasePrice}
-                  keyboardType="numeric"
-                />
-                <FormInput
-                  label="Garantía de Proveedor (Meses)"
-                  placeholder="Ej: 1, 3, 6"
-                  value={supplierWarrantyMonths}
-                  onChangeText={setSupplierWarrantyMonths}
-                  keyboardType="numeric"
-                />
-                <FormInput
-                  label="Notas de Compra (Opcional)"
-                  placeholder="Detalles sobre el estado o procedencia..."
-                  value={purchaseNotes}
-                  onChangeText={setPurchaseNotes}
-                  multiline
-                />
               </View>
 
-              <View style={styles.modalActions}>
-                <Button
-                  label="Cancelar"
-                  variant="secondary"
-                  onPress={() => setBuyModalVisible(false)}
-                  style={styles.modalBtn}
-                />
-                <Button
-                  label={isSubmittingBuy ? 'Guardando...' : 'Registrar en Stock'}
-                  variant="primary"
-                  onPress={handleSaveBuy}
-                  disabled={isSubmittingBuy}
-                  style={styles.modalBtn}
-                />
-              </View>
-            </ScrollView>
-          </ThemedView>
-        </View>
-      </Modal>
+              <FormInput
+                label="Distribuidor / Proveedor *"
+                placeholder="Nombre de quien te lo vendió"
+                value={distributor}
+                onChangeText={setDistributor}
+              />
 
-      {/* MODAL: Registrar Venta de Equipo */}
-      <Modal visible={sellModalVisible} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <ThemedView type="backgroundElement" style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <View>
-                <ThemedText type="subtitle">Vender Equipo</ThemedText>
-                {selectedDeviceToSell && (
-                  <ThemedText type="small" themeColor="textSecondary">
-                    {selectedDeviceToSell.brand} {selectedDeviceToSell.model} (IMEI: {selectedDeviceToSell.imei})
-                  </ThemedText>
-                )}
+              <View style={styles.formRow}>
+                <View style={styles.formCol}>
+                  <FormInput
+                    label="Costo de Compra (COP) *"
+                    placeholder="Ej. 1800000"
+                    keyboardType="numeric"
+                    value={purchasePrice}
+                    onChangeText={setPurchasePrice}
+                  />
+                </View>
+                <View style={styles.formCol}>
+                  <FormInput
+                    label="Garantía Proveedor (Meses)"
+                    placeholder="Ej. 1"
+                    keyboardType="numeric"
+                    value={supplierWarrantyMonths}
+                    onChangeText={setSupplierWarrantyMonths}
+                  />
+                </View>
               </View>
-              <Pressable onPress={() => setSellModalVisible(false)}>
-                <Ionicons name="close" size={24} color={theme.text} />
-              </Pressable>
+
+              <FormInput
+                label="Observaciones (Opcional)"
+                placeholder="Estado físico, batería, detalles..."
+                value={purchaseNotes}
+                onChangeText={setPurchaseNotes}
+              />
+
+              <Button
+                label={isSubmittingBuy ? 'Guardando...' : '+ Registrar en Stock'}
+                variant="primary"
+                onPress={handleAddDevice}
+                disabled={isSubmittingBuy}
+                style={styles.addBtn}
+              />
             </View>
+          </ThemedView>
+        )}
 
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <View style={styles.formGrid}>
-                {selectedDeviceToSell && (
-                  <View style={[styles.profitBadge, { backgroundColor: 'rgba(37,99,235,0.08)' }]}>
-                    <ThemedText type="small">
-                      Costo Adquisición: <ThemedText type="smallBold">{formatCOP(selectedDeviceToSell.purchasePrice)}</ThemedText>
-                    </ThemedText>
-                    <ThemedText type="smallBold" style={{ color: currentEstimatedProfit > 0 ? '#059669' : theme.textSecondary }}>
-                      Utilidad Estimada: +{formatCOP(currentEstimatedProfit)}
-                    </ThemedText>
-                  </View>
-                )}
+        {/* Columna Derecha: Búsqueda, Filtros y Lista de Equipos */}
+        <View style={[styles.listColumn, isTablet && styles.listColumnTablet]}>
+          <FormInput
+            label="Buscar equipos o ventas"
+            placeholder="Buscar por IMEI, modelo, cliente o folio..."
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            style={styles.searchInput}
+          />
 
-                <FormInput
-                  label="Precio de Venta al Cliente (COP) *"
-                  placeholder="Ej: 2300000"
-                  value={salePrice}
-                  onChangeText={setSalePrice}
-                  keyboardType="numeric"
-                />
+          {/* Chips de Filtro con Scroll Horizontal */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filtersScroll}>
+            {STATUS_FILTERS.map((filter) => {
+              const isSelected = selectedFilter === filter;
+              return (
+                <Pressable
+                  key={filter}
+                  onPress={() => setSelectedFilter(filter)}
+                  style={[
+                    styles.filterChip,
+                    isSelected
+                      ? { backgroundColor: Brand.primary }
+                      : { backgroundColor: theme.surfaceContainer, borderColor: theme.border },
+                  ]}>
+                  <ThemedText
+                    type="small"
+                    style={[
+                      styles.filterChipText,
+                      { color: isSelected ? Brand.onBrand : theme.textSecondary },
+                    ]}>
+                    {filter}
+                  </ThemedText>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
 
-                <FormInput
-                  label="Nombre del Comprador *"
-                  placeholder="Nombre completo del cliente"
-                  value={clientName}
-                  onChangeText={setClientName}
-                />
+          {/* Listado de Tarjetas */}
+          <View style={styles.devicesList}>
+            {filtered.length === 0 ? (
+              <ThemedView type="backgroundElement" style={styles.emptyContainer}>
+                <Ionicons name="phone-portrait-outline" size={48} color={theme.textSecondary} />
+                <ThemedText type="subtitle" style={styles.centerText}>
+                  No hay equipos para mostrar
+                </ThemedText>
+                <ThemedText themeColor="textSecondary" style={styles.centerText}>
+                  {searchQuery
+                    ? 'No se encontraron coincidencias con tu búsqueda.'
+                    : 'Ingresa tu primer equipo en el formulario de la izquierda.'}
+                </ThemedText>
+              </ThemedView>
+            ) : (
+              filtered.map((device) => {
+                const isSold = device.status === 'Vendido';
+                const isSelling = sellingDeviceId === device.id;
+                const profit = isSold
+                  ? calculateDeviceProfit(device.salePrice, device.purchasePrice)
+                  : 0;
+                const warrantyActive = isSold
+                  ? isDeviceWarrantyActive(device.clientWarrantyExpiry)
+                  : true;
 
-                <FormInput
-                  label="Cédula / Documento del Comprador"
-                  placeholder="Para el comprobante fiscal/garantía"
-                  value={clientDocument}
-                  onChangeText={setClientDocument}
-                  keyboardType="numeric"
-                />
+                const liveProfit = salePrice
+                  ? calculateDeviceProfit(parseCOPInput(salePrice) ?? parseFloat(salePrice), device.purchasePrice)
+                  : 0;
 
-                <FormInput
-                  label="Teléfono del Comprador"
-                  placeholder="Para compartir factura por WhatsApp"
-                  value={clientPhone}
-                  onChangeText={setClientPhone}
-                  keyboardType="phone-pad"
-                />
+                return (
+                  <ThemedView key={device.id} type="backgroundElement" style={styles.deviceCard}>
+                    {/* Encabezado del Equipo */}
+                    <View style={styles.deviceHeader}>
+                      <View style={{ flex: 1 }}>
+                        <ThemedText type="subtitle">
+                          {formatDeviceName(device.brand, device.model, device.storageCapacity, device.color)}
+                        </ThemedText>
+                        <ThemedText type="small" themeColor="textSecondary">
+                          IMEI: <ThemedText type="smallBold">{device.imei}</ThemedText> • {device.condition}
+                        </ThemedText>
+                      </View>
 
-                <FormInput
-                  label="Garantía al Cliente (Meses) *"
-                  placeholder="Ej: 3"
-                  value={clientWarrantyMonths}
-                  onChangeText={setClientWarrantyMonths}
-                  keyboardType="numeric"
-                />
-
-                {/* Método de Pago */}
-                <View style={styles.fieldGroup}>
-                  <ThemedText type="smallBold" style={styles.fieldLabel}>Método de Pago</ThemedText>
-                  <View style={styles.chipsRow}>
-                    {PAYMENT_METHODS.map((pm) => (
-                      <Pressable
-                        key={pm}
-                        onPress={() => setPaymentMethod(pm)}
+                      <View
                         style={[
-                          styles.chipSmall,
+                          styles.statusBadge,
                           {
-                            backgroundColor: paymentMethod === pm ? Brand.primary : theme.surfaceContainer,
-                            borderColor: paymentMethod === pm ? Brand.primary : theme.border,
+                            backgroundColor: isSold ? 'rgba(37,99,235,0.1)' : 'rgba(5,150,105,0.1)',
+                            borderColor: isSold ? '#2563eb' : '#059669',
                           },
                         ]}>
                         <ThemedText
-                          type="small"
-                          style={{ color: paymentMethod === pm ? '#ffffff' : theme.textSecondary }}>
-                          {pm}
+                          type="smallBold"
+                          style={{ color: isSold ? '#2563eb' : '#059669' }}>
+                          {device.status}
                         </ThemedText>
-                      </Pressable>
-                    ))}
-                  </View>
-                </View>
+                      </View>
+                    </View>
 
-                <FormInput
-                  label="Observaciones de la Venta"
-                  placeholder="Accesorios incluidos, condiciones acordadas..."
-                  value={saleNotes}
-                  onChangeText={setSaleNotes}
-                  multiline
-                />
-              </View>
+                    <View style={[styles.cardDivider, { backgroundColor: theme.border }]} />
 
-              <View style={styles.modalActions}>
-                <Button
-                  label="Cancelar"
-                  variant="secondary"
-                  onPress={() => setSellModalVisible(false)}
-                  style={styles.modalBtn}
-                />
-                <Button
-                  label={isSubmittingSale ? 'Confirmando...' : 'Confirmar Venta y Generar Factura'}
-                  variant="primary"
-                  onPress={handleSaveSale}
-                  disabled={isSubmittingSale}
-                  style={styles.modalBtn}
-                />
-              </View>
-            </ScrollView>
-          </ThemedView>
+                    {/* Información de Compra y Distribuidor */}
+                    <View style={styles.metaRow}>
+                      <ThemedText type="small" themeColor="textSecondary">
+                        Distribuidor: <ThemedText type="smallBold">{device.distributor}</ThemedText>
+                      </ThemedText>
+                      <ThemedText type="small" themeColor="textSecondary">
+                        Costo: <ThemedText type="smallBold">{formatCOP(device.purchasePrice)}</ThemedText>
+                      </ThemedText>
+                    </View>
+
+                    {/* Bloque de Información de Venta */}
+                    {isSold ? (
+                      <View style={[styles.soldCard, { backgroundColor: theme.surfaceContainer }]}>
+                        <View style={styles.metaRow}>
+                          <ThemedText type="smallBold" style={{ color: Brand.primary }}>
+                            Folio: {device.invoiceFolio || 'VNT-0000'}
+                          </ThemedText>
+                          <ThemedText type="small">
+                            Vendido en: <ThemedText type="smallBold">{formatCOP(device.salePrice || 0)}</ThemedText>
+                          </ThemedText>
+                        </View>
+
+                        <View style={styles.metaRow}>
+                          <ThemedText type="small" themeColor="textSecondary">
+                            Cliente: <ThemedText type="smallBold">{device.clientName}</ThemedText>
+                          </ThemedText>
+                          <ThemedText type="smallBold" style={{ color: '#059669' }}>
+                            Utilidad: +{formatCOP(profit)}
+                          </ThemedText>
+                        </View>
+
+                        <View style={styles.metaRow}>
+                          <ThemedText type="small" themeColor="textSecondary">
+                            Garantía ({device.clientWarrantyMonths}m): {device.clientWarrantyExpiry}
+                          </ThemedText>
+                          <ThemedText
+                            type="smallBold"
+                            style={{ color: warrantyActive ? '#059669' : '#dc2626' }}>
+                            {warrantyActive ? 'Garantía Vigente' : 'Garantía Expirada'}
+                          </ThemedText>
+                        </View>
+                      </View>
+                    ) : (
+                      <View style={styles.metaRow}>
+                        <ThemedText type="small" themeColor="textSecondary">
+                          Garantía Proveedor: {device.supplierWarrantyMonths} meses
+                        </ThemedText>
+                        <ThemedText type="small" style={{ color: '#059669', fontWeight: '600' }}>
+                          ✓ Disponible para Venta
+                        </ThemedText>
+                      </View>
+                    )}
+
+                    {/* Formulario Expandible Inline de Venta */}
+                    {isSelling && !isSold && (
+                      <View style={[styles.inlineSellBox, { borderColor: theme.border, backgroundColor: theme.surfaceContainer }]}>
+                        <ThemedText type="smallBold" style={{ color: Brand.primary }}>
+                          Registrar Venta de {device.brand} {device.model}
+                        </ThemedText>
+
+                        <View style={styles.sellProfitBadge}>
+                          <ThemedText type="small">
+                            Costo: {formatCOP(device.purchasePrice)}
+                          </ThemedText>
+                          <ThemedText
+                            type="smallBold"
+                            style={{ color: liveProfit > 0 ? '#059669' : theme.textSecondary }}>
+                            Utilidad Estimada: +{formatCOP(liveProfit)}
+                          </ThemedText>
+                        </View>
+
+                        <FormInput
+                          label="Precio de Venta al Cliente (COP) *"
+                          placeholder="Ej. 2300000"
+                          keyboardType="numeric"
+                          value={salePrice}
+                          onChangeText={setSalePrice}
+                        />
+
+                        <FormInput
+                          label="Nombre del Cliente *"
+                          placeholder="Nombre completo"
+                          value={clientName}
+                          onChangeText={setClientName}
+                        />
+
+                        <View style={styles.formRow}>
+                          <View style={styles.formCol}>
+                            <FormInput
+                              label="Cédula / Documento"
+                              placeholder="Para factura"
+                              keyboardType="numeric"
+                              value={clientDocument}
+                              onChangeText={setClientDocument}
+                            />
+                          </View>
+                          <View style={styles.formCol}>
+                            <FormInput
+                              label="Teléfono WhatsApp"
+                              placeholder="Para enviar PDF"
+                              keyboardType="phone-pad"
+                              value={clientPhone}
+                              onChangeText={setClientPhone}
+                            />
+                          </View>
+                        </View>
+
+                        <FormInput
+                          label="Garantía Otorgada (Meses) *"
+                          placeholder="Ej. 3"
+                          keyboardType="numeric"
+                          value={clientWarrantyMonths}
+                          onChangeText={setClientWarrantyMonths}
+                        />
+
+                        {/* Selector Método de Pago */}
+                        <View style={styles.conditionSection}>
+                          <ThemedText type="smallBold" themeColor="textSecondary">
+                            Método de Pago:
+                          </ThemedText>
+                          <View style={styles.conditionChips}>
+                            {PAYMENT_METHODS.map((pm) => {
+                              const isSelected = paymentMethod === pm;
+                              return (
+                                <Pressable
+                                  key={pm}
+                                  onPress={() => setPaymentMethod(pm)}
+                                  style={[
+                                    styles.condChip,
+                                    isSelected
+                                      ? { backgroundColor: Brand.primary }
+                                      : { backgroundColor: theme.surfaceContainerHigh, borderColor: theme.border },
+                                  ]}>
+                                  <ThemedText
+                                    type="small"
+                                    style={{
+                                      color: isSelected ? Brand.onBrand : theme.textSecondary,
+                                      fontWeight: isSelected ? '700' : '400',
+                                    }}>
+                                    {pm}
+                                  </ThemedText>
+                                </Pressable>
+                              );
+                            })}
+                          </View>
+                        </View>
+
+                        <View style={styles.inlineSellActions}>
+                          <Button
+                            label="Cancelar"
+                            variant="secondary"
+                            onPress={() => setSellingDeviceId(null)}
+                            style={{ flex: 1 }}
+                          />
+                          <Button
+                            label={isSubmittingSale ? 'Confirmando...' : 'Confirmar Venta'}
+                            variant="success"
+                            onPress={() => void handleConfirmSale(device)}
+                            disabled={isSubmittingSale}
+                            style={{ flex: 2 }}
+                          />
+                        </View>
+                      </View>
+                    )}
+
+                    {/* Botones de Acción de la Tarjeta */}
+                    <View style={styles.cardActions}>
+                      {!isSold ? (
+                        <Button
+                          label={isSelling ? 'Cerrar Venta' : '💵 Vender Equipo'}
+                          variant={isSelling ? 'secondary' : 'primary'}
+                          onPress={() => handleOpenSell(device)}
+                          style={{ flex: 1 }}
+                        />
+                      ) : (
+                        <Button
+                          label="📄 Ver Factura / Compartir"
+                          variant="primary"
+                          onPress={() =>
+                            router.push({
+                              pathname: '/device-receipt/[id]',
+                              params: { id: device.id },
+                            })
+                          }
+                          style={{ flex: 1 }}
+                        />
+                      )}
+
+                      {isAdmin && (
+                        <Pressable
+                          onPress={() => handleDeleteDevice(device)}
+                          style={({ pressed }) => [
+                            styles.deleteBtn,
+                            pressed && { opacity: 0.7 },
+                          ]}>
+                          <Ionicons name="trash-outline" size={18} color="#dc2626" />
+                        </Pressable>
+                      )}
+                    </View>
+                  </ThemedView>
+                );
+              })
+            )}
+          </View>
         </View>
-      </Modal>
+      </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: Spacing.two,
-    marginBottom: Spacing.three,
+    gap: Spacing.one,
+    paddingVertical: Spacing.two,
+    paddingHorizontal: Spacing.two,
   },
   title: {
-    fontSize: 22,
-    fontWeight: 'bold',
+    fontSize: 34,
+    lineHeight: 40,
   },
-  buyButton: {
-    minWidth: 160,
-  },
-  metricsRow: {
+  kpiRow: {
     flexDirection: 'column',
-    gap: Spacing.two,
+    gap: Spacing.three,
     marginBottom: Spacing.three,
   },
-  metricsRowTablet: {
+  kpiRowTablet: {
     flexDirection: 'row',
   },
-  metricCard: {
+  kpiCard: {
     flex: 1,
     padding: Spacing.three,
     borderRadius: Shape.md,
     gap: Spacing.half,
   },
-  metricHeader: {
+  kpiHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.one,
   },
-  searchSection: {
-    marginBottom: Spacing.three,
+  mainRow: {
+    gap: Spacing.four,
+  },
+  mainRowTablet: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  formCard: {
+    padding: Spacing.four,
+    borderRadius: Shape.xl,
+    gap: Spacing.three,
+  },
+  formCardTablet: {
+    width: '40%',
+  },
+  formTitle: {
+    marginBottom: Spacing.one,
+  },
+  formGrid: {
     gap: Spacing.two,
   },
-  searchInput: {
-    marginBottom: 0,
-  },
-  filterChips: {
+  formRow: {
     flexDirection: 'row',
+    gap: Spacing.two,
+  },
+  formCol: {
+    flex: 1,
+  },
+  conditionSection: {
+    gap: Spacing.one,
+    marginVertical: 4,
+  },
+  conditionChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: Spacing.one,
   },
-  chip: {
-    paddingHorizontal: Spacing.two,
+  condChip: {
+    paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.one,
-    borderRadius: Shape.sm,
-    borderWidth: 1,
+    borderRadius: Shape.full,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  addBtn: {
+    marginTop: Spacing.two,
+  },
+  listColumn: {
+    gap: Spacing.three,
+  },
+  listColumnTablet: {
+    flex: 1,
+  },
+  searchInput: {
+    paddingVertical: Spacing.two,
+  },
+  filtersScroll: {
+    gap: Spacing.two,
+    paddingBottom: Spacing.one,
+  },
+  filterChip: {
+    paddingHorizontal: Spacing.four,
+    paddingVertical: Spacing.two,
+    minHeight: TouchTarget.min,
+    justifyContent: 'center',
+    borderRadius: Shape.full,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+  },
+  filterChipText: {
+    fontWeight: '600',
+    lineHeight: 18,
+  },
+  devicesList: {
+    gap: Spacing.three,
+    paddingBottom: Spacing.six,
   },
   emptyContainer: {
-    padding: Spacing.five,
+    padding: Spacing.six,
     borderRadius: Shape.lg,
     alignItems: 'center',
     justifyContent: 'center',
     gap: Spacing.two,
-    marginTop: Spacing.three,
   },
-  listGrid: {
-    gap: Spacing.two,
-    paddingBottom: Spacing.five,
+  centerText: {
+    textAlign: 'center',
   },
   deviceCard: {
-    padding: Spacing.three,
-    borderRadius: Shape.md,
+    padding: Spacing.four,
+    borderRadius: Shape.xl,
     gap: Spacing.two,
   },
-  cardHeader: {
+  deviceHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
@@ -778,26 +841,40 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.two,
     paddingVertical: 4,
     borderRadius: Shape.sm,
+    borderWidth: 1,
   },
   cardDivider: {
-    height: 1,
+    height: StyleSheet.hairlineWidth,
     width: '100%',
+    marginVertical: 2,
   },
-  infoRow: {
+  metaRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  soldSection: {
-    backgroundColor: 'rgba(0,0,0,0.02)',
+  soldCard: {
     padding: Spacing.two,
-    borderRadius: Shape.sm,
+    borderRadius: Shape.md,
     gap: Spacing.one,
   },
-  inStockInfo: {
+  inlineSellBox: {
+    padding: Spacing.three,
+    borderRadius: Shape.lg,
+    borderWidth: 1,
+    gap: Spacing.two,
+    marginTop: Spacing.one,
+  },
+  sellProfitBadge: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    paddingVertical: Spacing.half,
+  },
+  inlineSellActions: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+    marginTop: Spacing.two,
   },
   cardActions: {
     flexDirection: 'row',
@@ -805,68 +882,10 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
     marginTop: Spacing.one,
   },
-  cardBtn: {
-    flex: 1,
-  },
-  deleteIconButton: {
+  deleteBtn: {
     padding: Spacing.two,
     borderRadius: Shape.sm,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: Spacing.three,
-  },
-  modalContent: {
-    width: '100%',
-    maxWidth: 600,
-    maxHeight: '90%',
-    borderRadius: Shape.lg,
-    padding: Spacing.four,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: Spacing.three,
-  },
-  formGrid: {
-    gap: Spacing.two,
-  },
-  fieldGroup: {
-    gap: Spacing.half,
-  },
-  fieldLabel: {
-    fontSize: 12,
-  },
-  chipsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.one,
-  },
-  chipSmall: {
-    paddingHorizontal: Spacing.two,
-    paddingVertical: 6,
-    borderRadius: Shape.sm,
-    borderWidth: 1,
-  },
-  profitBadge: {
-    padding: Spacing.two,
-    borderRadius: Shape.sm,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  modalActions: {
-    flexDirection: 'row',
-    gap: Spacing.two,
-    marginTop: Spacing.four,
-  },
-  modalBtn: {
-    flex: 1,
   },
 });
