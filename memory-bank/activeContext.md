@@ -4,14 +4,14 @@
 > Actualizar al finalizar cada tarea (ver `progress.md`).
 
 ## Estado Actual (Consolidado — verificado contra el código)
-- **Módulo de Compra y Venta de Equipos (Trade-in & Refurbished Devices) operativo (2026-08-25):**
-  - Módulo independiente con navegación dedicada en tabs (`src/app/(tabs)/devices.tsx`).
-  - Registro de compras a distribuidores: Marca, Modelo, Capacidad, Color, IMEI, Condición, Proveedor, Costo de compra y Garantía de proveedor.
-  - Venta directa de equipos a clientes: Nombre, Teléfono, Cédula, Precio de venta, Garantía al cliente, Método de pago y Notas.
+- **Módulo de Compra y Venta de Equipos (Trade-in & Refurbished Devices) optimizado en 3 submódulos (2026-08-25):**
+  - Navegación segmentada en 3 pestañas:
+    1. **1. Compra de Equipos:** Formulario de adquisición a distribuidores (marca, modelo, IMEI, costo, garantía proveedor) + historial de compras registradas.
+    2. **2. Venta de Equipos:** Catálogo de celulares en stock disponibles para vender con formulario rápido de factura/garantía + historial de ventas realizadas con botón para ver/compartir factura en PDF y WhatsApp.
+    3. **3. Utilidad e Inventario:** Tarjetas KPI de resumen financiero (Stock, Inversión, Ventas Totales, Utilidad Neta Real) + inventario consolidado con balances por celular y filtros de estado.
   - **Aislamiento Contable Estricto:** La utilidad por reventa de equipos (`Precio Venta − Costo Compra`) vive en `public.devices` y no afecta órdenes de trabajo (`repairs`), presupuestos ni comisiones a técnicos.
   - Factura y Comprobante de Venta con Garantía (`src/app/device-receipt/[id].tsx`): generación e impresión de PDF en web (jsPDF) y nativo (`expo-print`/`expo-sharing`) con botón para compartir por WhatsApp.
   - Suite de pruebas unitarias 122/122 PASS (`device-logic.test.ts`, `device-receipt-pdf-web.test.ts`).
-  - Migración aplicada en producción: `20260825000000_device_trade_in_and_sales.sql`.
 - **Integración de Inventario con Órdenes de Reparación operativa (2026-08-23):**
   modal interactivo en el detalle de la orden (`src/app/job/[id].tsx`) con
   pestañas "Desde Inventario" y "Costo Manual". Permite seleccionar repuestos del
