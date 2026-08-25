@@ -579,24 +579,6 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
       throw new Error(blockReason);
     }
 
-    // Reintegrar stock al inventario si la orden tenía pieza vinculada
-    if (target.inventoryPartId) {
-      const prevPart = inventory.find((p) => p.id === target.inventoryPartId);
-      if (prevPart) {
-        const qty = target.inventoryPartQty ?? 1;
-        const restoredStock = calculateRestoredStock(prevPart.stock, qty);
-        const { error: stockErr } = await supabase
-          .from('inventory')
-          .update({ stock: restoredStock })
-          .eq('id', prevPart.id);
-        if (!stockErr) {
-          setInventory((prev) =>
-            prev.map((p) => (p.id === prevPart.id ? { ...p, stock: restoredStock } : p))
-          );
-        }
-      }
-    }
-
     const { error } = await supabase
       .from('repairs')
       .update({
@@ -615,6 +597,24 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
     if (error) {
       console.error(formatDbError('cancelRepair (update)', error));
       throw new Error(`Error BD: ${error.message}`);
+    }
+
+    // Reintegrar stock al inventario si la orden tenía pieza vinculada (SOLO DESPUÉS DE ASEGURAR QUE LA ORDEN SE CANCELÓ)
+    if (target.inventoryPartId) {
+      const prevPart = inventory.find((p) => p.id === target.inventoryPartId);
+      if (prevPart) {
+        const qty = target.inventoryPartQty ?? 1;
+        const restoredStock = calculateRestoredStock(prevPart.stock, qty);
+        const { error: stockErr } = await supabase
+          .from('inventory')
+          .update({ stock: restoredStock })
+          .eq('id', prevPart.id);
+        if (!stockErr) {
+          setInventory((prev) =>
+            prev.map((p) => (p.id === prevPart.id ? { ...p, stock: restoredStock } : p))
+          );
+        }
+      }
     }
     
     setRepairs((prev) =>
@@ -648,7 +648,18 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
     const blockReason = requireWorkshop();
     if (blockReason) { notifyError(blockReason); return false; }
 
-    // Reintegrar stock al inventario si la orden tenía pieza vinculada
+    const { data, error } = await supabase.from('repairs').delete().eq('id', id).select('id');
+    if (error) {
+      console.error(formatDbError('deleteRepair (delete)', error));
+      notifyError(`No se pudo eliminar la orden: ${error.message}`);
+      return false;
+    }
+    if (!data || data.length === 0) {
+      notifyError('No se pudo eliminar la orden: no pertenece a tu taller o ya no existe.');
+      return false;
+    }
+
+    // Reintegrar stock al inventario si la orden tenía pieza vinculada (SOLO DESPUÉS DE BORRAR)
     if (target.inventoryPartId) {
       const prevPart = inventory.find((p) => p.id === target.inventoryPartId);
       if (prevPart) {
@@ -666,16 +677,6 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    const { data, error } = await supabase.from('repairs').delete().eq('id', id).select('id');
-    if (error) {
-      console.error(formatDbError('deleteRepair (delete)', error));
-      notifyError(`No se pudo eliminar la orden: ${error.message}`);
-      return false;
-    }
-    if (!data || data.length === 0) {
-      notifyError('No se pudo eliminar la orden: no pertenece a tu taller o ya no existe.');
-      return false;
-    }
     setRepairs((prev) => prev.filter((r) => r.id !== id));
     return true;
   };
@@ -750,17 +751,7 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
         notifyError(`Stock insuficiente de "${part.name}". Disponible adicional: ${part.stock}`);
         return false;
       }
-      const newPartStock = calculateRemainingStock(part.stock, delta);
-      const { error: invError } = await supabase
-        .from('inventory')
-        .update({ stock: newPartStock })
-        .eq('id', partId);
-      if (invError) {
-        console.error(formatDbError('assignInventoryPartToRepair (update inventory)', invError));
-        notifyError(`No se pudo actualizar el inventario: ${invError.message}`);
-        return false;
-      }
-
+      
       const partsCost = calculatePartsCost(part.price, quantity, customPrice);
       const { error: repError } = await supabase
         .from('repairs')
@@ -775,6 +766,18 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
         console.error(formatDbError('assignInventoryPartToRepair (update repair)', repError));
         notifyError(`No se pudo actualizar la orden: ${repError.message}`);
         return false;
+      }
+
+      const newPartStock = calculateRemainingStock(part.stock, delta);
+      const { error: invError } = await supabase
+        .from('inventory')
+        .update({ stock: newPartStock })
+        .eq('id', partId);
+      if (invError) {
+        console.error(formatDbError('assignInventoryPartToRepair (update inventory)', invError));
+        // Aún devolvemos el estado local actualizado porque la orden YA descontó, 
+        // pero avisamos del posible desincronismo
+        notifyError(`La orden se actualizó, pero hubo un error al ajustar el stock local: ${invError.message}`);
       }
 
       setInventory((prev) => prev.map((p) => (p.id === partId ? { ...p, stock: newPartStock } : p)));
@@ -800,7 +803,23 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
       return false;
     }
 
-    // Si había una pieza previa diferente, devolvemos su stock
+    const partsCost = calculatePartsCost(part.price, quantity, customPrice);
+    const { error: repError } = await supabase
+      .from('repairs')
+      .update({
+        parts_cost: partsCost,
+        inventory_part_id: partId,
+        inventory_part_name: part.name,
+        inventory_part_qty: quantity,
+      })
+      .eq('id', repairId);
+    if (repError) {
+      console.error(formatDbError('assignInventoryPartToRepair (update repair)', repError));
+      notifyError(`No se pudo actualizar la orden: ${repError.message}`);
+      return false;
+    }
+
+    // Si había una pieza previa diferente, devolvemos su stock (SOLO DESPUÉS DE ACTUALIZAR LA ORDEN)
     if (prevPartId) {
       const prevPart = inventory.find((p) => p.id === prevPartId);
       if (prevPart) {
@@ -820,24 +839,7 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
       .eq('id', partId);
     if (invError) {
       console.error(formatDbError('assignInventoryPartToRepair (deduct inventory)', invError));
-      notifyError(`No se pudo actualizar el inventario: ${invError.message}`);
-      return false;
-    }
-
-    const partsCost = calculatePartsCost(part.price, quantity, customPrice);
-    const { error: repError } = await supabase
-      .from('repairs')
-      .update({
-        parts_cost: partsCost,
-        inventory_part_id: partId,
-        inventory_part_name: part.name,
-        inventory_part_qty: quantity,
-      })
-      .eq('id', repairId);
-    if (repError) {
-      console.error(formatDbError('assignInventoryPartToRepair (update repair)', repError));
-      notifyError(`No se pudo actualizar la orden: ${repError.message}`);
-      return false;
+      notifyError(`La orden se actualizó, pero hubo un error al descontar el stock local: ${invError.message}`);
     }
 
     setInventory((prev) => prev.map((p) => (p.id === partId ? { ...p, stock: newPartStock } : p)));
@@ -870,18 +872,6 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
       return false;
     }
 
-    if (target.inventoryPartId) {
-      const prevPart = inventory.find((p) => p.id === target.inventoryPartId);
-      if (prevPart) {
-        const qty = target.inventoryPartQty ?? 1;
-        const restoredStock = calculateRestoredStock(prevPart.stock, qty);
-        await supabase.from('inventory').update({ stock: restoredStock }).eq('id', prevPart.id);
-        setInventory((prev) =>
-          prev.map((p) => (p.id === prevPart.id ? { ...p, stock: restoredStock } : p))
-        );
-      }
-    }
-
     const { error } = await supabase
       .from('repairs')
       .update({
@@ -895,6 +885,18 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
       console.error(formatDbError('removeInventoryPartFromRepair (update)', error));
       notifyError(`No se pudo remover el repuesto: ${error.message}`);
       return false;
+    }
+
+    if (target.inventoryPartId) {
+      const prevPart = inventory.find((p) => p.id === target.inventoryPartId);
+      if (prevPart) {
+        const qty = target.inventoryPartQty ?? 1;
+        const restoredStock = calculateRestoredStock(prevPart.stock, qty);
+        await supabase.from('inventory').update({ stock: restoredStock }).eq('id', prevPart.id);
+        setInventory((prev) =>
+          prev.map((p) => (p.id === prevPart.id ? { ...p, stock: restoredStock } : p))
+        );
+      }
     }
 
     setRepairs((prev) =>
