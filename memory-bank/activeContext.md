@@ -4,6 +4,7 @@
 > Actualizar al finalizar cada tarea (ver `progress.md`).
 
 ## Estado Actual (Consolidado — verificado contra el código)
+- **Importaci�n de Inventario PIME (2026-08-26):** Ingesta masiva del cat�logo de repuestos PIME (84 registros) para jaiderpr@gmail.com, vinculando/creando el taller "PIME Accesorios" mediante scripts/import-pime-inventory.mjs. Mapeo de stock y costo con upsert en la tabla public.inventory.
 - **Módulo de Compra y Venta de Equipos (Trade-in & Refurbished Devices) optimizado en 3 submódulos (2026-08-25):**
   - Navegación segmentada en 3 pestañas:
     1. **1. Compra de Equipos:** Formulario de adquisición a distribuidores (marca, modelo, IMEI, costo, garantía proveedor) + historial de compras registradas.
@@ -163,9 +164,7 @@
 - **Migración faltante aplicada en vivo (2026-08-24):** Creada la migración `20260824220000_repairs_cancel_reason_status.sql` (agregando `motivo_cancelacion` y permitiendo el estado 'Cancelado / No Reparado' en el check constraint `repairs_status_check`). Aplicada directamente en producción usando la cadena de conexión de la base de datos vía script.
 
 ## Foco Operativo Inmediato (Sprint Actual)
-**Operación en Mostrador, Registro de Órdenes Reales y Validación Comercial.**
-Security Sweep completado (20 pts: Git/Secrets, HTTP Headers, Dep Audit); cancelRepair + modal submission operativos; suite 106/106 PASS, tsc 0, deploy + headers activos. MVP/RC cerrados.
-
+**Importaci�n de inventario y puesta en marcha:** Carga masiva del inventario PIME (84 registros) en producci�n de Supabase para la cuenta jaiderpr@gmail.com completada. Pr�ximo: validaci�n funcional en el dashboard de inventario y resoluci�n de deuda t�cnica E2E.
 ## Decisiones Recientes
 - **Liquidación en tiempo real (2026-08-21):** el panel se suscribe a
   `postgres_changes` sobre `public.repairs` (canal `admin-liquidacion-realtime`)

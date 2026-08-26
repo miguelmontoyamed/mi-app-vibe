@@ -3,6 +3,7 @@
 > Registro de avance del proyecto. Actualizar al finalizar cada tarea.
 
 ## Completado (✓)
+- **Importaci�n de Inventario PIME (2026-08-26):** Script scripts/import-pime-inventory.mjs para importar repuestos desde Excel local. Resuelve taller (creando/asociando "PIME Accesorios"), mapea columnas inteligentemente (insensible a acentos/cajas), realiza upsert por lotes e imprime el reporte.
 - **Fix cancelRepair + Modal Submission (2026-08-24):** Botón "Confirmar" en modal "Marcar como No Realizado" (`job/[id].tsx`) ahora con:
   - Validación de motivo obligatorio + alerta informativa si vacío
   - Estado `isSubmitting` (`cancellingOrder`) con feedback visual "Cancelando..." + botón deshabilitado
@@ -114,6 +115,7 @@
 ## Historial Reciente
 | Fecha | Cambio |
 |-------|--------|
+| 2026-08-26 | Ingesta de Inventario: Importaci�n masiva de repuestos Excel PIME para jaiderpr@gmail.com (84 repuestos cargados) |
 | 2026-08-25 | **Auditoría Integral de Seguridad y Pruebas Defensivas (Skills Suite):** Ejecución de `security-and-secrets-review`, `authz-permission-review`, `dependency-supply-chain-review` y `env-config-hardening`. Verificación de 8 vectores de ataque: SQLi (inmune), IDOR / Cross-Tenant (bloqueado por RLS), Escalada de privilegios (bloqueado por policies), Secuestro Super Admin (validado por `SECURITY DEFINER` en Postgres), XSS (sanitizado con `escapeHtml`), exposición de secretos (0 leaks en repo/bundle), cabeceras HTTP (5 headers activos en Vercel) y dependencias (0 críticas en runtime). Calificación final: **96/100 (Grado A - Excelente)**. |
 | 2026-08-25 | **Módulo de Equipos con 3 Submódulos Segmentados:** Arquitectura de navegación segmentada en `src/app/(tabs)/devices.tsx`: 1) **Compra de Equipos** (registro a proveedores con IMEI, costo y garantía de distribuidor + historial de compras), 2) **Venta de Equipos** (catálogo de stock listo para vender con cálculo de utilidad estimada en tiempo real y facturación + historial de ventas), 3) **Utilidad e Inventario** (tarjetas KPI de resumen financiero con Capital Invertido, Total Facturado y Utilidad Neta Real + inventario consolidado con balance y filtros de estado). Factura oficial en `/device-receipt/[id]` con PDF (jsPDF / expo-print) y envío por WhatsApp. Aislamiento contable total respecto a reparaciones del taller. Suite de tests 122/122 PASS. |
 | 2026-08-24 | **Corrección de Inventario Fantasma (Race Condition):** Se corrigió un error en `repair-context.tsx` (`cancelRepair`, `deleteRepair`, `assignInventoryPartToRepair`, `removeInventoryPartFromRepair`) donde el inventario sumaba o restaba stock antes de que la tabla `repairs` confirmara el cambio en Supabase. Ahora el inventario solo se afecta si la orden de reparación se actualiza o borra exitosamente en la base de datos. Se ajustó el stock real a 5. |
