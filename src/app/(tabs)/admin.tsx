@@ -363,6 +363,8 @@ export default function AdminScreen() {
             Lista global de talleres y activación de 30 días con un clic.
           </ThemedText>
           <Pressable
+            accessibilityRole="button"
+            role="button"
             style={({ pressed }) => [
               styles.activateButton,
               { paddingVertical: Spacing.three, alignSelf: 'flex-start' },
@@ -388,6 +390,8 @@ export default function AdminScreen() {
           </ThemedText>
 
           <Pressable
+            accessibilityRole="button"
+            role="button"
             style={({ pressed }) => [
               styles.activateButton,
               { paddingVertical: Spacing.three, alignSelf: 'flex-start' },
@@ -416,6 +420,8 @@ export default function AdminScreen() {
                 {inviteLink.url}
               </ThemedText>
               <Pressable
+                accessibilityRole="button"
+                role="button"
                 style={({ pressed }) => [
                   styles.copyButton,
                   pressed && styles.pressed,

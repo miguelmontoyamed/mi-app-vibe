@@ -135,10 +135,10 @@ test.describe('Flujos críticos (usuario aislado)', () => {
   test('Login → Recepción TRM-XXXX → Estado → Cobro → Admin', async ({ page }) => {
     // ── 1. LOGIN ──────────────────────────────────────────────────────────
     await page.goto(`${BASE_URL}/login`);
-    await page.waitForSelector('input[placeholder*="correo"]', { timeout: 20_000 });
-    await page.locator('input[placeholder*="correo"]').fill(EMAIL);
-    await page.locator('input[placeholder*="contraseña"], input[type="password"]').fill(PASSWORD);
-    await pressButton(page, 'Iniciar sesión').click();
+    await page.waitForSelector('[data-testid="login-email-input"]', { timeout: 20_000 });
+    await page.getByTestId('login-email-input').fill(EMAIL);
+    await page.getByTestId('login-password-input').fill(PASSWORD);
+    await page.getByTestId('login-submit-button').click();
     // Tras el login la app reemplaza a "/" (dashboard).
     await page.waitForURL((url) => !url.pathname.includes('/login'), { timeout: 20_000 });
 

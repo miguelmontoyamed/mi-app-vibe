@@ -76,6 +76,8 @@ export function Button({
 
   return (
     <Pressable
+      accessibilityRole="button"
+      role="button"
       {...rest}
       disabled={disabled}
       onPressIn={handlePressIn}

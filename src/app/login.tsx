@@ -166,14 +166,22 @@ export default function LoginScreen() {
           autoCapitalize="none"
           keyboardType="email-address"
           value={email}
-          onChangeText={setEmail}
+          onChangeText={(text) => {
+            setEmail(text);
+            if (loginError) setLoginError(null);
+          }}
+          testID="login-email-input"
         />
         <FormInput
           label="Contraseña"
           placeholder="••••••••"
           secureTextEntry
           value={password}
-          onChangeText={setPassword}
+          onChangeText={(text) => {
+            setPassword(text);
+            if (loginError) setLoginError(null);
+          }}
+          testID="login-password-input"
         />
 
         <Button
@@ -181,9 +189,10 @@ export default function LoginScreen() {
           onPress={handleLogin}
           style={styles.primary}
           disabled={submitting}
+          testID="login-submit-button"
         />
         {loginError ? (
-          <ThemedText type="small" style={styles.loginError}>
+          <ThemedText type="small" style={styles.loginError} testID="login-error-message">
             {loginError}
           </ThemedText>
         ) : null}
@@ -258,5 +267,11 @@ const styles = StyleSheet.create({
   loginError: {
     color: Brand.danger,
     textAlign: 'center',
+    backgroundColor: `${Brand.danger}1A`,
+    padding: Spacing.two,
+    borderRadius: Shape.sm,
+    borderWidth: 1,
+    borderColor: `${Brand.danger}4D`,
+    overflow: 'hidden',
   },
 });

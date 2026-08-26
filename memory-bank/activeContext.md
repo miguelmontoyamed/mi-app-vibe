@@ -218,11 +218,7 @@
   vivo; schema.sql espejado con delivered_at, trigger, RPC (count(*)::int).
 
 ## Deuda Técnica No Bloqueante (E2E)
-- **Registrado:** `.omo/plans/e2e-debt-login-feedback.md`
-- **Objetivo:** Reparación de deuda de tests E2E y feedback de login (pending implementation)
-- **Hallazgos clave:** 
-  - `invitation.spec.ts:19` — `BASE_URL` default `localhost:8081` (no apunta a producción)
-  - `core-flows.spec.ts` — locator `text=Iniciar sesión` resuelve a div con `pointer-events:none`; credenciales hardcodeadas sin seed en prod Supabase
-  - `login.tsx` — feedback silencioso al fallar credenciales
-  - `web-smoke` PASS en chromium+webkit: la pantalla no tiene pantallas blancas (build renderiza correctamente)
-- **Estado:** deuda documentada, pendiente de implementación en sprint subsiguiente; no bloquea release candidate actual.
+- **Estado:** COMPLETADO. (2026-08-26) Se resolvió la deuda de tests E2E y feedback visual documentada en `.omo/plans/e2e-debt-login-feedback.md`.
+  - `login.tsx`: Feedback visual de error en formato banner (`testID="login-error-message"`), se limpia automáticamente al escribir. Componentes blindados con `testID`.
+  - `invitation.spec.ts` y `core-flows.spec.ts`: Actualizados para usar `getByTestId` y selectores semánticos (`accessibilityRole="button"`), mitigando la limitación de `pointer-events:none` en React Native Web.
+  - Gates de calidad validados: `tsc --noEmit` y `npm test` al 100%.

@@ -67,10 +67,10 @@ async function deleteAdminUser(id: string) {
 /** Inicia sesión con credenciales dadas. */
 async function login(page: Page, email: string, password: string) {
   await page.goto(`${BASE_URL}/login`);
-  await page.waitForSelector('input[placeholder*="correo"]', { timeout: 15_000 });
-  await page.locator('input[placeholder*="correo"]').fill(email);
-  await page.locator('input[placeholder*="contraseña"], input[type="password"]').fill(password);
-  await page.getByText(/iniciar sesión/i).first().click();
+  await page.waitForSelector('[data-testid="login-email-input"]', { timeout: 15_000 });
+  await page.getByTestId('login-email-input').fill(email);
+  await page.getByTestId('login-password-input').fill(password);
+  await page.getByTestId('login-submit-button').click();
   await page.waitForURL((url) => !url.pathname.includes('/login'), { timeout: 20_000 });
 }
 
@@ -107,7 +107,7 @@ test.describe('Flujo de Invitación de Técnico', () => {
     await page.waitForURL('**/admin', { timeout: 15_000 });
 
     // 3. Genera el enlace de invitación
-    const inviteButton = page.getByRole('button', { name: /generar enlace/i });
+    const inviteButton = page.getByTestId('btn-generate-invite');
     await expect(inviteButton).toBeVisible({ timeout: 10_000 });
     await inviteButton.click();
 
