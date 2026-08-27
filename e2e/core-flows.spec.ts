@@ -132,6 +132,19 @@ test.afterAll(async () => {
 });
 
 test.describe('Flujos críticos (usuario aislado)', () => {
+  test('Login con credenciales incorrectas muestra error visual', async ({ page }) => {
+    await page.goto(`${BASE_URL}/login`);
+    await page.waitForSelector('[data-testid="login-email-input"]', { timeout: 20_000 });
+    await page.getByTestId('login-email-input').fill('bad-email@test.com');
+    await page.getByTestId('login-password-input').fill('wrong-password');
+    await page.getByTestId('login-submit-button').click();
+    
+    const errorMessage = page.getByTestId('login-error-message');
+    await expect(errorMessage).toBeVisible({ timeout: 10_000 });
+    await expect(errorMessage).toContainText('Correo o contraseña incorrectos');
+  });
+
+
   test('Login → Recepción TRM-XXXX → Estado → Cobro → Admin', async ({ page }) => {
     // ── 1. LOGIN ──────────────────────────────────────────────────────────
     await page.goto(`${BASE_URL}/login`);

@@ -192,9 +192,11 @@ export default function LoginScreen() {
           testID="login-submit-button"
         />
         {loginError ? (
-          <ThemedText type="small" style={styles.loginError} testID="login-error-message">
-            {loginError}
-          </ThemedText>
+          <View style={styles.loginErrorContainer} testID="login-error-message">
+            <ThemedText type="small" style={styles.loginErrorText}>
+              {loginError}
+            </ThemedText>
+          </View>
         ) : null}
         <Button
           label={googleInProgress ? 'Conectando con Google…' : 'Continuar con Google'}
@@ -264,14 +266,19 @@ const styles = StyleSheet.create({
     color: Brand.danger,
     textAlign: 'center',
   },
-  loginError: {
+  loginErrorContainer: {
+    backgroundColor: `${Brand.danger}1a`,
+    padding: Spacing.two,
+    borderRadius: Shape.lg,
+    borderWidth: 1,
+    borderColor: `${Brand.danger}66`,
+    overflow: 'hidden',
+    minHeight: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loginErrorText: {
     color: Brand.danger,
     textAlign: 'center',
-    backgroundColor: `${Brand.danger}1A`,
-    padding: Spacing.two,
-    borderRadius: Shape.sm,
-    borderWidth: 1,
-    borderColor: `${Brand.danger}4D`,
-    overflow: 'hidden',
   },
 });

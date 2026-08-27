@@ -47,5 +47,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.three,
     fontSize: 16,
+    minHeight: 44,
   },
 });
