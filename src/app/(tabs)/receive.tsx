@@ -413,24 +413,26 @@ export default function ReceiveScreen() {
           </>
         ) : null}
 
-        <View style={styles.assignGroup}>
-          <ThemedText type="smallBold">Asignar a</ThemedText>
-          <View style={styles.chipsRow}>
-            {memberOptions.map((option) => {
-              const selected = (assignedMember?.id ?? currentUser.id) === option.user.id;
-              return (
-                <Pressable
-                  key={option.user.id}
-                  onPress={() => setAssignedMember(option.user)}
-                  style={[styles.chip, selected && styles.chipSelected]}>
-                  <ThemedText style={[styles.chipText, selected && styles.chipTextSelected]}>
-                    {option.label}
-                  </ThemedText>
-                </Pressable>
-              );
-            })}
+        {currentUser.role === 'admin' && (
+          <View style={styles.assignGroup}>
+            <ThemedText type="smallBold">Asignar a</ThemedText>
+            <View style={styles.chipsRow}>
+              {memberOptions.map((option) => {
+                const selected = (assignedMember?.id ?? currentUser.id) === option.user.id;
+                return (
+                  <Pressable
+                    key={option.user.id}
+                    onPress={() => setAssignedMember(option.user)}
+                    style={[styles.chip, selected && styles.chipSelected]}>
+                    <ThemedText style={[styles.chipText, selected && styles.chipTextSelected]}>
+                      {option.label}
+                    </ThemedText>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
-        </View>
+        )}
 
         <Button label="Registrar Recepción y Asignar" onPress={handleSave} style={styles.submitButton} />
       </ThemedView>

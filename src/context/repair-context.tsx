@@ -80,6 +80,8 @@ interface RepairContextType {
   loadError: string | null;
   /** Carga las reparaciones del taller desde Supabase (nube). Devuelve { ok, error } con el motivo técnico. */
   fetchRepairs: () => Promise<{ ok: boolean; error?: string }>;
+  /** Carga el inventario del taller desde Supabase (nube). Devuelve { ok, error } con el motivo técnico. */
+  fetchInventory: () => Promise<{ ok: boolean; error?: string }>;
   /** Crea la orden en Supabase y devuelve { ok, error }. NO finge éxito si la DB rechaza el INSERT. */
   addRepair: (repair: Omit<RepairItem, 'id' | 'status' | 'date'>) => Promise<{ ok: boolean; error?: string }>;
   updateRepairStatus: (id: string, status: RepairStatus) => Promise<void>;
@@ -923,6 +925,7 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
         hydrated,
         loadError,
         fetchRepairs,
+        fetchInventory,
         addRepair,
         updateRepairStatus,
         updateRepair,

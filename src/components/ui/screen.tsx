@@ -7,6 +7,7 @@ import {
   View,
   type StyleProp,
   type ViewStyle,
+  type RefreshControlProps,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -20,6 +21,7 @@ import {
   TabletContentWidth,
 } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useTheme } from '@/hooks/use-theme';
 
 /**
@@ -33,6 +35,10 @@ type ScreenProps = {
   contentContainerStyle?: StyleProp<ViewStyle>;
   /** Optional screen title shown centered in the top navbar. */
   title?: string;
+  /** Optional back button for the top navbar. */
+  showBackButton?: boolean;
+  /** Optional RefreshControl component. */
+  refreshControl?: React.ReactElement<RefreshControlProps>;
 };
 
 /**
@@ -40,7 +46,7 @@ type ScreenProps = {
  * width, the top navbar and the web badge. Replaces the repeated per-screen
  * wrapper.
  */
-export function Screen({ children, contentContainerStyle, title }: ScreenProps) {
+export function Screen({ children, contentContainerStyle, title, showBackButton, refreshControl }: ScreenProps) {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   const { isAuthenticated } = useAuth();
@@ -77,9 +83,10 @@ export function Screen({ children, contentContainerStyle, title }: ScreenProps) 
         { backgroundColor: theme.background },
         webSafeAreaTop,
       ]}>
-      {isAuthenticated && <Navbar title={title} />}
+      {isAuthenticated && <Navbar title={title} showBackButton={showBackButton} />}
       <ScrollView
         style={styles.scrollView}
+        refreshControl={refreshControl}
         contentContainerStyle={[
           styles.contentContainer,
           {

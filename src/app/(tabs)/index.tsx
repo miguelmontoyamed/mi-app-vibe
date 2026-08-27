@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Link } from 'expo-router';
-import { useSyncExternalStore } from 'react';
+import { Link, useRouter } from 'expo-router';
+import { useSyncExternalStore, useEffect, useState } from 'react';
 import { Linking, Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
+import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
 import { GlassCard } from '@/components/ui/glass-card';
 import { Screen } from '@/components/ui/screen';
@@ -11,7 +12,12 @@ import { Brand, BREAKPOINTS, Elevation, KpiAccent, Shape, Spacing, statusStyle, 
 import { useAuth } from '@/context/auth-context';
 import { useRepair, type RepairStatus } from '@/context/repair-context';
 import { useWorkshop } from '@/context/workshop-context';
+import { useBilling } from '@/context/billing-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useTheme } from '@/hooks/use-theme';
+import type { TechnicianMonthlyPerformance } from '@/types/billing';
+import { formatCOP } from '@/utils/format';
+import { formatPeriodLabel } from '@/utils/billing-performance';
 
 /** WhatsApp de renovación cuando el trial está por vencer (<=10 días). */
 const RENEW_WHATSAPP_URL =
@@ -55,7 +61,29 @@ export default function DashboardScreen() {
   const { repairs } = useRepair();
   const { currentUser } = useAuth();
   const { subscription } = useWorkshop();
+  const { currentPeriod, fetchMonthlyPerformance } = useBilling();
   const nowMs = useNowMs();
+  const router = useRouter();
+  const theme = useTheme();
+
+  const [myPerf, setMyPerf] = useState<TechnicianMonthlyPerformance | null>(null);
+
+  useEffect(() => {
+    if (currentUser?.role === 'technician' && currentPeriod) {
+      let cancelled = false;
+      fetchMonthlyPerformance(currentPeriod).then((res) => {
+        if (!cancelled && res.ok) {
+          const perf = res.data.find((p) => p.technicianId === currentUser.id);
+          if (perf) {
+            setMyPerf(perf);
+          }
+        }
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+  }, [currentUser, currentPeriod, fetchMonthlyPerformance, repairs]); // We add `repairs` as dependency so it refreshes when a repair is completed.
 
   // Tabs only render when authenticated. Guard keeps typing safe (User | null).
   if (!currentUser) {
@@ -137,6 +165,46 @@ export default function DashboardScreen() {
             />
           </View>
         </GlassCard>
+      )}
+
+      {/* Producción del Técnico (solo visible para técnicos) */}
+      {currentUser.role === 'technician' && (
+        <ThemedView type="backgroundElement" style={styles.techPerfContainer}>
+          <View style={styles.techPerfHeader}>
+            <ThemedText type="subtitle">Tu Producción del Mes</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              {currentPeriod ? formatPeriodLabel(currentPeriod) : 'Cargando...'}
+            </ThemedText>
+          </View>
+          
+          <View style={styles.cardsGrid}>
+            <View style={[styles.techPerfMetricBox, { flexBasis: cardBasis, backgroundColor: theme.surfaceContainerHigh }]}>
+              <ThemedText type="small" themeColor="textSecondary">Equipos Entregados</ThemedText>
+              <ThemedText type="title" style={{ color: Brand.primary }}>
+                {myPerf?.deliveredCount ?? 0}
+              </ThemedText>
+            </View>
+            <View style={[styles.techPerfMetricBox, { flexBasis: cardBasis, backgroundColor: theme.surfaceContainerHigh }]}>
+              <ThemedText type="small" themeColor="textSecondary">Generado</ThemedText>
+              <ThemedText type="subtitle">
+                {formatCOP(myPerf?.netProduction ?? 0)}
+              </ThemedText>
+            </View>
+            <View style={[styles.techPerfMetricBox, { flexBasis: cardBasis, backgroundColor: theme.surfaceContainerHigh }]}>
+              <ThemedText type="small" themeColor="textSecondary">Tu Comisión ({myPerf?.commissionRate ? Math.round(myPerf.commissionRate * 100) : 0}%)</ThemedText>
+              <ThemedText type="subtitle" style={{ color: Brand.success }}>
+                {formatCOP(myPerf?.commissionTotal ?? 0)}
+              </ThemedText>
+            </View>
+          </View>
+
+          <Button
+            label="Ver historial de producción"
+            variant="secondary"
+            onPress={() => router.push('/production' as any)}
+            style={styles.historyButton}
+          />
+        </ThemedView>
       )}
 
       {/* Dashboard Summary Cards — GlassCard con chip de acento por estado. */}
@@ -279,5 +347,27 @@ const styles = StyleSheet.create({
     marginTop: Spacing.half,
     paddingVertical: Spacing.two,
     paddingHorizontal: Spacing.three,
+  },
+  techPerfContainer: {
+    padding: Spacing.four,
+    borderRadius: Shape.xl,
+    marginBottom: Spacing.three,
+    width: '100%',
+    borderWidth: 1,
+    borderColor: Brand.primary + '33',
+  },
+  techPerfHeader: {
+    marginBottom: Spacing.three,
+  },
+  techPerfMetricBox: {
+    padding: Spacing.three,
+    borderRadius: Shape.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.half,
+  },
+  historyButton: {
+    marginTop: Spacing.three,
+    width: '100%',
   },
 });

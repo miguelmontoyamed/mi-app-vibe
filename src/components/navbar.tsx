@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { Platform, StyleSheet, useWindowDimensions, View, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -10,6 +11,8 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 type NavbarProps = {
   /** Optional screen title rendered in the center of the bar. */
   title?: string;
+  /** Optional back button shown before the brand. */
+  showBackButton?: boolean;
 };
 
 /**
@@ -25,13 +28,14 @@ type NavbarProps = {
  *   lateral con `flex: 1` + `minWidth: 0` y el centro con `flexShrink: 1`, de
  *   modo que nada puede encimarse y los textos largos se truncan con `…`.
  */
-export function Navbar({ title }: NavbarProps) {
+export function Navbar({ title, showBackButton }: NavbarProps) {
   const insets = useSafeAreaInsets();
   const scheme = useColorScheme();
   const dark = scheme === 'dark';
   const glass = Glass[dark ? 'dark' : 'light'];
   const { width } = useWindowDimensions();
   const { currentUser } = useAuth();
+  const router = useRouter();
 
   if (!currentUser) {
     return null;
@@ -69,6 +73,15 @@ export function Navbar({ title }: NavbarProps) {
       <View style={styles.inner}>
         {/* Marca: en móvil queda solo el ícono (sm:hidden del texto, md:flex) */}
         <View style={styles.sectionLeft}>
+          {showBackButton && (
+            <Ionicons
+              name="arrow-back"
+              size={24}
+              color={Colors[dark ? 'dark' : 'light'].text}
+              style={{ paddingRight: Spacing.one }}
+              onPress={() => router.back()}
+            />
+          )}
           <View style={styles.logoBubble}>
             <Ionicons name="hardware-chip-outline" size={18} color={Brand.onBrand} />
           </View>

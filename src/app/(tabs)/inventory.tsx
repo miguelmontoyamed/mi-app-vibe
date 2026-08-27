@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Alert, Platform, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { useState, useCallback } from 'react';
+import { Alert, Platform, Pressable, StyleSheet, View, useWindowDimensions, RefreshControl } from 'react-native';
 
 import { Button } from '@/components/ui/button';
 import { FormInput } from '@/components/ui/form-input';
@@ -30,7 +30,7 @@ function notify(message: string) {
 }
 
 export default function InventoryScreen() {
-  const { inventory, addInventoryPart, updateInventoryStock } = useRepair();
+  const { inventory, addInventoryPart, updateInventoryStock, fetchInventory } = useRepair();
   const { currentUser } = useAuth();
   // RBAC: el inventario es de solo lectura para el técnico (crear/ajustar = admin).
   const isAdmin = currentUser?.role === 'admin';
@@ -42,6 +42,13 @@ export default function InventoryScreen() {
   const [category, setCategory] = useState('');
   const [stock, setStock] = useState('');
   const [price, setPrice] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchInventory();
+    setRefreshing(false);
+  }, [fetchInventory]);
 
   const filteredInventory = inventory.filter(
     (item) =>
@@ -88,7 +95,11 @@ export default function InventoryScreen() {
   };
 
   return (
-    <Screen>
+    <Screen
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+      }
+    >
       <View style={styles.header}>
         <ThemedText type="title" style={styles.title}>
           Inventario de Repuestos
