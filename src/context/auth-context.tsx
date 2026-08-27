@@ -541,7 +541,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
    * el taller real desde la fila en `profiles` del admin invitador).
    */
   const generateInviteLink = (): string | null => {
-    if (!currentUser || currentUser.role !== 'admin') {
+    if (!currentUser || currentUser.role !== 'admin' || !workshopId) {
       return null;
     }
     // No generar enlaces si el taller ya alcanzó el límite de 5 técnicos.
@@ -549,11 +549,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (techCount >= MAX_TECHNICIANS) {
       return null;
     }
-    const token = generateInviteToken(currentUser.id, currentUser.name);
+    const token = generateInviteToken(workshopId, currentUser.name);
     const url = buildInviteUrl(token);
     setInviteLink({
       token: token.token,
-      workshopId: currentUser.id,
+      workshopId: workshopId,
       workshopName: currentUser.name,
       url,
       expiresAt: token.expiresAt,

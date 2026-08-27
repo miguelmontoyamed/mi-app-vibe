@@ -108,6 +108,7 @@
   upstream. Commit `fix(e2e+ui): merge upstream fixes for invitation spec,
   login error handling, and GlassCard flexShrink`.
 
+- **Corrección Autónoma de Perfiles de Técnico y Taller (2026-08-26):** Se automatizó y preparó la corrección del esquema y de la cuenta huérfana de `miguelmontoyabq@gmail.com` vinculándola al taller de `jaiderpr@gmail.com`. Adicionalmente se desplegó a producción el blindaje final del perfil Read-Only para técnicos en la pantalla de configuración de taller.
 - **Importación de Inventario Septiembre (2026-08-26):** Catálogo de repuestos actualizado para la cuenta de `jaiderpr@gmail.com` mediante script depurado. Se filtraron automáticamente los ítems sin stock (0 o nulo) y se aseguró el reemplazo completo del inventario anterior. Scripts temporales limpiados.
 
 ## En Desarrollo / Próximo (🔄)

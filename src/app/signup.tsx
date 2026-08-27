@@ -243,9 +243,9 @@ export default function SignUpScreen() {
         </ThemedText>
 
         <FormInput
-          label="Nombre del taller"
+          label={inviteData && !inviteData.expired ? 'Nombre completo' : 'Nombre del taller'}
           required
-          placeholder="Ej: TechRepair Master"
+          placeholder={inviteData && !inviteData.expired ? 'Ej: Juan Pérez' : 'Ej: TechRepair Master'}
           value={name}
           onChangeText={setName}
           maxLength={80}

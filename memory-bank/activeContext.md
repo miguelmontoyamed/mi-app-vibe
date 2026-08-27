@@ -20,6 +20,9 @@
   - Se desarrolló un script en Node.js que procesó el archivo `LISTA DE PRECIOS SEPTIEMBRE.xlsx`.
   - El script categorizó repuestos implícitos, descartó filas no deseadas ("USADAS", "TOTAL CANTIDADES") y generó un script SQL `importar_inventario.sql`.
   - El SQL generado primero vacía automáticamente todo el inventario existente del usuario `jaiderpr@gmail.com` e inserta todo el stock nuevo limpiamente, listo para ejecutarse vía SQL Editor.
+- **Corrección Autónoma de Perfiles de Técnico y Taller (2026-08-26):**
+  - Se automatizó y preparó la corrección del esquema y de la cuenta huérfana de `miguelmontoyabq@gmail.com` vinculándola al taller de `jaiderpr@gmail.com`.
+  - Despliegue de blindaje final del perfil Read-Only a técnicos en la configuración del taller completado a Vercel.
 - **Integración de Inventario con Órdenes de Reparación operativa (2026-08-23):**
   modal interactivo en el detalle de la orden (`src/app/job/[id].tsx`) con
   pestañas "Desde Inventario" y "Costo Manual". Permite seleccionar repuestos del
