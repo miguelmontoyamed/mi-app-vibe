@@ -3,6 +3,7 @@
 > Registro de avance del proyecto. Actualizar al finalizar cada tarea.
 
 ## Completado (✓)
+- **Script de Recarga Limpia PIME (2026-08-26):** Creado `scripts/reload-pime-inventory.mjs` para el reseteo y recarga masiva de inventario para `jaiderpr@gmail.com`. El script limpia el inventario previo del taller e inserta por lotes los datos parseados de todas las hojas del Excel. Listo para ejecución local.
 - **Alineación de Selectores E2E y Feedback de Login (2026-08-26):** Resolución de deuda técnica (`e2e-debt-login-feedback.md`). Implementación de feedback visual explícito en `login.tsx` (con `testID`s estables `login-submit-button`, `login-email-input`, etc.) que se auto-limpia al escribir. Alineación de tests `invitation.spec.ts` y `core-flows.spec.ts` a `getByTestId` evitando fallos de `pointer-events:none` de RN Web. Incorporación de `accessibilityRole="button"` en botones base y Pressables para pruebas semánticas. Gates de calidad 100% PASS (`tsc`, `jest`).
 - **Importación de Inventario PIME (2026-08-26):** Script scripts/import-pime-inventory.mjs para importar repuestos desde Excel local. Resuelve taller (creando/asociando "PIME Accesorios"), mapea columnas inteligentemente (insensible a acentos/cajas), realiza upsert por lotes e imprime el reporte.
 - **Fix cancelRepair + Modal Submission (2026-08-24):** Botón "Confirmar" en modal "Marcar como No Realizado" (`job/[id].tsx`) ahora con:

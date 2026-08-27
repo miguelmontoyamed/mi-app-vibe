@@ -164,7 +164,8 @@
 - **Migración faltante aplicada en vivo (2026-08-24):** Creada la migración `20260824220000_repairs_cancel_reason_status.sql` (agregando `motivo_cancelacion` y permitiendo el estado 'Cancelado / No Reparado' en el check constraint `repairs_status_check`). Aplicada directamente en producción usando la cadena de conexión de la base de datos vía script.
 
 ## Foco Operativo Inmediato (Sprint Actual)
-**Importaci�n de inventario y puesta en marcha:** Carga masiva del inventario PIME (84 registros) en producci�n de Supabase para la cuenta jaiderpr@gmail.com completada. Pr�ximo: validaci�n funcional en el dashboard de inventario y resoluci�n de deuda t�cnica E2E.
+- **Recarga de inventario PIME:** Se ha creado el script `scripts/reload-pime-inventory.mjs` para resetear y recargar de forma masiva y limpia el inventario del usuario `jaiderpr@gmail.com` desde su Excel original. El script está pendiente de ejecución en el entorno local (casa) donde residen las credenciales y el archivo fuente.
+- **Validación E2E:** Deuda técnica completada. Próximo paso: validación funcional en el dashboard de inventario.
 ## Decisiones Recientes
 - **Liquidación en tiempo real (2026-08-21):** el panel se suscribe a
   `postgres_changes` sobre `public.repairs` (canal `admin-liquidacion-realtime`)
