@@ -106,10 +106,11 @@
   upstream. Commit `fix(e2e+ui): merge upstream fixes for invitation spec,
   login error handling, and GlassCard flexShrink`.
 
+- **Importación de Inventario Septiembre (2026-08-26):** Catálogo de repuestos actualizado para la cuenta de `jaiderpr@gmail.com` mediante script depurado. Se filtraron automáticamente los ítems sin stock (0 o nulo) y se aseguró el reemplazo completo del inventario anterior. Scripts temporales limpiados.
+
 ## En Desarrollo / Próximo (🔄)
-- **Foco operativo:** validación y operación continua en mostrador del taller
-  (recepción, asignación, cobro). MVP y Release Candidate cerrados; fase de uso
-  en mostrador y soporte operativo.
+- **Foco del Sprint:** Resolución de la deuda técnica de feedback visual silencioso en login (`src/app/login.tsx`) y estabilización de pruebas E2E.
+- Validación y operación continua en mostrador del taller (recepción, asignación, cobro). MVP y Release Candidate cerrados; fase de uso en mostrador y soporte operativo.
 
 ## Pendiente (◻)
 - Ninguno. La "exportación contable" fue DESCARTADA del backlog (2026-08-22).
@@ -117,7 +118,7 @@
 ## Historial Reciente
 | Fecha | Cambio |
 |-------|--------|
-| 2026-08-26 | Ingesta de Inventario: Importaci�n masiva de repuestos Excel PIME para jaiderpr@gmail.com (84 repuestos cargados) |
+| 2026-08-26 | **Importación Limpia de Inventario desde Excel:** Se desarrolló un script en Node.js que procesó el archivo `LISTA DE PRECIOS SEPTIEMBRE.xlsx`, categorizó repuestos implícitos, descartó filas no deseadas ("USADAS", "TOTAL CANTIDADES") y generó el script SQL `importar_inventario.sql`. Dicho script vacía primero el inventario de `jaiderpr@gmail.com` e inserta todo el stock nuevo limpiamente (84 repuestos cargados). |
 | 2026-08-25 | **Auditoría Integral de Seguridad y Pruebas Defensivas (Skills Suite):** Ejecución de `security-and-secrets-review`, `authz-permission-review`, `dependency-supply-chain-review` y `env-config-hardening`. Verificación de 8 vectores de ataque: SQLi (inmune), IDOR / Cross-Tenant (bloqueado por RLS), Escalada de privilegios (bloqueado por policies), Secuestro Super Admin (validado por `SECURITY DEFINER` en Postgres), XSS (sanitizado con `escapeHtml`), exposición de secretos (0 leaks en repo/bundle), cabeceras HTTP (5 headers activos en Vercel) y dependencias (0 críticas en runtime). Calificación final: **96/100 (Grado A - Excelente)**. |
 | 2026-08-25 | **Módulo de Equipos con 3 Submódulos Segmentados:** Arquitectura de navegación segmentada en `src/app/(tabs)/devices.tsx`: 1) **Compra de Equipos** (registro a proveedores con IMEI, costo y garantía de distribuidor + historial de compras), 2) **Venta de Equipos** (catálogo de stock listo para vender con cálculo de utilidad estimada en tiempo real y facturación + historial de ventas), 3) **Utilidad e Inventario** (tarjetas KPI de resumen financiero con Capital Invertido, Total Facturado y Utilidad Neta Real + inventario consolidado con balance y filtros de estado). Factura oficial en `/device-receipt/[id]` con PDF (jsPDF / expo-print) y envío por WhatsApp. Aislamiento contable total respecto a reparaciones del taller. Suite de tests 122/122 PASS. |
 | 2026-08-24 | **Corrección de Inventario Fantasma (Race Condition):** Se corrigió un error en `repair-context.tsx` (`cancelRepair`, `deleteRepair`, `assignInventoryPartToRepair`, `removeInventoryPartFromRepair`) donde el inventario sumaba o restaba stock antes de que la tabla `repairs` confirmara el cambio en Supabase. Ahora el inventario solo se afecta si la orden de reparación se actualiza o borra exitosamente en la base de datos. Se ajustó el stock real a 5. |

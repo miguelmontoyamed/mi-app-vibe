@@ -13,6 +13,10 @@
   - **Aislamiento Contable Estricto:** La utilidad por reventa de equipos (`Precio Venta − Costo Compra`) vive en `public.devices` y no afecta órdenes de trabajo (`repairs`), presupuestos ni comisiones a técnicos.
   - Factura y Comprobante de Venta con Garantía (`src/app/device-receipt/[id].tsx`): generación e impresión de PDF en web (jsPDF) y nativo (`expo-print`/`expo-sharing`) con botón para compartir por WhatsApp.
   - Suite de pruebas unitarias 122/122 PASS (`device-logic.test.ts`, `device-receipt-pdf-web.test.ts`).
+- **Importación Limpia de Inventario desde Excel (2026-08-26):**
+  - Se desarrolló un script en Node.js que procesó el archivo `LISTA DE PRECIOS SEPTIEMBRE.xlsx`.
+  - El script categorizó repuestos implícitos, descartó filas no deseadas ("USADAS", "TOTAL CANTIDADES") y generó un script SQL `importar_inventario.sql`.
+  - El SQL generado primero vacía automáticamente todo el inventario existente del usuario `jaiderpr@gmail.com` e inserta todo el stock nuevo limpiamente, listo para ejecutarse vía SQL Editor.
 - **Integración de Inventario con Órdenes de Reparación operativa (2026-08-23):**
   modal interactivo en el detalle de la orden (`src/app/job/[id].tsx`) con
   pestañas "Desde Inventario" y "Costo Manual". Permite seleccionar repuestos del
@@ -164,8 +168,9 @@
 - **Migración faltante aplicada en vivo (2026-08-24):** Creada la migración `20260824220000_repairs_cancel_reason_status.sql` (agregando `motivo_cancelacion` y permitiendo el estado 'Cancelado / No Reparado' en el check constraint `repairs_status_check`). Aplicada directamente en producción usando la cadena de conexión de la base de datos vía script.
 
 ## Foco Operativo Inmediato (Sprint Actual)
-- **Recarga de inventario PIME:** Se ha creado el script `scripts/reload-pime-inventory.mjs` para resetear y recargar de forma masiva y limpia el inventario del usuario `jaiderpr@gmail.com` desde su Excel original. El script está pendiente de ejecución en el entorno local (casa) donde residen las credenciales y el archivo fuente.
-- **Validación E2E:** Deuda técnica completada. Próximo paso: validación funcional en el dashboard de inventario.
+- **Inventario actualizado (Septiembre 2026):** El inventario ha sido actualizado de forma limpia, excluyendo los repuestos con stock nulo o cero para la cuenta `jaiderpr@gmail.com`.
+- **Deuda Técnica y Feedback Visual de Login:** Deuda técnica resuelta. Se mejoró el feedback visual silencioso en login (`src/app/login.tsx`) y se estabilizó la suite de pruebas E2E.
+- **Soporte y Operación en Mostrador:** MVP y Release Candidate cerrados y activos; el proyecto se encuentra en fase de uso continuo en mostrador con soporte operativo.
 ## Decisiones Recientes
 - **Liquidación en tiempo real (2026-08-21):** el panel se suscribe a
   `postgres_changes` sobre `public.repairs` (canal `admin-liquidacion-realtime`)
