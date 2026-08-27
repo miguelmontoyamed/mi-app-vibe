@@ -30,7 +30,7 @@ const supabaseUrl = env.EXPO_PUBLIC_SUPABASE_URL || process.env.EXPO_PUBLIC_SUPA
 const supabaseServiceKey = env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 if (!supabaseUrl || !supabaseServiceKey) {
-  console.error('❌ Error: Credenciales de Supabase no encontradas.');
+  console.error('❌ Error: Credenciales de Supabase no encontradas (SUPABASE_SERVICE_ROLE_KEY requerida).');
   process.exit(1);
 }
 
@@ -38,14 +38,24 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey, {
   auth: { persistSession: false, autoRefreshToken: false }
 });
 
-const excelPath = 'C:\\Users\\MIGUEL\\Downloads\\inventario reouestos PIME.xlsx';
-const fallbackPath = './inventario reouestos PIME.xlsx';
-const finalPath = fs.existsSync(excelPath) ? excelPath : fallbackPath;
+const excelPath = 'C:\\Users\\TORETO\\Desktop\\LISTA DE PRECIOS SEPTIEMBRE.xlsx';
+const fallbackExcelPath = 'C:\\Users\\MIGUEL\\Downloads\\inventario reouestos PIME.xlsx';
+const fallbackPath2 = './inventario reouestos PIME.xlsx';
+const finalPath = fs.existsSync(excelPath) ? excelPath : (fs.existsSync(fallbackExcelPath) ? fallbackExcelPath : fallbackPath2);
 
 if (!fs.existsSync(finalPath)) {
-  console.error(`❌ Error: Archivo Excel no encontrado en ${finalPath}`);
+  console.error(`❌ Error: Archivo Excel no encontrado en ${excelPath}`);
   process.exit(1);
 }
+
+const SHEET_TYPE_MAP = {
+  'PANTALLAS': 'Pantalla',
+  'VISORES': 'Visor',
+  'TACTILES': 'Táctil',
+  'DISPLAY': 'Display',
+  'BATERIAS': 'Batería',
+  'OCAS Y POLARIZADOS': 'Insumo'
+};
 
 async function main() {
   console.log('🔍 Localizando taller de jaiderpr@gmail.com...');
@@ -65,7 +75,7 @@ async function main() {
 
   console.log(`🏢 Taller ID detectado: ${workshopId}`);
 
-  // 1. LIMPIEZA TOTAL DEL INVENTARIO EXISTENTE PARA ESTE TALLER
+  // 1. LIMPIEZA TOTAL DEL INVENTARIO EXISTENTE
   console.log('🧹 Vaciando inventario actual de este taller...');
   const { error: delErr } = await supabase.from('inventory').delete().eq('workshop_id', workshopId);
   if (delErr) {
@@ -74,17 +84,54 @@ async function main() {
   }
   console.log('✅ Inventario previo eliminado correctamente.');
 
-  // 2. PARSEO DE TODAS LAS HOJAS DEL EXCEL
+  // 2. PARSEO EXHAUSTIVO DE TODAS LAS HOJAS DEL EXCEL
   console.log(`📊 Leyendo Excel desde: ${finalPath}`);
   const workbook = xlsx.readFile(finalPath);
   const itemsToInsert = [];
+  let skippedZero = 0;
 
   for (const sheetName of workbook.SheetNames) {
     const ws = workbook.Sheets[sheetName];
     const rawRows = xlsx.utils.sheet_to_json(ws, { header: 1, defval: '' });
     if (rawRows.length === 0) continue;
 
-    let currentBrand = 'Repuestos';
+    const defaultType = SHEET_TYPE_MAP[sheetName.trim().toUpperCase()] || sheetName;
+    let currentBrand = '';
+
+    if (sheetName === 'OCAS Y POLARIZADOS') {
+      let currentInsumo = 'OCA';
+      for (let i = 0; i < rawRows.length; i++) {
+        const row = rawRows[i];
+        const col0 = String(row[0] || '').trim();
+        const col1 = String(row[1] || '').trim();
+        if (!col0 && !col1) continue;
+
+        if (col0.toUpperCase().includes('OCA')) {
+          currentInsumo = 'OCA';
+          continue;
+        }
+        if (col0.toUpperCase().includes('POLARIZADO')) {
+          currentInsumo = 'Polarizado';
+          continue;
+        }
+        if (col0.toUpperCase().includes('UNIDADES') || col1.toUpperCase().includes('PULGADAS')) {
+          continue;
+        }
+
+        const qty = parseInt(col0.replace(/[^\d]/g, ''), 10);
+        const inches = col1.replace(/¨|"|''/g, '').trim();
+        if (!isNaN(qty) && qty > 0 && inches) {
+          itemsToInsert.push({
+            workshop_id: workshopId,
+            name: `${currentInsumo} Universal ${inches}"`,
+            category: 'INSUMOS',
+            stock: qty,
+            price: 0
+          });
+        }
+      }
+      continue;
+    }
 
     for (let i = 0; i < rawRows.length; i++) {
       const row = rawRows[i];
@@ -94,56 +141,91 @@ async function main() {
       const col1 = String(row[1] || '').trim();
       const col2 = String(row[2] || '').trim();
       const col3 = String(row[3] || '').trim();
+      const col4 = String(row[4] || '').trim();
 
-      // Detectar encabezado de marcas (ej: "SAMSUNG", "LENOVO", "HUAWEI", "APPLE")
-      if (col0 && !col1 && !col2 && !col3 && isNaN(Number(col0))) {
-        if (!col0.toLowerCase().includes('inventario') && !col0.toLowerCase().includes('modelo')) {
-          currentBrand = col0.toUpperCase();
+      // Encabezado de marca
+      if (col0 && !col1 && !col3 && isNaN(Number(col0))) {
+        const upper = col0.toUpperCase();
+        if (!upper.includes('INVENTARIO') && !upper.includes('MODELO') && !upper.includes('TOTAL') && !upper.includes('USADA')) {
+          currentBrand = upper;
+          continue;
         }
-        continue;
       }
 
-      // Omitir filas de títulos
-      if (col0.toLowerCase().includes('modelo') || col1.toLowerCase().includes('referencia') || col2.toLowerCase().includes('costo')) {
+      if (col0.toUpperCase().includes('MODELO') || col1.toUpperCase().includes('REFERENCIA') || col0.toUpperCase().includes('TOTAL') || col1.toUpperCase().includes('TOTAL')) {
+        continue;
+      }
+      if (col0.toUpperCase().includes('USADA') || col1.toUpperCase().includes('USADA')) {
         continue;
       }
 
       if (!col0 && !col1) continue;
 
-      // Armar nombre del repuesto
-      let name = '';
-      if (col0.toUpperCase().startsWith(currentBrand)) {
-        name = `${col0} ${col1}`.replace(/\s+/g, ' ').trim();
-      } else {
-        name = `${currentBrand} ${col0} ${col1}`.replace(/\s+/g, ' ').trim();
+      if ((col0 === 'SAMSUNG' || col0 === 'LENOVO' || col0 === 'HUAWEI' || col0 === 'APPLE' || col0 === 'XIAOMI' || col0 === 'UNIVERSALES' || col0 === 'ASUS') && !col3) {
+        currentBrand = col0;
+        continue;
       }
 
-      // Parsear costo
+      let rawStock = '';
+      let rawCost = '';
+
+      if (sheetName === 'BATERIAS') {
+        rawStock = col2;
+        rawCost = col3;
+      } else if (sheetName === 'DISPLAY') {
+        rawCost = col3;
+        rawStock = col4;
+      } else {
+        rawStock = col4 !== '' ? col4 : col2;
+        rawCost = col3;
+      }
+
+      // Stock
+      let stock = 0;
+      const stockStr = String(rawStock || '').trim().toLowerCase();
+      if (stockStr && !stockStr.includes('no hay') && !stockStr.includes('sin stock') && stockStr !== 'no' && stockStr !== '0') {
+        const parsed = parseInt(stockStr.replace(/[^\d-]/g, ''), 10);
+        if (!isNaN(parsed) && parsed > 0) {
+          stock = parsed;
+        }
+      }
+
+      // Costo
       let cost = 0;
-      const parsedCost = parseFloat(col2.replace(/[^\d.]/g, ''));
-      if (!isNaN(parsedCost)) cost = parsedCost;
-
-      // Parsear stock / recibido
-      let stock = 1;
-      const stockStr = col3.toLowerCase();
-      if (stockStr.includes('no hay') || stockStr.includes('sin stock') || stockStr === 'no') {
-        stock = 0;
-      } else {
-        const parsedStock = parseInt(stockStr.replace(/[^\d-]/g, ''), 10);
-        if (!isNaN(parsedStock) && parsedStock >= 0) stock = parsedStock;
+      const costStr = String(rawCost || '').trim();
+      if (costStr) {
+        const parsedCost = parseFloat(costStr.replace(/[^\d.]/g, ''));
+        if (!isNaN(parsedCost)) cost = parsedCost;
       }
+
+      // REGLA ESTRICTA: Omitir repuestos sin stock
+      if (stock <= 0) {
+        skippedZero++;
+        continue;
+      }
+
+      const brandStr = currentBrand ? currentBrand : '';
+      let cleanModel = col0;
+      let cleanRef = col1;
+
+      if (cleanModel.toUpperCase().startsWith(brandStr)) {
+        cleanModel = cleanModel.substring(brandStr.length).trim();
+      }
+
+      const fullName = `${defaultType} ${brandStr} ${cleanModel} ${cleanRef}`.replace(/\s+/g, ' ').trim();
+      const category = sheetName.trim().toUpperCase();
 
       itemsToInsert.push({
         workshop_id: workshopId,
-        name: name,
-        category: currentBrand,
+        name: fullName,
+        category: category,
         stock: stock,
-        price: 0 // Precio de venta inicial para cotización libre
+        price: cost
       });
     }
   }
 
-  console.log(`📦 Se procesaron ${itemsToInsert.length} repuestos listos para importar.`);
+  console.log(`📦 Se procesaron ${itemsToInsert.length} repuestos clarificados con stock > 0 (Omitidos ${skippedZero} sin stock).`);
 
   // 3. INSERCIÓN MASIVA POR LOTES
   const batchSize = 100;
@@ -156,7 +238,7 @@ async function main() {
     }
   }
 
-  console.log(`🎉 ÉXITO: Se insertaron ${itemsToInsert.length} repuestos limpios en Supabase.`);
+  console.log(`🎉 ÉXITO: Se insertaron ${itemsToInsert.length} repuestos limpios, categorizados y con tipo explícito.`);
 }
 
 main().catch(err => { console.error('Error:', err); process.exit(1); });

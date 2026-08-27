@@ -115,11 +115,25 @@
 - **Importación de Inventario Septiembre (2026-08-26):** Catálogo de repuestos actualizado para la cuenta de `jaiderpr@gmail.com` mediante script depurado. Se filtraron automáticamente los ítems sin stock (0 o nulo) y se aseguró el reemplazo completo del inventario anterior. Scripts temporales limpiados.
 
 ## En Desarrollo / Próximo (🔄)
-- **Foco del Sprint:** Resolución de la deuda técnica de feedback visual silencioso en login (`src/app/login.tsx`) y estabilización de pruebas E2E.
-- Validación y operación continua en mostrador del taller (recepción, asignación, cobro). MVP y Release Candidate cerrados; fase de uso en mostrador y soporte operativo.
+- **Purificación de Inventario en Base de Datos de Producción:** Ejecutar `importar_inventario.sql` o `scripts/reload-pime-inventory.mjs` para aplicar el catálogo de 180 repuestos limpios (con tipo explícito y 0 ítems sin stock).
+- **Validación de Experiencia de Mostrador:** Confirmar con los usuarios en el taller que el rol técnico y la recepción cumplan el 100% de los candados solicitados.
 
-## Pendiente (◻)
-- Ninguno. La "exportación contable" fue DESCARTADA del backlog (2026-08-22).
+## Pendiente por Verificar / Resolver (◻)
+- ◻ **ERROR-01: Repuestos con Stock 0 en Inventario (ej. `LENOVO TB 370 P12`):**
+  - *Estado:* En cola de aplicación en BD.
+  - *Criterio de Cierre:* La tabla `public.inventory` en Supabase no debe contener ningún registro con `stock <= 0` ni repuestos que indiquen "NO HAY".
+- ◻ **ERROR-02: Ambigüedad en Tipos de Repuestos (ej. `SAMSUNG P350 tab 8.0`):**
+  - *Estado:* En cola de aplicación en BD.
+  - *Criterio de Cierre:* Todo repuesto debe indicar su tipo explícito en el nombre (`Pantalla ...`, `Visor ...`, `Batería ...`, `Táctil ...`, `Display ...`, `OCA ...`, `Polarizado ...`).
+- ◻ **ERROR-03: Perfil de Técnico con Privilegios de Admin Residuales:**
+  - *Estado:* Desplegado en frontend, pendiente validar en producción con `miguelmontoyabq@gmail.com`.
+  - *Criterio de Cierre:* El técnico no debe tener acceso a botones de agregar/modificar stock, configuración de taller ni reasignación de órdenes ajenas.
+- ◻ **ERROR-04: Auto-asignación de Órdenes en Recepción para Técnicos:**
+  - *Estado:* Desplegado en frontend, pendiente validación operativa.
+  - *Criterio de Cierre:* Toda orden creada por un técnico debe quedar asignada automáticamente a sí mismo sin posibilidad de delegarla a otros técnicos.
+- ◻ **ERROR-05: Historial y Producción Mensual de Técnicos:**
+  - *Estado:* Desplegado en frontend (`production.tsx`), pendiente validación operativa.
+  - *Criterio de Cierre:* El técnico debe poder consultar su monto producido en el mes en curso y seleccionar meses anteriores para revisar su acumulado histórico.
 
 ## Historial Reciente
 | Fecha | Cambio |

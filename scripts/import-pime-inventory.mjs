@@ -1,4 +1,4 @@
-﻿import fs from 'fs';
+import fs from 'fs';
 import xlsx from 'xlsx';
 import { createClient } from '@supabase/supabase-js';
 
@@ -272,6 +272,11 @@ async function main() {
       if (!isNaN(parsedCost) && parsedCost >= 0) {
         cost = parsedCost;
       }
+    }
+    
+    // 🔴 REGLA DE NEGOCIO: No agregar al inventario repuestos sin stock
+    if (stock <= 0) {
+      continue;
     }
     
     parsedItems.push({

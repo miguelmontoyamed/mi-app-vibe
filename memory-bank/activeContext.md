@@ -176,8 +176,8 @@
 - **Migración faltante aplicada en vivo (2026-08-24):** Creada la migración `20260824220000_repairs_cancel_reason_status.sql` (agregando `motivo_cancelacion` y permitiendo el estado 'Cancelado / No Reparado' en el check constraint `repairs_status_check`). Aplicada directamente en producción usando la cadena de conexión de la base de datos vía script.
 
 ## Foco Operativo Inmediato (Sprint Actual)
-- **Estabilización E2E y Deuda Técnica (Login):** Foco mantenido en la resolución de deuda de pruebas E2E (feedback de error de login y selectores).
-- **Inventario actualizado (Septiembre 2026):** El inventario ha sido actualizado de forma limpia, excluyendo los repuestos con stock nulo o cero para la cuenta `jaiderpr@gmail.com`.
+- **Corrección y Purificación de Inventario Físico (Septiembre 2026):** Resolver ambigüedad de nombres (agregar tipo: Pantalla, Visor, Táctil, Batería) y eliminar repuestos con stock 0 en la BD de producción.
+- **Verificación de Candados de Rol Técnico (Mostrador):** Confirmar en vivo con los usuarios que el técnico no pueda editar inventario, se auto-asigne al recibir órdenes y consulte su historial de producción sin fricción.
 - **Ratificación Arquitectónica:** Se documentó y blindó la regla de negocio de Persistencia Continua de Inventario. El inventario físico sobrevive mes a mes; los cierres mensuales son estrictamente snapshots financieros de órdenes.
 - **Soporte y Operación en Mostrador:** MVP y Release Candidate cerrados y activos; el proyecto se encuentra en fase de uso continuo en mostrador con soporte operativo.
 ## Decisiones Recientes
@@ -226,11 +226,23 @@
 - **Deuda Técnica Diferida — Vulnerabilidades Transitivas Expo SDK 57 (2026-08-24):** `npm audit` reporta 16 vulnerabilidades residuales (4 high: `image-size` DoS, `nanoid` loop; 12 moderate: `uuid` bounds, `image-size` transitive) en dependencias de Expo (`metro`, `@expo/metro`, `@expo/config-plugins`, `expo-sharing`, `expo-splash-screen`). `npm audit fix --force` requiere downgrade a Expo 46 → breaking changes en SDK 57. Diferida para próxima actualización mayor de Expo (SDK 58+). Mitigación actual: headers `Permissions-Policy` restringen superficie de ataque; RLS aísla datos; no hay vectores de explotación conocidos en código propio.
 
 ## Próximo Paso Esperado
-- El panel de liquidación ya funciona en producción (fix 42804 aplicado en
-  vivo el 2026-08-21): verificar en vivo alternando mes archivado vs en curso.
-- La migración `20260821000000_technician_monthly_performance.sql` y el fix
-  `20260821210000_fix_monthly_performance_count_type.sql` están aplicados en
-  vivo; schema.sql espejado con delivered_at, trigger, RPC (count(*)::int).
+- Ejecutar la recarga limpia de inventario (`importar_inventario.sql` / `scripts/reload-pime-inventory.mjs`) en la base de datos de producción de Supabase para aplicar los 180 repuestos con tipo explícito y 0 repuestos sin stock.
+- Validar con el usuario en mostrador que la visualización del inventario y el panel de producción del técnico respondan adecuadamente.
+
+## Errores Reportados por el Usuario (En Cola de Verificación / Pendientes)
+1. ◻ **[PENDIENTE] Repuestos con Stock 0 en Inventario (ej. `LENOVO TB 370 P12`):**
+   - *Causa:* El importador procesaba celdas vacías o con texto "NO HAY" asignando stock 0 pero sin descartar el registro del payload de inserción.
+   - *Acción:* Scripts corregidos con filtro `if (stock <= 0) continue;`. Pendiente ejecutar purificación en la base de datos de producción.
+2. ◻ **[PENDIENTE] Falta de Tipo de Repuesto en Nombres del Catálogo (ej. `SAMSUNG P350 tab 8.0`):**
+   - *Causa:* El parser ignoraba las pestañas del Excel (`PANTALLAS`, `VISORES`, `TACTILES`, `BATERIAS`, `DISPLAY`, `OCAS Y POLARIZADOS`) y solo usaba Marca + Modelo + Referencia.
+   - *Acción:* Parser multi-hoja implementado generando formato `[Tipo de Repuesto] [Marca] [Modelo] [Referencia]` (ej. `Pantalla SAMSUNG P350 TAB A 8.0"`). Pendiente impacto en base de datos.
+3. ◻ **[PENDIENTE] Verificación de Aislamiento y Roles de Perfiles (`miguelmontoyabq@gmail.com` vinculado a `jaiderpr@gmail.com`):**
+   - *Causa:* Desfase histórico donde técnicos creaban talleres propios por falta de validación en metadata de Auth.
+   - *Acción:* Trigger y perfil corregidos. Pendiente confirmación de que no existan comportamientos de admin residuales en sesión.
+4. ◻ **[PENDIENTE] Verificación en Mostrador de Auto-asignación en Recepción (`receive.tsx`):**
+   - *Acción:* Selector restringido a admin; técnicos quedan auto-asignados forzosamente al registrar órdenes. Desplegado a Vercel, pendiente validación de usuario.
+5. ◻ **[PENDIENTE] Verificación en Mostrador de Historial de Producción (`production.tsx`):**
+   - *Acción:* Vista histórica y tarjeta mensual implementadas para técnicos. Desplegado a Vercel, pendiente validación de usuario.
 
 ## Deuda Técnica No Bloqueante (E2E)
 - **Estado:** COMPLETADO. (2026-08-26) Se resolvió la deuda de tests E2E y feedback visual documentada en `.omo/plans/e2e-debt-login-feedback.md`.
