@@ -38,6 +38,13 @@ perfil del usuario autenticado.
 4. **Cero acceso cruzado entre talleres:** toda policy filtra por el
    `workshop_id` del perfil del usuario autenticado.
 
+## Invariantes de Base de Datos y Dominio
+1. **Persistencia Continua de Inventario (`public.inventory`)**:
+   - Las existencias (`stock`) y el catálogo de repuestos son permanentes y NO se ven afectados por los cambios de mes de calendario (`YYYY-MM`).
+   - Los cierres mensuales (`monthly_closures` / `get_technician_monthly_performance`) solo archivan snapshots financieros de órdenes de servicio (`repairs`), manteniendo el inventario activo sin modificaciones ni reseteos.
+   - Nuevos ingresos de repuestos deben realizarse mediante `UPSERT` o incremento de stock (`stock = stock + incoming_qty`), prohibiendo el uso de `DELETE` en actualizaciones rutinarias.
+
+
 ## Sistema de Diseño
 - **Material Design 3** para estructura y jerarquía:
   - `src/constants/theme.ts` = tokens centralizados (colores, `Shape` radios,

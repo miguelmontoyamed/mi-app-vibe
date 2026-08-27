@@ -168,8 +168,9 @@
 - **Migración faltante aplicada en vivo (2026-08-24):** Creada la migración `20260824220000_repairs_cancel_reason_status.sql` (agregando `motivo_cancelacion` y permitiendo el estado 'Cancelado / No Reparado' en el check constraint `repairs_status_check`). Aplicada directamente en producción usando la cadena de conexión de la base de datos vía script.
 
 ## Foco Operativo Inmediato (Sprint Actual)
+- **Estabilización E2E y Deuda Técnica (Login):** Foco mantenido en la resolución de deuda de pruebas E2E (feedback de error de login y selectores).
 - **Inventario actualizado (Septiembre 2026):** El inventario ha sido actualizado de forma limpia, excluyendo los repuestos con stock nulo o cero para la cuenta `jaiderpr@gmail.com`.
-- **Deuda Técnica y Feedback Visual de Login:** Deuda técnica resuelta. Se mejoró el feedback visual silencioso en login (`src/app/login.tsx`) y se estabilizó la suite de pruebas E2E.
+- **Ratificación Arquitectónica:** Se documentó y blindó la regla de negocio de Persistencia Continua de Inventario. El inventario físico sobrevive mes a mes; los cierres mensuales son estrictamente snapshots financieros de órdenes.
 - **Soporte y Operación en Mostrador:** MVP y Release Candidate cerrados y activos; el proyecto se encuentra en fase de uso continuo en mostrador con soporte operativo.
 ## Decisiones Recientes
 - **Liquidación en tiempo real (2026-08-21):** el panel se suscribe a
