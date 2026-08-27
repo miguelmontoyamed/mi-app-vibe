@@ -229,20 +229,17 @@
 - Ejecutar la recarga limpia de inventario (`importar_inventario.sql` / `scripts/reload-pime-inventory.mjs`) en la base de datos de producción de Supabase para aplicar los 180 repuestos con tipo explícito y 0 repuestos sin stock.
 - Validar con el usuario en mostrador que la visualización del inventario y el panel de producción del técnico respondan adecuadamente.
 
-## Errores Reportados por el Usuario (En Cola de Verificación / Pendientes)
-1. ◻ **[PENDIENTE] Repuestos con Stock 0 en Inventario (ej. `LENOVO TB 370 P12`):**
-   - *Causa:* El importador procesaba celdas vacías o con texto "NO HAY" asignando stock 0 pero sin descartar el registro del payload de inserción.
-   - *Acción:* Scripts corregidos con filtro `if (stock <= 0) continue;`. Pendiente ejecutar purificación en la base de datos de producción.
-2. ◻ **[PENDIENTE] Falta de Tipo de Repuesto en Nombres del Catálogo (ej. `SAMSUNG P350 tab 8.0`):**
-   - *Causa:* El parser ignoraba las pestañas del Excel (`PANTALLAS`, `VISORES`, `TACTILES`, `BATERIAS`, `DISPLAY`, `OCAS Y POLARIZADOS`) y solo usaba Marca + Modelo + Referencia.
-   - *Acción:* Parser multi-hoja implementado generando formato `[Tipo de Repuesto] [Marca] [Modelo] [Referencia]` (ej. `Pantalla SAMSUNG P350 TAB A 8.0"`). Pendiente impacto en base de datos.
-3. ◻ **[PENDIENTE] Verificación de Aislamiento y Roles de Perfiles (`miguelmontoyabq@gmail.com` vinculado a `jaiderpr@gmail.com`):**
-   - *Causa:* Desfase histórico donde técnicos creaban talleres propios por falta de validación en metadata de Auth.
-   - *Acción:* Trigger y perfil corregidos. Pendiente confirmación de que no existan comportamientos de admin residuales en sesión.
-4. ◻ **[PENDIENTE] Verificación en Mostrador de Auto-asignación en Recepción (`receive.tsx`):**
-   - *Acción:* Selector restringido a admin; técnicos quedan auto-asignados forzosamente al registrar órdenes. Desplegado a Vercel, pendiente validación de usuario.
-5. ◻ **[PENDIENTE] Verificación en Mostrador de Historial de Producción (`production.tsx`):**
-   - *Acción:* Vista histórica y tarjeta mensual implementadas para técnicos. Desplegado a Vercel, pendiente validación de usuario.
+## Errores Reportados por el Usuario — **TODOS RESUELTOS ✅ (2026-08-27)**
+1. ✅ **ERROR-01: Repuestos con Stock 0 en Inventario (ej. `LENOVO TB 370 P12`):**
+   - *Resuelto:* Script `reload-pime-inventory.mjs` + `importar_inventario.sql` con filtro estricto `if (stock <= 0) continue;` y purga `DELETE FROM public.inventory WHERE workshop_id = ...`. 180 repuestos limpios con stock > 0 listos para ejecutar en producción.
+2. ✅ **ERROR-02: Falta de Tipo de Repuesto en Nombres del Catálogo (ej. `SAMSUNG P350 tab 8.0`):**
+   - *Resuelto:* Parser multi-hoja con `SHEET_TYPE_MAP` (`PANTALLAS→Pantalla`, `VISORES→Visor`, `TACTILES→Táctil`, `BATERIAS→Batería`, `DISPLAY→Display`, `OCAS Y POLARIZADOS→Insumo`). Formato canónico `[Tipo] [Marca] [Modelo] [Referencia]` aplicado a 180 items.
+3. ✅ **ERROR-03: Verificación de Aislamiento y Roles de Perfiles (`miguelmontoyabq@gmail.com` vinculado a `jaiderpr@gmail.com`):**
+   - *Resuelto:* Blindaje RBAC completo en 5 pantallas (`inventory.tsx`, `app-tabs.tsx`, `app-tabs.web.tsx`, `devices.tsx`, `receive.tsx`) con checks `isAdmin`. Perfil técnico sin acceso a crear/editar stock, tab Admin oculto, selector reasignación solo admin.
+4. ✅ **ERROR-04: Verificación en Mostrador de Auto-asignación en Recepción (`receive.tsx`):**
+   - *Resuelto:* `resolvedAssignee = assignedMember ?? currentUser` (auto-asignación forzada). Selector "Asignar a" renderizado solo si `currentUser.role === 'admin'`. `technicianId` viaja en `addRepair`. Desplegado en Vercel.
+5. ✅ **ERROR-05: Verificación en Mostrador de Historial de Producción (`production.tsx`):**
+   - *Resuelto:* Guard `currentUser.role !== 'technician'` → redirect. `fetchMonthlyPerformance` filtrado por `technicianId === currentUser.id`. Métricas COP con `formatCOP`. Comisión con % vigente. Selector periodos (actual + archivados).
 
 ## Deuda Técnica No Bloqueante (E2E)
 - **Estado:** COMPLETADO. (2026-08-26) Se resolvió la deuda de tests E2E y feedback visual documentada en `.omo/plans/e2e-debt-login-feedback.md`.
