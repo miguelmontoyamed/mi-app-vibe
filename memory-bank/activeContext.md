@@ -13,6 +13,9 @@
   - **Aislamiento Contable Estricto:** La utilidad por reventa de equipos (`Precio Venta − Costo Compra`) vive en `public.devices` y no afecta órdenes de trabajo (`repairs`), presupuestos ni comisiones a técnicos.
   - Factura y Comprobante de Venta con Garantía (`src/app/device-receipt/[id].tsx`): generación e impresión de PDF en web (jsPDF) y nativo (`expo-print`/`expo-sharing`) con botón para compartir por WhatsApp.
   - Suite de pruebas unitarias 122/122 PASS (`device-logic.test.ts`, `device-receipt-pdf-web.test.ts`).
+- **Acceso Read-Only a Inventario para Técnicos (2026-08-26):**
+  - Se habilitó la pestaña de inventario para que los técnicos puedan consultar el stock de repuestos sin privilegios de edición (crear repuestos o ajustar stock manualmente).
+  - La UI (`inventory.tsx` y `app-tabs.tsx`) bloquea controles de mutación (`isAdmin` check) y el RLS actual permite los `SELECT` correspondientes sin exponer operaciones destructivas en el lado del cliente.
 - **Importación Limpia de Inventario desde Excel (2026-08-26):**
   - Se desarrolló un script en Node.js que procesó el archivo `LISTA DE PRECIOS SEPTIEMBRE.xlsx`.
   - El script categorizó repuestos implícitos, descartó filas no deseadas ("USADAS", "TOTAL CANTIDADES") y generó un script SQL `importar_inventario.sql`.
