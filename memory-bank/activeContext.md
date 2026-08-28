@@ -5,10 +5,11 @@
 
 ## Estado Actual (Consolidado — verificado contra el código)
 - **Blindaje y Asociación de Invitación de Técnicos (2026-08-27):**
-  - Se corrigió el flujo de registro por invitación: se eliminó el fallback silencioso a creación de taller propio (`registerOwner`) cuando el enlace expiraba o fallaba, bloqueando el formulario y alertando al usuario para solicitar un nuevo enlace.
+  - Se corrigió y automatizó al 100% el flujo de registro por invitación: se eliminó el fallback silencioso a creación de taller propio (`registerOwner`) cuando el enlace expiraba o fallaba, bloqueando el formulario y alertando al usuario para solicitar un nuevo enlace.
   - Soporte de almacenamiento de invitación pendiente (`savePendingInvite` / `getPendingInvite` / `clearPendingInvite`) para persistir el taller destino a través de redirecciones de Google OAuth y verificaciones de correo.
-  - Creación del RPC `claim_workshop_invitation(p_workshop_id)` en Supabase para vincular limpiamente las cuentas autenticadas (incluyendo Google OAuth) al taller del dueño como `role = 'technician'`.
-  - Suite de pruebas ampliada a 143/143 PASS (`auth-links.test.ts`) y 0 errores de TypeScript (`tsc --noEmit`).
+  - Aplicación automática de la función RPC `claim_workshop_invitation(p_workshop_id)` y actualización de política de eliminación de huérfanos en Supabase (`phmhlbodkoicjctlamah`).
+  - Verificación de extremo a extremo en base de datos real con `scripts/verify-invitation-pipeline.mjs` (9/9 checks PASS en 4 escenarios: token, email/password signup, Google OAuth claim y expiración de 10m).
+  - Suite de pruebas unitarias al 100% PASS (143/143) y 0 errores de TypeScript (`tsc --noEmit`).
 - **Importación de Inventario PIME (2026-08-26):** Ingesta masiva del catlogo de repuestos PIME (84 registros) para jaiderpr@gmail.com, vinculando/creando el taller "PIME Accesorios" mediante scripts/import-pime-inventory.mjs. Mapeo de stock y costo con upsert en la tabla public.inventory.
 - **Módulo de Compra y Venta de Equipos (Trade-in & Refurbished Devices) optimizado en 3 submódulos (2026-08-25):**
   - Navegación segmentada en 3 pestañas:

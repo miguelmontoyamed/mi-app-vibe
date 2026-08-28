@@ -94,3 +94,12 @@ $$;
 
 revoke execute on function public.claim_workshop_invitation(uuid) from public, anon;
 grant execute on function public.claim_workshop_invitation(uuid) to authenticated, service_role;
+
+-- Permitir limpieza de talleres huérfanos sin reparaciones ni perfiles
+drop policy if exists "workshops_admin_delete" on public.workshops;
+create policy "workshops_admin_delete" on public.workshops
+  for delete using (
+    (id = current_workshop_id() and public.current_user_role() = 'admin')
+    or (not exists (select 1 from public.profiles where workshop_id = workshops.id)
+        and not exists (select 1 from public.repairs where workshop_id = workshops.id))
+  );
