@@ -4,7 +4,12 @@
 > Actualizar al finalizar cada tarea (ver `progress.md`).
 
 ## Estado Actual (Consolidado — verificado contra el código)
-- **Importaci�n de Inventario PIME (2026-08-26):** Ingesta masiva del cat�logo de repuestos PIME (84 registros) para jaiderpr@gmail.com, vinculando/creando el taller "PIME Accesorios" mediante scripts/import-pime-inventory.mjs. Mapeo de stock y costo con upsert en la tabla public.inventory.
+- **Blindaje y Asociación de Invitación de Técnicos (2026-08-27):**
+  - Se corrigió el flujo de registro por invitación: se eliminó el fallback silencioso a creación de taller propio (`registerOwner`) cuando el enlace expiraba o fallaba, bloqueando el formulario y alertando al usuario para solicitar un nuevo enlace.
+  - Soporte de almacenamiento de invitación pendiente (`savePendingInvite` / `getPendingInvite` / `clearPendingInvite`) para persistir el taller destino a través de redirecciones de Google OAuth y verificaciones de correo.
+  - Creación del RPC `claim_workshop_invitation(p_workshop_id)` en Supabase para vincular limpiamente las cuentas autenticadas (incluyendo Google OAuth) al taller del dueño como `role = 'technician'`.
+  - Suite de pruebas ampliada a 143/143 PASS (`auth-links.test.ts`) y 0 errores de TypeScript (`tsc --noEmit`).
+- **Importación de Inventario PIME (2026-08-26):** Ingesta masiva del catlogo de repuestos PIME (84 registros) para jaiderpr@gmail.com, vinculando/creando el taller "PIME Accesorios" mediante scripts/import-pime-inventory.mjs. Mapeo de stock y costo con upsert en la tabla public.inventory.
 - **Módulo de Compra y Venta de Equipos (Trade-in & Refurbished Devices) optimizado en 3 submódulos (2026-08-25):**
   - Navegación segmentada en 3 pestañas:
     1. **1. Compra de Equipos:** Formulario de adquisición a distribuidores (marca, modelo, IMEI, costo, garantía proveedor) + historial de compras registradas.

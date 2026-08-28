@@ -3,6 +3,12 @@
 > Registro de avance del proyecto. Actualizar al finalizar cada tarea.
 
 ## Completado (✓)
+- **Blindaje y Asociación de Invitación de Técnicos (2026-08-27):**
+  - Se solucionó la desvinculación de cuentas de técnicos al registrarse mediante enlace de invitación.
+  - Eliminado el fallback silencioso a registro de dueño (`registerOwner`) en invitaciones expiradas o inválidas en `src/app/signup.tsx`.
+  - Persistencia del token de invitación (`savePendingInvite` / `getPendingInvite` / `clearPendingInvite`) a través de flujos de Google OAuth y confirmación de email.
+  - Creación y registro de la función RPC `claim_workshop_invitation(p_workshop_id)` en Supabase (`20260828000000_technician_invite_link_claim.sql` y `schema.sql`).
+  - Suite de pruebas aumentada a 143/143 PASS y 0 errores de TypeScript (`npx tsc --noEmit`).
 - **Persistencia Continua de Inventario (2026-08-26):** Se documentó y blindó formalmente en el Memory Bank (`systemPatterns.md`) la regla de negocio que garantiza que el catálogo y las existencias físicas sobreviven mes a mes, prohibiendo el uso de `DELETE` rutinario y desligándolo de los cierres mensuales financieros.
 - **Script de Recarga Limpia PIME (2026-08-26):** Creado `scripts/reload-pime-inventory.mjs` para el reseteo y recarga masiva de inventario para `jaiderpr@gmail.com`. El script limpia el inventario previo del taller e inserta por lotes los datos parseados de todas las hojas del Excel. Listo para ejecución local.
 - **Alineación de Selectores E2E y Feedback de Login (2026-08-26):** Resolución de deuda técnica (`e2e-debt-login-feedback.md`). Implementación de feedback visual explícito en `login.tsx` (con `testID`s estables `login-submit-button`, `login-email-input`, etc.) que se auto-limpia al escribir. Alineación de tests `invitation.spec.ts` y `core-flows.spec.ts` a `getByTestId` evitando fallos de `pointer-events:none` de RN Web. Incorporación de `accessibilityRole="button"` en botones base y Pressables para pruebas semánticas. Gates de calidad 100% PASS (`tsc`, `jest`).

@@ -14,10 +14,6 @@
  * validación server-side (Supabase Edge Functions / RLS).
  */
 
-import * as Crypto from 'expo-crypto';
-import * as Linking from 'expo-linking';
-import { Platform } from 'react-native';
-
 /** 10 minutos en milisegundos. El token vence rápido para minimizar exposición. */
 export const INVITE_EXPIRY_MS = 10 * 60 * 1000;
 
@@ -52,7 +48,11 @@ export function generateInviteToken(
   workshopId: string,
   workshopName: string
 ): InviteToken {
-  const raw = Crypto.randomUUID().replace(/-/g, '').slice(0, 16).toUpperCase();
+  const uuid =
+    typeof globalThis.crypto?.randomUUID === 'function'
+      ? globalThis.crypto.randomUUID()
+      : Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+  const raw = uuid.replace(/-/g, '').slice(0, 16).toUpperCase();
   const now = Date.now();
   return {
     token: raw,
@@ -125,19 +125,79 @@ export function validateInviteToken(token: InviteToken): InviteValidation {
  * Convierte un `InviteToken` en la URL completa que se le entrega al técnico.
  * - Web: `window.location.origin` + ruta `/signup` (localhost en dev, dominio
  *   desplegado en producción). El rewrite de vercel.json sirve el SPA.
- * - Nativo: deep link del scheme de la app (`miappvibe://signup?invite=...`);
- *   `createURL` codifica el query param una sola vez (URLSearchParams).
+ * - Nativo: deep link del scheme de la app (`miappvibe://signup?invite=...`).
  */
 export function buildInviteUrl(token: InviteToken): string {
   const encoded = encodeInviteToken(token);
-  if (Platform.OS === 'web') {
-    const origin =
-      typeof window !== 'undefined' && window.location?.origin
-        ? window.location.origin
-        : 'https://mi-app-vibe-ten.vercel.app';
-    return `${origin}/signup?invite=${encoded}`;
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return `${window.location.origin}/signup?invite=${encoded}`;
   }
-  return Linking.createURL('/signup', {
-    queryParams: { invite: JSON.stringify(token) },
-  });
+  return `miappvibe://signup?invite=${encoded}`;
 }
+
+const PENDING_INVITE_STORAGE_KEY = 'trm_pending_invite_token';
+
+/**
+ * Guarda temporalmente el token de invitación en el almacenamiento del cliente
+ * (sessionStorage / localStorage en web) para sobrevivir a redirecciones de OAuth
+ * o confirmaciones de correo.
+ */
+export function savePendingInvite(token: InviteToken): void {
+  try {
+    const serialized = JSON.stringify(token);
+    if (typeof window !== 'undefined') {
+      window.sessionStorage?.setItem(PENDING_INVITE_STORAGE_KEY, serialized);
+      window.localStorage?.setItem(PENDING_INVITE_STORAGE_KEY, serialized);
+    }
+  } catch {
+    // Silenciosamente ignorar fallos de storage
+  }
+}
+
+/**
+ * Recupera y valida el token de invitación pendiente guardado en el cliente.
+ * Si el token es inválido o expiró, lo descarta y retorna null.
+ */
+export function getPendingInvite(): InviteToken | null {
+  try {
+    if (typeof window !== 'undefined') {
+      const raw =
+        window.sessionStorage?.getItem(PENDING_INVITE_STORAGE_KEY) ??
+        window.localStorage?.getItem(PENDING_INVITE_STORAGE_KEY);
+      if (!raw) return null;
+      const parsed: unknown = JSON.parse(raw);
+      const t = parsed as Partial<InviteToken>;
+      if (
+        typeof t.token === 'string' &&
+        typeof t.workshopId === 'string' &&
+        typeof t.workshopName === 'string' &&
+        typeof t.expiresAt === 'number' &&
+        typeof t.createdAt === 'number'
+      ) {
+        const validation = validateInviteToken(t as InviteToken);
+        if (validation.valid) {
+          return t as InviteToken;
+        }
+        // Expirado o inválido: limpiar
+        clearPendingInvite();
+      }
+    }
+  } catch {
+    clearPendingInvite();
+  }
+  return null;
+}
+
+/**
+ * Limpia el token de invitación pendiente del almacenamiento del cliente.
+ */
+export function clearPendingInvite(): void {
+  try {
+    if (typeof window !== 'undefined') {
+      window.sessionStorage?.removeItem(PENDING_INVITE_STORAGE_KEY);
+      window.localStorage?.removeItem(PENDING_INVITE_STORAGE_KEY);
+    }
+  } catch {
+    // Silenciosamente ignorar fallos de storage
+  }
+}

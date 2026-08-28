@@ -18,6 +18,8 @@ import {
   decodeInviteToken,
   validateInviteToken,
   buildInviteUrl,
+  getPendingInvite,
+  clearPendingInvite,
   type InviteValidation,
 } from '@/utils/auth-links';
 
@@ -55,7 +57,7 @@ export interface InviteLink {
   createdAt: number;
 }
 
-interface AuthContextType {
+export interface AuthContextType {
   currentUser: User | null;
   isAuthenticated: boolean;
   /** True cuando Supabase terminó de restaurar la sesión y cargar los
@@ -64,6 +66,8 @@ interface AuthContextType {
   hydrated: boolean;
   /** Miembros del taller: filas de `public.profiles` (role technician/admin). */
   users: User[];
+  /** Taller actual resuelto desde la BD (Supabase workshops.id). */
+  workshopId: string | null;
   inviteLink: InviteLink | null;
   /** Error visible de hidratación (env faltante), o null. */
   loadError: string | null;
@@ -186,6 +190,27 @@ async function fetchAuthoritativeRole(userId: string): Promise<string | null> {
   return data.role;
 }
 
+/**
+ * Reclama una invitación de taller pendiente (guardada en sessionStorage/localStorage)
+ * si el usuario acaba de autenticarse (ej. tras redirección de Google OAuth o confirmación).
+ */
+async function checkAndClaimPendingInvite(): Promise<boolean> {
+  const pending = getPendingInvite();
+  if (!pending?.workshopId) return false;
+  try {
+    const { data, error } = await supabase.rpc('claim_workshop_invitation', {
+      p_workshop_id: pending.workshopId,
+    });
+    if (!error && (data as { ok?: boolean })?.ok) {
+      clearPendingInvite();
+      return true;
+    }
+  } catch (err) {
+    console.error('Error claiming workshop invitation:', err);
+  }
+  return false;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [users, setUsers] = useState<User[]>([]);
 
@@ -237,6 +262,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         const profile = await supabaseRestoreSession();
         if (!cancelled && profile) {
+          await checkAndClaimPendingInvite();
           const role = await fetchAuthoritativeRole(profile.id);
           setCurrentUser(profileToUser(profile, role ?? undefined));
         }
@@ -283,6 +309,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // los miembros del taller.
         (async () => {
           try {
+            await checkAndClaimPendingInvite();
             const role = await fetchAuthoritativeRole(profile.id);
             setCurrentUser(profileToUser(profile, role ?? undefined));
             const wid = await resolveWorkshopId();
@@ -306,6 +333,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Supabase SIEMPRE: no hay pool local ni cuentas seed.
     const result = await supabaseSignInWithPassword(needle, password);
     if (result.ok) {
+      await checkAndClaimPendingInvite();
       const role = await fetchAuthoritativeRole(result.user.id);
       const user = profileToUser(result.user, role ?? undefined);
       setCurrentUser(user);
@@ -330,6 +358,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const result = await supabaseSignInWithGoogleIdToken(idToken);
       if (result.ok) {
+        await checkAndClaimPendingInvite();
         const role = await fetchAuthoritativeRole(result.user.id);
         const user = profileToUser(result.user, role ?? undefined);
         setCurrentUser(user);
@@ -578,6 +607,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isAuthenticated: currentUser !== null,
         hydrated,
         users,
+        workshopId,
         inviteLink,
         loadError,
         login,
@@ -586,9 +616,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         registerOwner,
         resendRegistration,
         createTechnician,
-deleteTechnician,
-  updateTechnicianCommission,
-  registerInvitedTechnician,
+        deleteTechnician,
+        updateTechnicianCommission,
+        registerInvitedTechnician,
         generateInviteLink,
         validateInviteLink,
       }}>

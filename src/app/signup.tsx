@@ -12,7 +12,7 @@ import { useAuth } from '@/context/auth-context';
 import { useTheme } from '@/hooks/use-theme';
 import { isGoogleConfigured, useGoogleSignIn } from '@/lib/google-auth';
 import { supabaseSignInWithGoogleRedirect } from '@/lib/supabase-auth';
-import { decodeInviteToken, validateInviteToken } from '@/utils/auth-links';
+import { decodeInviteToken, validateInviteToken, savePendingInvite } from '@/utils/auth-links';
 
 const notify = (title: string, message: string) => {
   if (Platform.OS === 'web') {
@@ -42,9 +42,16 @@ export default function SignUpScreen() {
     const decoded = decodeInviteToken(raw);
     if (!decoded) return null;
     const validation = validateInviteToken(decoded);
-    if (!validation.valid) return { expired: true as const };
-    return { expired: false as const, workshopName: validation.workshopName, workshopId: validation.workshopId };
+    if (!validation.valid) return { expired: true as const, tokenObj: decoded };
+    return {
+      expired: false as const,
+      workshopName: validation.workshopName,
+      workshopId: validation.workshopId,
+      tokenObj: decoded,
+    };
   }, [params.invite]);
+
+  const isInviteFlow = params.invite != null && typeof params.invite === 'string';
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -55,6 +62,14 @@ export default function SignUpScreen() {
   const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async () => {
+    if (inviteData?.expired) {
+      notify(
+        'Invitación expirada',
+        'El enlace de invitación ha vencido (vigencia de 10 minutos). Solicita un nuevo enlace al dueño del taller.'
+      );
+      return;
+    }
+
     if (!name.trim() || !email.trim() || !password.trim()) {
       notify('Campos incompletos', 'Completa todos los campos obligatorios (*).');
       return;
@@ -71,8 +86,8 @@ export default function SignUpScreen() {
     try {
       // Flujo de técnico invitado: crea la cuenta real (Supabase) con
       // role='technician' asociada al taller del admin que generó el enlace.
-      // Sin Supabase configurado cae a la simulación local (demo).
       if (inviteData && !inviteData.expired) {
+        savePendingInvite(inviteData.tokenObj);
         const result = await registerInvitedTechnician(
           name.trim(),
           email.trim().toLowerCase(),
@@ -103,6 +118,16 @@ export default function SignUpScreen() {
         }
         return;
       }
+
+      // Si el enlace de invitación era inválido o malformado, evitar registrar como dueño por error
+      if (isInviteFlow) {
+        notify(
+          'Enlace de invitación inválido',
+          'El enlace de invitación no es válido. Pide al dueño del taller que te comparta un nuevo enlace.'
+        );
+        return;
+      }
+
       // Flujo estándar: registro de dueño de taller.
       const { user, reason, pendingVerification: pending } = await registerOwner(
         name,
@@ -149,6 +174,18 @@ export default function SignUpScreen() {
   };
 
   const handleGoogle = async () => {
+    if (inviteData?.expired) {
+      notify(
+        'Invitación expirada',
+        'El enlace de invitación ha vencido (vigencia de 10 minutos). Solicita un nuevo enlace al dueño del taller.'
+      );
+      return;
+    }
+
+    if (inviteData && !inviteData.expired) {
+      savePendingInvite(inviteData.tokenObj);
+    }
+
     // 🛑 FLUJO ESTRICTO PARA WEB: SIN POPUPS, SIN WEBBROWSER.
     // Supabase navega la pestaña principal completa (window.location.assign)
     // y el return inmediato evita que se ejecute CUALQUIER otra lógica.
@@ -210,6 +247,8 @@ export default function SignUpScreen() {
     );
   }
 
+  const isFormDisabled = submitting || !!inviteData?.expired;
+
   return (
     <Screen contentContainerStyle={styles.screen}>
       <ThemedView style={[styles.card, { borderColor: theme.border }]}>
@@ -220,7 +259,7 @@ export default function SignUpScreen() {
               Esta invitación ha expirado.
             </ThemedText>
             <ThemedText type="small" style={styles.inviteBannerText}>
-              Solicita un nuevo enlace al dueño del taller.
+              El enlace tenía una vigencia de 10 minutos. Solicita un nuevo enlace al dueño del taller.
             </ThemedText>
           </ThemedView>
         ) : inviteData ? (
@@ -239,7 +278,9 @@ export default function SignUpScreen() {
         <ThemedText type="small" themeColor="textSecondary" style={styles.subtitle}>
           {inviteData && !inviteData.expired
             ? `Regístrate para empezar a trabajar con el taller "${inviteData.workshopName}".`
-            : 'Registra tu taller para administrar equipos y agregar técnicos. Te pediremos confirmar tu correo con el enlace que te enviamos.'}
+            : inviteData?.expired
+              ? 'Pide al administrador que te genere una nueva invitación para unirte a su taller.'
+              : 'Registra tu taller para administrar equipos y agregar técnicos. Te pediremos confirmar tu correo con el enlace que te enviamos.'}
         </ThemedText>
 
         <FormInput
@@ -249,6 +290,7 @@ export default function SignUpScreen() {
           value={name}
           onChangeText={setName}
           maxLength={80}
+          editable={!isFormDisabled}
         />
         <FormInput
           label="Correo"
@@ -259,6 +301,7 @@ export default function SignUpScreen() {
           value={email}
           onChangeText={setEmail}
           maxLength={100}
+          editable={!isFormDisabled}
         />
         <FormInput
           label="Contraseña"
@@ -267,13 +310,22 @@ export default function SignUpScreen() {
           secureTextEntry
           value={password}
           onChangeText={setPassword}
+          editable={!isFormDisabled}
         />
 
         <Button
-          label={submitting ? 'Creando cuenta…' : 'Crear cuenta'}
+          label={
+            inviteData?.expired
+              ? 'Invitación expirada'
+              : submitting
+                ? 'Creando cuenta…'
+                : inviteData
+                  ? 'Unirme como técnico'
+                  : 'Crear cuenta'
+          }
           onPress={handleSubmit}
           style={styles.primary}
-          disabled={submitting}
+          disabled={isFormDisabled}
         />
 
         <View style={styles.divider}>
@@ -288,7 +340,7 @@ export default function SignUpScreen() {
           label={googleInProgress ? 'Conectando con Google…' : 'Registrarse con Google'}
           variant="secondary"
           onPress={handleGoogle}
-          disabled={googleInProgress}
+          disabled={googleInProgress || isFormDisabled}
         />
         {googleError ? (
           <ThemedText type="small" style={styles.googleError}>
