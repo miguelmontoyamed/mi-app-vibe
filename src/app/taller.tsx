@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Alert, Platform, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/ui/button';
@@ -22,22 +22,16 @@ interface FieldErrors {
  * Onboarding / perfil del taller. Guarda el membrete (nombre, NIT, dirección,
  * teléfono) que se imprime en los recibos de reparación.
  *
- * El campo NIT acepta cualquier cantidad de dígitos base (1–15): personas
- * naturales suelen tener menos de 9 y jurídicas 9 o más. El dígito de
- * verificación (DV) se calcula automáticamente en segundo plano con el módulo
- * 11 de la DIAN (`nitCheckDigit`) y se adjunta al guardar, por lo que el
- * usuario nunca escribe guiones ni el DV.
+ * Modo solo lectura para técnicos; solo administradores pueden editar.
  */
 export default function TallerScreen() {
   const router = useRouter();
   const { currentUser } = useAuth();
   const { profile, saveProfile } = useWorkshop();
 
-  // Ya no redirigimos a los técnicos, ahora pueden ver el taller en modo solo lectura.
+  const isTechnician = currentUser?.role === 'technician';
 
   const [name, setName] = useState(profile?.name ?? '');
-  // Solo los 9 dígitos base: si el perfil previo guardó 10 (base + DV), se
-  // recortan y el DV se recalcula con el mismo algoritmo.
   const [nit, setNit] = useState(() => normalizeNit(profile?.nit ?? '').slice(0, NIT_MAX_BASE_LENGTH));
   const [address, setAddress] = useState(profile?.address ?? '');
   const [phone, setPhone] = useState(profile?.phone ?? '');
@@ -47,6 +41,15 @@ export default function TallerScreen() {
   const calculatedDv = nit.length > 0 ? nitCheckDigit(nit) : null;
 
   const handleSave = async () => {
+    if (isTechnician) {
+      if (Platform.OS === 'web') {
+        window.alert('Solo el administrador del taller puede editar el membrete y datos de la empresa.');
+      } else {
+        Alert.alert('Acceso denegado', 'Solo el administrador del taller puede editar el membrete y datos de la empresa.');
+      }
+      return;
+    }
+
     const nextErrors: FieldErrors = {};
     if (!name.trim()) {
       nextErrors.name = 'Ingresa el nombre del taller.';
@@ -62,9 +65,6 @@ export default function TallerScreen() {
       return;
     }
 
-    // El DV se adjunta automáticamente: se guardan base + DV (longitud libre).
-    // `saveProfile` espera la confirmación de Supabase y muestra su propio
-    // alert de error en caso de fallo; solo resolvemos aquí si persistió.
     await saveProfile({
       name: name.trim(),
       nit: `${nit}${nitCheckDigit(nit)}`,
@@ -79,8 +79,6 @@ export default function TallerScreen() {
     }
     router.back();
   };
-
-  const isTechnician = currentUser?.role === 'technician';
 
   return (
     <Screen title="Mi Taller">
@@ -231,7 +229,7 @@ const styles = StyleSheet.create({
   readonlyBanner: {
     padding: Spacing.three,
     borderRadius: Shape.lg,
-    backgroundColor: `${Brand.primary}1a`, // Liquid Glass / subtil translúcido
+    backgroundColor: `${Brand.primary}1a`,
     borderColor: `${Brand.primary}66`,
     borderWidth: 1,
     gap: Spacing.one,

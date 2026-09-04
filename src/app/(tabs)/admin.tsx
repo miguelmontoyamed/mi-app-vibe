@@ -49,9 +49,15 @@ export default function AdminScreen() {
     logout,
     generateInviteLink,
     inviteLink,
+    pendingInvitations,
+    createTechnicianInvite,
+    revokeInvitation,
     deleteTechnician,
     updateTechnicianCommission,
   } = useAuth();
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [creatingInvite, setCreatingInvite] = useState(false);
+  const [revokingId, setRevokingId] = useState<string | null>(null);
   const { repairs, inventory } = useRepair();
   const { subscription } = useWorkshop();
   // Una sola suscripción a billing: periodo abierto, cierres históricos,
@@ -258,28 +264,50 @@ export default function AdminScreen() {
     notify(`Comisión de ${u.name} actualizada a ${rate}%.`);
   };
 
-  const handleCreateInvite = () => {
-    // Límite estricto: no se generan enlaces si el taller ya tiene 5 técnicos.
+  const handleCreateInvite = async () => {
     const techCount = users.filter((u) => u.role === 'technician').length;
     if (techCount >= MAX_TECHNICIANS) {
       notify(`Límite alcanzado: el taller tiene el máximo de ${MAX_TECHNICIANS} técnicos permitidos.`);
       return;
     }
-    const url = generateInviteLink();
-    if (!url) {
-      notify('Solo el dueño del taller puede generar enlaces de invitación.');
-      return;
+    setCreatingInvite(true);
+    try {
+      const res = await createTechnicianInvite(inviteEmail.trim() || undefined);
+      if (!res.ok) {
+        notify(res.message ?? 'No se pudo generar la invitación.');
+        return;
+      }
+      setInviteEmail('');
+      notify('¡Enlace de invitación generado! Válido por 24 horas. Cópialo y compártelo con el técnico.');
+    } finally {
+      setCreatingInvite(false);
     }
-    notify('¡Enlace de invitación generado! Vence en 10 minutos. Copia el enlace y compártelo con el técnico.');
   };
 
-  /** Copia el enlace de invitación al portapapeles (web) o lo muestra (native). */
+  const handleCopyUrl = (url: string) => {
+    if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(url).then(() => notify('Enlace copiado al portapapeles.'));
+    } else {
+      notify(`Enlace de invitación:\n\n${url}`);
+    }
+  };
+
   const handleCopyInvite = () => {
     if (!inviteLink) return;
-    if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.clipboard) {
-      navigator.clipboard.writeText(inviteLink.url).then(() => notify('Enlace copiado al portapapeles.'));
-    } else {
-      notify(`Enlace de invitación:\n\n${inviteLink.url}`);
+    handleCopyUrl(inviteLink.url);
+  };
+
+  const handleRevokeInvite = async (id: string) => {
+    setRevokingId(id);
+    try {
+      const ok = await revokeInvitation(id);
+      if (ok) {
+        notify('Invitación revocada con éxito.');
+      } else {
+        notify('No se pudo revocar la invitación.');
+      }
+    } finally {
+      setRevokingId(null);
     }
   };
 
@@ -386,8 +414,37 @@ export default function AdminScreen() {
             Genera un enlace seguro que permite a un técnico registrarse y quedar asociado
             automáticamente al taller{' '}
             <ThemedText type="linkPrimary">{currentUser.name}</ThemedText>.
-            El enlace vence a los 10 minutos por seguridad.
+            Las invitaciones son de un solo uso y vencen en 24 horas.
           </ThemedText>
+
+          <View style={{ marginVertical: Spacing.two, gap: Spacing.one }}>
+            <ThemedText type="small">Correo del técnico (opcional):</ThemedText>
+            <TextInput
+              style={[
+                styles.commissionInput,
+                {
+                  width: '100%',
+                  maxWidth: 360,
+                  height: 40,
+                  color: theme.text,
+                  borderColor: theme.border,
+                  backgroundColor: theme.backgroundElement,
+                  borderRadius: Shape.sm,
+                  paddingHorizontal: Spacing.two,
+                  textAlign: 'left',
+                },
+              ]}
+              placeholder="tecnico@correo.com (dejar vacío para enlace libre)"
+              placeholderTextColor={theme.textSecondary}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              value={inviteEmail}
+              onChangeText={setInviteEmail}
+            />
+            <ThemedText type="small" themeColor="textSecondary" style={{ fontSize: 11 }}>
+              Si especificas el correo, solo una cuenta con ese correo podrá reclamar la invitación.
+            </ThemedText>
+          </View>
 
           <Pressable
             accessibilityRole="button"
@@ -396,10 +453,12 @@ export default function AdminScreen() {
               styles.activateButton,
               { paddingVertical: Spacing.three, alignSelf: 'flex-start' },
               pressed && styles.pressed,
+              creatingInvite && { opacity: 0.6 },
             ]}
+            disabled={creatingInvite}
             onPress={handleCreateInvite}>
             <ThemedText style={styles.activateButtonText}>
-              Generar Enlace de Invitación
+              {creatingInvite ? 'Generando...' : 'Generar Enlace de Invitación'}
             </ThemedText>
           </Pressable>
 
@@ -407,7 +466,7 @@ export default function AdminScreen() {
             <View style={styles.linkDisplayBox}>
               <View style={styles.inviteHeader}>
                 <ThemedText type="smallBold" style={{ color: Brand.success }}>
-                  Enlace generado — vence en 10 min
+                  Enlace generado — vence en 24 horas
                 </ThemedText>
                 <ThemedText type="small" themeColor="textSecondary">
                   Creado: {new Date(inviteLink.createdAt).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}
@@ -432,8 +491,60 @@ export default function AdminScreen() {
             </View>
           ) : (
             <ThemedText type="small" themeColor="textSecondary" style={{ fontStyle: 'italic' }}>
-              Aún no hay un enlace activo. Genera uno para invitar a un técnico.
+              Aún no hay un enlace activo recién generado. Puedes generar uno arriba.
             </ThemedText>
+          )}
+
+          {/* Lista de invitaciones pendientes en base de datos */}
+          {pendingInvitations.length > 0 && (
+            <View style={{ marginTop: Spacing.three, gap: Spacing.two }}>
+              <ThemedText type="smallBold">Invitaciones Pendientes ({pendingInvitations.length})</ThemedText>
+              {pendingInvitations.map((inv) => (
+                <View
+                  key={inv.id}
+                  style={[
+                    styles.techRow,
+                    {
+                      borderBottomColor: theme.border,
+                      paddingVertical: Spacing.two,
+                      backgroundColor: `${Brand.primary}0a`,
+                      borderRadius: Shape.sm,
+                      paddingHorizontal: Spacing.two,
+                    },
+                  ]}>
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <ThemedText type="smallBold">
+                      {inv.email ? `Para: ${inv.email}` : 'Enlace libre (un solo uso)'}
+                    </ThemedText>
+                    <ThemedText type="small" themeColor="textSecondary" style={{ fontSize: 11 }}>
+                      Vence: {new Date(inv.expires_at).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' })}
+                    </ThemedText>
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: Spacing.two }}>
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.copyButton,
+                        pressed && styles.pressed,
+                      ]}
+                      onPress={() => handleCopyUrl(inv.url)}>
+                      <ThemedText style={styles.copyButtonText}>Copiar</ThemedText>
+                    </Pressable>
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.deleteTechButton,
+                        pressed && styles.pressed,
+                        revokingId === inv.id && { opacity: 0.5 },
+                      ]}
+                      disabled={revokingId === inv.id}
+                      onPress={() => handleRevokeInvite(inv.id)}>
+                      <ThemedText style={styles.deleteTechText}>
+                        {revokingId === inv.id ? '...' : 'Revocar'}
+                      </ThemedText>
+                    </Pressable>
+                  </View>
+                </View>
+              ))}
+            </View>
           )}
         </ThemedView>
       )}

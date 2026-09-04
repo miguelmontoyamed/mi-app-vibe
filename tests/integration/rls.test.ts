@@ -274,14 +274,14 @@ describe('RLS integration — 18 casos', () => {
     );
   });
 
-  it('T3. Technician DELETE repair — permitido', { skip }, async () => {
-    await expectAllowed(() =>
+  it('T3. Technician DELETE repair — BLOQUEADO', { skip }, async () => {
+    await expectBlocked(() =>
       tech.from('repairs').delete().eq('id', `TRM-T1-${RUN % 10000}`)
     );
   });
 
-  it('T4. Technician UPSERT workshop_profiles — permitido (taller compartido)', { skip }, async () => {
-    await expectAllowed(() =>
+  it('T4. Technician UPSERT workshop_profiles — BLOQUEADO (solo lectura)', { skip }, async () => {
+    await expectBlocked(() =>
       tech.from('workshop_profiles').upsert(
         { workshop_id: workshopId, name: 'QA Taller', nit: '9012345678' },
         { onConflict: 'workshop_id' }
@@ -289,8 +289,8 @@ describe('RLS integration — 18 casos', () => {
     );
   });
 
-  it('T5. Technician INSERT inventory — permitido', { skip }, async () => {
-    await expectAllowed(() =>
+  it('T5. Technician INSERT inventory — BLOQUEADO (solo admin crea catálogo)', { skip }, async () => {
+    await expectBlocked(() =>
       tech.from('inventory').insert({ workshop_id: workshopId, name: `Repuesto T5 ${RUN}`, stock: 2, price: 5000 })
     );
   });
@@ -322,6 +322,24 @@ describe('RLS integration — 18 casos', () => {
   it('T9. UPDATE repair de OTRO taller (cross-workshop) — BLOQUEADO', { skip }, async () => {
     await expectBlocked(() =>
       tech.from('repairs').update({ status: 'Listo' }).eq('id', `TRM-FOR-${RUN % 10000}`)
+    );
+  });
+
+  it('T10. Technician UPDATE propia comision — BLOQUEADO', { skip }, async () => {
+    await expectBlocked(() =>
+      tech.from('profiles').update({ commission_rate: 0.95 }).eq('id', techUserId)
+    );
+  });
+
+  it('T11. Technician INSERT workshop_invitations — BLOQUEADO', { skip }, async () => {
+    await expectBlocked(() =>
+      tech.from('workshop_invitations').insert({
+        workshop_id: workshopId,
+        invited_by: techUserId,
+        token: `token-intruder-${RUN}`,
+        role: 'technician',
+        expires_at: new Date(Date.now() + 3600000).toISOString(),
+      })
     );
   });
 });

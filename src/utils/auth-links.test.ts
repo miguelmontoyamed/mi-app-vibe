@@ -8,6 +8,9 @@ import {
   validateInviteToken,
   buildInviteUrl,
   INVITE_EXPIRY_MS,
+  savePendingInviteToken,
+  getPendingInviteToken,
+  clearPendingInviteToken,
   type InviteToken,
 } from './auth-links.ts';
 
@@ -45,8 +48,16 @@ describe('auth-links utils', () => {
   });
 
   it('debe retornar null al decodificar un token malformado o JSON inválido', () => {
-    assert.strictEqual(decodeInviteToken('not-a-token'), null);
+    assert.strictEqual(decodeInviteToken('not-a-token-!@#$'), null);
     assert.strictEqual(decodeInviteToken('{"invalid": true}'), null);
+  });
+
+  it('debe decodificar un token hexadecimal criptográfico directo', () => {
+    const hexToken = 'a1b2c3d4e5f678901234567890abcdef1234567890abcdef1234567890abcdef';
+    const decoded = decodeInviteToken(hexToken);
+
+    assert.ok(decoded);
+    assert.strictEqual(decoded.token, hexToken);
   });
 
   it('debe validar un token vigente correctamente', () => {
@@ -65,7 +76,7 @@ describe('auth-links utils', () => {
       token: '1234567890ABCDEF',
       workshopId,
       workshopName,
-      createdAt: Date.now() - 20 * 60 * 1000,
+      createdAt: Date.now() - 25 * 60 * 60 * 1000,
       expiresAt: Date.now() - 5 * 60 * 1000, // 5 min atrás
     };
 
@@ -82,5 +93,12 @@ describe('auth-links utils', () => {
 
     assert.ok(url.includes('/signup?invite='));
     assert.ok(url.includes(token.workshopId) || url.includes(encodeURIComponent(token.workshopId)));
+  });
+
+  it('debe construir la URL de invitación con token seguro en formato string', () => {
+    const hexToken = 'abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890';
+    const url = buildInviteUrl(hexToken);
+
+    assert.ok(url.includes(`/signup?invite=${hexToken}`));
   });
 });

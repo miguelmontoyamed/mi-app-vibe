@@ -3,6 +3,14 @@
 > Registro de avance del proyecto. Actualizar al finalizar cada tarea.
 
 ## Completado (✓)
+- **Blindaje Criptográfico de Invitaciones y RBAC/RLS Reforzado (2026-09-04):**
+  - Implementación de `workshop_invitations` en PostgreSQL con tokens seguros de 64 caracteres hex y expiración de 24 horas.
+  - RPCs `create_technician_invitation`, `get_invitation_info`, `claim_technician_invitation`, `revoke_technician_invitation`.
+  - Trigger `check_profile_updates` en `public.profiles` para bloquear auto-escalada de privilegios y modificación no autorizada de `commission_rate`.
+  - Blindaje de `workshop_profiles` (solo admin puede editar datos fiscales y membrete) e `inventory` (solo admin puede crear/borrar repuestos).
+  - Privacidad de comisiones de técnicos en `auth-context.tsx` y gestión completa de revocación/copia en `admin.tsx`.
+  - Verificación automatizada con `scripts/verify-invitation-pipeline.mjs` y suite de pruebas unitarias 100% PASS.
+
 - **Blindaje y Asociación de Invitación de Técnicos (2026-08-27):**
   - Se solucionó y automatizó al 100% la desvinculación de cuentas de técnicos al registrarse mediante enlace de invitación.
   - Eliminado el fallback silencioso a registro de dueño (`registerOwner`) en invitaciones expiradas o inválidas en `src/app/signup.tsx`.

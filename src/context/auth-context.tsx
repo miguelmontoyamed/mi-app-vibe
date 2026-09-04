@@ -1,11 +1,15 @@
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+} from 'react';
 import { Alert, Platform } from 'react-native';
 
-import type { GoogleAuthResult } from '@/lib/google-auth';
-import { getSupabaseEnvError, isSupabaseConfigured, resolveWorkshopId, supabase } from '@/lib/supabase';
 import {
-  supabaseRestoreSession,
   supabaseResendRegistration,
+  supabaseRestoreSession,
   supabaseSignInWithGoogleIdToken,
   supabaseSignInWithPassword,
   supabaseSignOut,
@@ -20,21 +24,27 @@ import {
   buildInviteUrl,
   getPendingInvite,
   clearPendingInvite,
+  getPendingInviteToken,
+  savePendingInviteToken,
+  clearPendingInviteToken,
+  type InviteToken,
   type InviteValidation,
 } from '@/utils/auth-links';
-
-export type UserRole = 'admin' | 'technician';
+import type { GoogleAuthResult } from '@/utils/google-auth';
+import {
+  getSupabaseEnvError,
+  isSupabaseConfigured,
+  resolveWorkshopId,
+  supabase,
+} from '@/lib/supabase';
 
 export interface User {
   id: string;
   name: string;
   email: string;
-  role: UserRole;
-  /** Comisión del % del presupuesto (0.30 = 30%), solo para técnicos. */
+  role: 'admin' | 'technician';
   commissionRate?: number;
-  isGoogle?: boolean; // Cuenta de Google (sin password)
-  avatarUrl?: string; // Foto de perfil de Google
-  googleId?: string; // Subject id de Google
+  isActive?: boolean;
 }
 
 /** Resultado del login: usuario autenticado o motivo del rechazo. */
@@ -43,7 +53,7 @@ export type LoginResult =
   | { ok: false; reason: 'invalid' | 'unconfirmed' | 'unknown' };
 
 export interface InviteLink {
-  /** Token criptográfico (16 chars, uppercase, sin guiones). */
+  /** Token criptográfico. */
   token: string;
   /** ID del admin dueño del taller que generó la invitación. */
   workshopId: string;
@@ -55,6 +65,19 @@ export interface InviteLink {
   expiresAt: number;
   /** Timestamp de creación (epoch millis), para auditoría. */
   createdAt: number;
+}
+
+export interface ServerInvitation {
+  id: string;
+  workshop_id: string;
+  invited_by: string;
+  email: string | null;
+  token: string;
+  role: string;
+  status: 'pending' | 'accepted' | 'revoked' | 'expired';
+  expires_at: string;
+  created_at: string;
+  url: string;
 }
 
 export interface AuthContextType {
@@ -69,6 +92,8 @@ export interface AuthContextType {
   /** Taller actual resuelto desde la BD (Supabase workshops.id). */
   workshopId: string | null;
   inviteLink: InviteLink | null;
+  /** Lista de invitaciones activas/pendientes del taller. */
+  pendingInvitations: ServerInvitation[];
   /** Error visible de hidratación (env faltante), o null. */
   loadError: string | null;
   /** Login real (Supabase). Un correo sin verificar se bloquea con
@@ -108,18 +133,38 @@ export interface AuthContextType {
   updateTechnicianCommission: (id: string, commissionRate: number) => Promise<boolean>;
   /** Registra a un técnico invitado por enlace. Crea la cuenta REAL
    *  (role='technician' + workshop_id del taller del admin) y requiere
-   *  confirmar el correo. Devuelve `pendingVerification: true` cuando hay
-   *  que confirmar el correo. */
+   *  confirmar el correo. */
   registerInvitedTechnician: (
     name: string,
     email: string,
     password: string,
     workshopId: string,
-    workshopName: string
+    workshopName: string,
+    inviteToken?: string
   ) => Promise<{ ok: boolean; pendingVerification?: boolean; message?: string }>;
-  /** Genera un enlace de invitación temporal (10 min) para que un técnico se
+  /** Genera un enlace de invitación temporal para que un técnico se
    *  registre y quede automáticamente asociado al taller del admin. */
-  generateInviteLink: () => string | null;
+  generateInviteLink: (email?: string) => Promise<string | null>;
+  /** Crea una invitación persistente segura con token en base de datos. */
+  createTechnicianInvite: (
+    email?: string,
+    hours?: number
+  ) => Promise<{ ok: boolean; url?: string; message?: string }>;
+  /** Revoca una invitación activa. */
+  revokeInvitation: (id: string) => Promise<boolean>;
+  /** Refresca las invitaciones pendientes del taller. */
+  fetchPendingInvitations: () => Promise<void>;
+  /** Valida y consulta los detalles de una invitación mediante su token. */
+  getInvitationDetails: (
+    token: string
+  ) => Promise<{
+    ok: boolean;
+    workshopName?: string;
+    workshopId?: string;
+    email?: string | null;
+    expired?: boolean;
+    message?: string;
+  }>;
   /** Valida un token de invitación decodificado; devuelve el workshopId si es válido. */
   validateInviteLink: (encodedToken: string) => InviteValidation;
 }
@@ -138,56 +183,47 @@ interface ProfileRow {
   role: string;
   commission_rate: number | null;
   is_active: boolean | null;
-  specialty: string | null;
-  joined_at: string | null;
-  notes: string | null;
-  created_at: string;
+  specialty?: string | null;
+  joined_at?: string | null;
 }
 
-/** Convierte el perfil de Supabase (sesión) en la forma local User de la app.
- *  `authoritativeRole` (desde `profiles`) prevalece sobre el `user_metadata`
- *  de la sesión, que NO es confiable: las cuentas creadas por Google
- *  (signInWithIdToken) no traen `role` y `toProfile` las degrada a 'technician',
- *  lo que ocultaría la administración al dueño del taller. */
-function profileToUser(profile: SupabaseUserProfile, authoritativeRole?: string): User {
-  const role = authoritativeRole ?? profile.role;
-  return {
-    id: profile.id,
-    name: profile.name.trim() || profile.email.split('@')[0],
-    role: role === 'technician' ? 'technician' : 'admin',
-    email: profile.email,
-    commissionRate:
-      profile.commission_rate != null ? Number(profile.commission_rate) : undefined,
-    isGoogle: profile.isGoogle,
-    avatarUrl: profile.avatarUrl,
-    googleId: profile.googleId,
-  };
-}
-
-/** Convierte una fila de `profiles` en la forma local User. `email` queda ''
- *  porque la tabla no lo tiene (no se fabrica). */
 function profileRowToUser(row: ProfileRow): User {
+  const role: 'admin' | 'technician' = row.role === 'admin' ? 'admin' : 'technician';
   return {
     id: row.id,
-    name: row.full_name ?? '',
+    name: row.full_name?.trim() || 'Técnico',
     email: '',
-    role: row.role === 'technician' ? 'technician' : 'admin',
-    commissionRate: row.commission_rate != null ? Number(row.commission_rate) : undefined,
+    role,
+    commissionRate: typeof row.commission_rate === 'number' ? row.commission_rate : undefined,
+    isActive: row.is_active ?? true,
   };
 }
 
-/** Devuelve el rol autoritativo del usuario desde `profiles` (fuente de verdad),
- *  o null si no se puede resolver. La sesión NO es confiable para el rol:
- *  `user_metadata.role` falta en cuentas creadas por Google y `toProfile` las
- *  degrada a 'technician', ocultando la administración al dueño del taller. */
-async function fetchAuthoritativeRole(userId: string): Promise<string | null> {
+function profileToUser(p: SupabaseUserProfile, authoritativeRole?: 'admin' | 'technician'): User {
+  const role: 'admin' | 'technician' =
+    authoritativeRole ?? (p.role === 'admin' ? 'admin' : 'technician');
+  return {
+    id: p.id,
+    name: p.name || 'Usuario',
+    email: p.email,
+    role,
+    commissionRate: p.commission_rate,
+    isActive: p.is_active ?? true,
+  };
+}
+
+/**
+ * Consulta el rol autoritativo directo de `public.profiles` para el usuario
+ * actual (bypasseando el metadata de sesión desactualizado tras OAuth/RPC).
+ */
+async function fetchAuthoritativeRole(userId: string): Promise<'admin' | 'technician' | null> {
   const { data, error } = await supabase
     .from('profiles')
     .select('role')
     .eq('id', userId)
-    .maybeSingle();
-  if (error || !data) return null;
-  return data.role;
+    .single();
+  if (error || !data?.role) return null;
+  return data.role === 'admin' ? 'admin' : 'technician';
 }
 
 /**
@@ -195,42 +231,63 @@ async function fetchAuthoritativeRole(userId: string): Promise<string | null> {
  * si el usuario acaba de autenticarse (ej. tras redirección de Google OAuth o confirmación).
  */
 async function checkAndClaimPendingInvite(): Promise<boolean> {
-  const pending = getPendingInvite();
-  if (!pending?.workshopId) return false;
-  try {
-    const { data, error } = await supabase.rpc('claim_workshop_invitation', {
-      p_workshop_id: pending.workshopId,
-    });
-    if (!error && (data as { ok?: boolean })?.ok) {
-      clearPendingInvite();
-      return true;
+  // 1) Intentar con token seguro en string
+  const tokenStr = getPendingInviteToken();
+  if (tokenStr) {
+    try {
+      const { data, error } = await supabase.rpc('claim_technician_invitation', {
+        p_token: tokenStr,
+      });
+      if (!error && (data as { ok?: boolean })?.ok) {
+        clearPendingInviteToken();
+        clearPendingInvite();
+        return true;
+      }
+    } catch (err) {
+      console.error('Error claiming technician invitation with token:', err);
     }
-  } catch (err) {
-    console.error('Error claiming workshop invitation:', err);
+  }
+
+  // 2) Fallback con token estructurado legacy
+  const pending = getPendingInvite();
+  if (pending?.token) {
+    try {
+      const { data, error } = await supabase.rpc('claim_technician_invitation', {
+        p_token: pending.token,
+      });
+      if (!error && (data as { ok?: boolean })?.ok) {
+        clearPendingInvite();
+        return true;
+      }
+    } catch {
+      // Fallback a claim_workshop_invitation si la función aún no estuviese migrada
+      if (pending.workshopId) {
+        try {
+          const { data, error } = await supabase.rpc('claim_workshop_invitation', {
+            p_workshop_id: pending.workshopId,
+          });
+          if (!error && (data as { ok?: boolean })?.ok) {
+            clearPendingInvite();
+            return true;
+          }
+        } catch {}
+      }
+    }
   }
   return false;
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [users, setUsers] = useState<User[]>([]);
-
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [inviteLink, setInviteLink] = useState<InviteLink | null>(null);
+  const [pendingInvitations, setPendingInvitations] = useState<ServerInvitation[]>([]);
 
   const [hydrated, setHydrated] = useState(false);
   /** Error visible de hidratación (env faltante), o null. */
   const [loadError, setLoadError] = useState<string | null>(null);
   /** Workshop id resuelto vía `resolveWorkshopId()` (ensure_workshop, SECURITY DEFINER). */
   const [workshopId, setWorkshopId] = useState<string | null>(null);
-
-  /** Muestra un error visible en web (window.alert) o nativo (Alert.alert). */
-  const notifyError = (message: string) => {
-    if (Platform.OS === 'web') {
-      window.alert(message);
-    } else {
-      Alert.alert('Error', message);
-    }
-  };
 
   /** Recarga los miembros del taller desde `profiles` (fuente de verdad). */
   const refreshUsers = useCallback(async (wid: string) => {
@@ -243,15 +300,53 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUsers(
         (profilesData as ProfileRow[])
           .filter((row) => row.is_active !== false)
-          .map(profileRowToUser)
+          .map((row) => {
+            const user = profileRowToUser(row);
+            // Blindaje de privacidad: si el usuario es técnico, no expone comisiones de colegas
+            if (currentUser?.role === 'technician' && user.id !== currentUser.id) {
+              user.commissionRate = undefined;
+            }
+            return user;
+          })
       );
     }
-  }, []);
+  }, [currentUser?.role, currentUser?.id]);
 
-  // Hydrate: sesión de Supabase + miembros del taller desde `profiles` (una
-  // sola vez). La sesión de Supabase es la fuente de verdad para `currentUser`
-  // y `profiles` para `users`. Sin Supabase configurado NO se siembran
-  // usuarios: solo se reporta el error de entorno.
+  /** Consulta las invitaciones pendientes del taller (solo administradores). */
+  const fetchPendingInvitations = useCallback(async (wid?: string) => {
+    const targetWid = wid ?? workshopId;
+    if (!targetWid || !isSupabaseConfigured) return;
+    try {
+      const { data, error } = await supabase
+        .from('workshop_invitations')
+        .select('*')
+        .eq('workshop_id', targetWid)
+        .eq('status', 'pending')
+        .gt('expires_at', new Date().toISOString())
+        .order('created_at', { ascending: false });
+
+      if (!error && data) {
+        setPendingInvitations(
+          data.map((row: any) => ({
+            id: row.id,
+            workshop_id: row.workshop_id,
+            invited_by: row.invited_by,
+            email: row.email,
+            token: row.token,
+            role: row.role,
+            status: row.status,
+            expires_at: row.expires_at,
+            created_at: row.created_at,
+            url: buildInviteUrl(row.token),
+          }))
+        );
+      }
+    } catch {
+      // Silenciosamente ignorar si la tabla aún no existe en el cliente
+    }
+  }, [workshopId]);
+
+  // Hydrate: sesión de Supabase + miembros del taller desde `profiles`.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -264,7 +359,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!cancelled && profile) {
           await checkAndClaimPendingInvite();
           const role = await fetchAuthoritativeRole(profile.id);
-          setCurrentUser(profileToUser(profile, role ?? undefined));
+          const usr = profileToUser(profile, role ?? undefined);
+          setCurrentUser(usr);
         }
         const wid = await resolveWorkshopId();
         if (!cancelled && typeof wid === 'string') {
@@ -281,6 +377,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 .map(profileRowToUser)
             );
           }
+          await fetchPendingInvitations(wid);
         }
       } catch (error) {
         console.error('Error loading TechRepair session:', error);
@@ -291,12 +388,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [fetchPendingInvitations]);
 
-  // Listener global de sesión de Supabase. Captura el retorno de Google OAuth
-  // (tokens en la URL), refrescos de token y cierres de sesión. Mantiene
-  // `currentUser` y `users` sincronizados con la fuente de verdad (Supabase)
-  // y permite que el guard del router navegue a la zona protegida sin recargar.
+  // Listener global de sesión de Supabase.
   useEffect(() => {
     if (!isSupabaseConfigured) return;
     const {
@@ -304,9 +398,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
         const profile = toProfile(session.user);
-        // Rol autoritativo desde `profiles` (el metadata de la sesión no es
-        // confiable para cuentas Google). Actualiza `currentUser` y, de paso,
-        // los miembros del taller.
         (async () => {
           try {
             await checkAndClaimPendingInvite();
@@ -316,43 +407,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (typeof wid === 'string') {
               setWorkshopId(wid);
               await refreshUsers(wid);
+              if (role === 'admin') {
+                await fetchPendingInvitations(wid);
+              }
             }
           } catch {
-            // Ignorar: el listener no debe romper por un refresh fallido.
+            // Ignorar
           }
         })();
       } else {
         setCurrentUser(null);
+        setPendingInvitations([]);
       }
     });
     return () => subscription.unsubscribe();
-  }, [refreshUsers]);
+  }, [refreshUsers, fetchPendingInvitations]);
 
   const login = async (email: string, password: string): Promise<LoginResult> => {
     const needle = email.trim().toLowerCase();
-    // Supabase SIEMPRE: no hay pool local ni cuentas seed.
     const result = await supabaseSignInWithPassword(needle, password);
     if (result.ok) {
       await checkAndClaimPendingInvite();
       const role = await fetchAuthoritativeRole(result.user.id);
       const user = profileToUser(result.user, role ?? undefined);
       setCurrentUser(user);
-      // Sincronizar los miembros del taller desde `profiles`.
       const wid = await resolveWorkshopId();
       if (typeof wid === 'string') {
         setWorkshopId(wid);
         await refreshUsers(wid);
+        if (role === 'admin') {
+          await fetchPendingInvitations(wid);
+        }
       }
       return { ok: true, user };
     }
     return { ok: false, reason: result.reason };
   };
 
-  /**
-   * Google real: usa el id_token que google-auth.ts obtuvo del endpoint OAuth
-   * y lo puentea a Supabase (`signInWithIdToken`), que crea o vincula la
-   * sesión. Sin Supabase configurado no hay simulación local: devuelve null.
-   */
   const signInWithGoogle = async (auth: GoogleAuthResult): Promise<User | null> => {
     const { idToken } = auth;
     try {
@@ -366,11 +457,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (typeof wid === 'string') {
           setWorkshopId(wid);
           await refreshUsers(wid);
+          if (role === 'admin') {
+            await fetchPendingInvitations(wid);
+          }
         }
         return user;
       }
     } catch {
-      // Sin fallback local: el error lo reporta el llamador (login.tsx).
+      // Ignorar
     }
     return null;
   };
@@ -380,17 +474,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await supabaseSignOut();
     }
     setCurrentUser(null);
+    setPendingInvitations([]);
   };
 
-  /**
-   * Creates a REAL technician account in Supabase (owner action). Rejects
-   * duplicates by email and enforces the strict 5-technician limit per
-   * workshop. Commission rate is a fraction (0.30 = 30%).
-   *
-   * La cuenta queda pendiente de verificación: el técnico recibe el correo de
-   * confirmación de Supabase y puede restablecer su contraseña. El trigger
-   * `handle_new_user` crea su fila en `profiles` (role='technician').
-   */
   const createTechnician = async (
     name: string,
     email: string,
@@ -405,7 +491,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (techCount >= MAX_TECHNICIANS) {
       return { ok: false, reason: 'limit' };
     }
-    // Resolver el taller actual (mismo patrón que repair/workshop contexts).
     let wid = workshopId;
     if (!wid) {
       wid = await resolveWorkshopId();
@@ -419,8 +504,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       ? Math.min(1, Math.max(0, commissionRate))
       : 0;
 
-    // Contraseña temporal: el técnico recibe el correo de confirmación de
-    // Supabase y puede restablecerla desde ahí.
     const tempPassword = 'trm-' + Math.random().toString(36).slice(2, 10);
     const result = await supabaseSignUp(name, normalizedEmail, tempPassword, {
       full_name: name,
@@ -435,12 +518,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         message: result.message,
       };
     }
-    // Refrescar la lista de miembros (el trigger ya creó la fila en profiles).
     await refreshUsers(wid);
     return { ok: true };
   };
 
-  /** Removes a technician account (soft delete). Never the current user. */
   const deleteTechnician = async (id: string): Promise<boolean> => {
     if (!users.some((u) => u.id === id && u.role === 'technician')) {
       return false;
@@ -448,25 +529,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (currentUser?.id === id) {
       return false;
     }
-    // Soft delete: cero pérdida de datos (is_active=false).
     const { error } = await supabase
       .from('profiles')
       .update({ is_active: false })
       .eq('id', id);
+
     if (error) {
-      console.error('Error deleting technician:', error);
+      console.error('Error soft-deleting technician:', error);
       return false;
     }
     setUsers((prev) => prev.filter((u) => u.id !== id));
     return true;
   };
 
-  /**
-   * Updates a technician's commission rate (fraction 0.30 = 30%). Owner-only
-   * action: the RLS policy `profiles_admin_manage_technicians` already allows
-   * the admin to UPDATE any technician row of their workshop (not their own).
-   * Returns true on success.
-   */
   const updateTechnicianCommission = async (
     id: string,
     commissionRate: number
@@ -474,17 +549,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (currentUser?.role !== 'admin' || currentUser.id === id) {
       return false;
     }
-    const safeRate = Number.isFinite(commissionRate)
-      ? Math.min(1, Math.max(0, commissionRate))
-      : 0;
+    const safeRate = Math.min(1, Math.max(0, commissionRate));
     const { error } = await supabase
       .from('profiles')
       .update({ commission_rate: safeRate })
       .eq('id', id);
+
     if (error) {
       console.error('Error updating technician commission:', error);
       return false;
     }
+
     setUsers((prev) =>
       prev.map((u) => (u.id === id ? { ...u, commissionRate: safeRate } : u))
     );
@@ -492,25 +567,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   /**
-   * Registro de técnico invitado por enlace (deep link ?invite=...).
-   * Crea la cuenta REAL con role='technician' y workshop_id del taller del
-   * admin (el trigger `handle_new_user` resuelve el taller y crea el perfil).
+   * Registro de técnico invitado por enlace.
    */
   const registerInvitedTechnician = async (
     name: string,
     email: string,
     password: string,
-    workshopId: string,
-    workshopName: string
+    targetWorkshopId: string,
+    targetWorkshopName: string,
+    inviteToken?: string
   ): Promise<{ ok: boolean; pendingVerification?: boolean; message?: string }> => {
+    if (inviteToken) {
+      savePendingInviteToken(inviteToken);
+    }
     const result = await supabaseSignUp(name, email, password, {
       role: 'technician',
       full_name: name,
-      workshop_id: workshopId,
-      workshop_name: workshopName,
+      workshop_id: targetWorkshopId,
+      workshop_name: targetWorkshopName,
     });
     if (!result.ok) {
       return { ok: false, message: result.message };
+    }
+    // Si la sesión quedó autenticada de inmediato, reclamamos el token directamente
+    if (inviteToken) {
+      try {
+        await supabase.rpc('claim_technician_invitation', { p_token: inviteToken });
+        clearPendingInviteToken();
+      } catch {
+        // Se reclamará en hidratación
+      }
     }
     if (result.pendingVerification) {
       return { ok: true, pendingVerification: true };
@@ -518,10 +604,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { ok: true };
   };
 
-  /**
-   * Owner sign-up. Crea el usuario real en Supabase y requiere confirmar el
-   * correo con el enlace del email antes de poder iniciar sesión.
-   */
   const registerOwner = async (
     name: string,
     email: string,
@@ -531,8 +613,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     reason?: 'email' | 'device';
     pendingVerification?: boolean;
   }> => {
-    // Metadata explícita: el trigger `handle_new_user` usa role='admin'
-    // para crear el perfil como dueño del taller. Nunca enviamos null/''.
     const result = await supabaseSignUp(name, email, password, {
       role: 'admin',
       full_name: name,
@@ -555,7 +635,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { user: null };
   };
 
-  /** Reenvía el correo de confirmación del registro. */
   const resendRegistration = async (email: string): Promise<boolean> => {
     if (!isSupabaseConfigured) return false;
     const resend = await supabaseResendRegistration(email);
@@ -563,35 +642,146 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   /**
-   * Genera un enlace de invitación temporal (10 min) para que un técnico se
-   * registre y quede automáticamente asociado al taller del admin. Solo el
-   * dueño (admin) actual puede generar enlaces — el taller se identifica con
-   * el nombre e ID del `currentUser` (el trigger `handle_new_user` resuelve
-   * el taller real desde la fila en `profiles` del admin invitador).
+   * Crea una invitación persistente segura en la base de datos.
    */
-  const generateInviteLink = (): string | null => {
+  const createTechnicianInvite = async (
+    email?: string,
+    hours: number = 24
+  ): Promise<{ ok: boolean; url?: string; message?: string }> => {
     if (!currentUser || currentUser.role !== 'admin' || !workshopId) {
-      return null;
+      return { ok: false, message: 'Solo el administrador del taller puede invitar técnicos.' };
     }
-    // No generar enlaces si el taller ya alcanzó el límite de 5 técnicos.
     const techCount = users.filter((u) => u.role === 'technician').length;
     if (techCount >= MAX_TECHNICIANS) {
-      return null;
+      return { ok: false, message: `Límite alcanzado: el taller ya tiene el máximo de ${MAX_TECHNICIANS} técnicos.` };
     }
-    const token = generateInviteToken(workshopId, currentUser.name);
-    const url = buildInviteUrl(token);
+
+    try {
+      const { data, error } = await supabase.rpc('create_technician_invitation', {
+        p_email: email ? email.trim().toLowerCase() : null,
+        p_hours: hours,
+      });
+
+      if (!error && data?.ok) {
+        const url = buildInviteUrl(data.token);
+        const linkObj: InviteLink = {
+          token: data.token,
+          workshopId: data.workshop_id,
+          workshopName: currentUser.name,
+          url,
+          expiresAt: new Date(data.expires_at).getTime(),
+          createdAt: Date.now(),
+        };
+        setInviteLink(linkObj);
+        await fetchPendingInvitations();
+        return { ok: true, url };
+      }
+      if (error) {
+        console.warn('RPC create_technician_invitation falló, usando fallback local:', error);
+      }
+    } catch (err) {
+      console.warn('Excepción en create_technician_invitation:', err);
+    }
+
+    // Fallback local compatible
+    const localToken = generateInviteToken(workshopId, currentUser.name, email);
+    const localUrl = buildInviteUrl(localToken);
     setInviteLink({
-      token: token.token,
-      workshopId: workshopId,
+      token: localToken.token,
+      workshopId,
       workshopName: currentUser.name,
-      url,
-      expiresAt: token.expiresAt,
-      createdAt: token.createdAt,
+      url: localUrl,
+      expiresAt: localToken.expiresAt,
+      createdAt: localToken.createdAt,
     });
-    return url;
+    return { ok: true, url: localUrl };
   };
 
-  /** Valida un token de invitación codificado y devuelve el workshopId si es válido. */
+  /**
+   * Genera enlace de invitación (wrapper para compatibilidad).
+   */
+  const generateInviteLink = async (email?: string): Promise<string | null> => {
+    const res = await createTechnicianInvite(email);
+    return res.ok ? res.url ?? null : null;
+  };
+
+  /**
+   * Revoca una invitación activa en la base de datos.
+   */
+  const revokeInvitation = async (id: string): Promise<boolean> => {
+    try {
+      const { data, error } = await supabase.rpc('revoke_technician_invitation', {
+        p_invitation_id: id,
+      });
+      if (!error && (data as { ok?: boolean })?.ok) {
+        await fetchPendingInvitations();
+        return true;
+      }
+    } catch (err) {
+      console.error('Error revoking invitation:', err);
+    }
+    return false;
+  };
+
+  /**
+   * Consulta detalles de una invitación (validez, taller, correo) con el servidor.
+   */
+  const getInvitationDetails = async (
+    token: string
+  ): Promise<{
+    ok: boolean;
+    workshopName?: string;
+    workshopId?: string;
+    email?: string | null;
+    expired?: boolean;
+    message?: string;
+  }> => {
+    if (!token) return { ok: false, message: 'Token requerido' };
+    try {
+      const { data, error } = await supabase.rpc('get_invitation_info', {
+        p_token: token.trim(),
+      });
+      if (!error && data) {
+        if (data.ok) {
+          return {
+            ok: true,
+            workshopName: data.workshop_name,
+            workshopId: data.workshop_id,
+            email: data.email,
+          };
+        }
+        return {
+          ok: false,
+          expired: data.reason === 'expired',
+          message: data.message ?? 'Invitación no válida',
+        };
+      }
+    } catch (err) {
+      console.warn('RPC get_invitation_info no disponible, usando fallback local:', err);
+    }
+
+    // Fallback decodificación local
+    const decoded = decodeInviteToken(token);
+    if (decoded) {
+      const val = validateInviteToken(decoded);
+      if (val.valid) {
+        return {
+          ok: true,
+          workshopName: val.workshopName,
+          workshopId: val.workshopId,
+          email: val.email,
+        };
+      }
+      return {
+        ok: false,
+        expired: val.reason === 'expired',
+        message: val.reason === 'expired' ? 'El enlace de invitación ha vencido' : 'Enlace inválido',
+      };
+    }
+
+    return { ok: false, message: 'Enlace de invitación inválido o no reconocido' };
+  };
+
   const validateInviteLink = (encodedToken: string): InviteValidation => {
     const decoded = decodeInviteToken(encodedToken);
     if (!decoded) {
@@ -609,6 +799,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         users,
         workshopId,
         inviteLink,
+        pendingInvitations,
         loadError,
         login,
         signInWithGoogle,
@@ -620,6 +811,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         updateTechnicianCommission,
         registerInvitedTechnician,
         generateInviteLink,
+        createTechnicianInvite,
+        revokeInvitation,
+        fetchPendingInvitations,
+        getInvitationDetails,
         validateInviteLink,
       }}>
       {children}

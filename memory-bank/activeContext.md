@@ -4,6 +4,16 @@
 > Actualizar al finalizar cada tarea (ver `progress.md`).
 
 ## Estado Actual (Consolidado — verificado contra el código)
+- **Blindaje Criptográfico de Invitaciones y RBAC/RLS Reforzado (2026-09-04):**
+  - **Tabla persistente de invitaciones:** Creada `public.workshop_invitations` con tokens criptográficos únicos (64 hex), vigencia de 24 horas y seguimiento de estado (`pending`, `accepted`, `revoked`, `expired`).
+  - **RPCs Seguras:** `create_technician_invitation`, `get_invitation_info`, `claim_technician_invitation`, `revoke_technician_invitation`. Deshabilitada la antigua RPC vulnerable `claim_workshop_invitation(uuid)`.
+  - **Un solo uso y restricción de correo:** Las invitaciones se consumen atómicamente y pueden asignarse a un correo específico para evitar que enlaces compartidos sean reclamados por terceros.
+  - **Gestión de Invitaciones en Admin (`admin.tsx`):** Lista en vivo de invitaciones pendientes con opción de copiar enlace y botón de revocación inmediata.
+  - **Protección de Perfiles (RLS & Triggers):** Trigger `check_profile_updates` en `public.profiles` que prohíbe a técnicos auto-aumentarse comisiones (`commission_rate`), cambiar de rol o alterar su taller.
+  - **Protección de Membrete e Inventario:** RLS en `workshop_profiles` (solo lectura para técnicos, escritura exclusiva de admin) y en `inventory` (técnicos solo actualizan stock al reparar; creación y borrado exclusivo de admin).
+  - **Privacidad de Comisiones:** En el contexto de la app (`auth-context.tsx`), las comisiones de otros técnicos se ocultan para perfiles con rol `technician`.
+  - **Verificación:** Script `scripts/verify-invitation-pipeline.mjs` y suite de pruebas unitarias al 100% PASS (64/64 pruebas operativas).
+
 - **Blindaje y Asociación de Invitación de Técnicos (2026-08-27):**
   - Se corrigió y automatizó al 100% el flujo de registro por invitación: se eliminó el fallback silencioso a creación de taller propio (`registerOwner`) cuando el enlace expiraba o fallaba, bloqueando el formulario y alertando al usuario para solicitar un nuevo enlace.
   - Soporte de almacenamiento de invitación pendiente (`savePendingInvite` / `getPendingInvite` / `clearPendingInvite`) para persistir el taller destino a través de redirecciones de Google OAuth y verificaciones de correo.

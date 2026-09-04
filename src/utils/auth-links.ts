@@ -1,52 +1,48 @@
 /**
  * Utilidades de tokens de invitación seguros para asociar técnicos a talleres.
  *
- * Flujo:
- *   1. El admin (dueño) genera un InviteToken con su workshopId.
- *   2. El token se codifica (encodeURIComponent + JSON) y se incrusta en un
- *      enlace tipo deep link: `https://techrepair.saas/join?invite=...`
- *   3. El técnico abre el enlace; el signup detecta el parámetro `invite`,
- *      lo decodifica y valida que no haya expirado, y asocia automáticamente
- *      al técnico con el taller del admin.
- *
- * Mock de validación: sin Supabase configurado, la validación se hace contra
- * el estado local en AuthContext. La estructura está lista para migrar a
- * validación server-side (Supabase Edge Functions / RLS).
+ * Flujo blindado:
+ *   1. El admin (dueño) genera una invitación en base de datos (`workshop_invitations`)
+ *      con token criptográfico único (64 hex) y expiración de 24 horas.
+ *   2. El enlace contiene el token seguro: `/signup?invite=<hex-token>`.
+ *   3. Al abrir el enlace, el signup consulta la validez del token en el servidor
+ *      (`get_invitation_info`) mostrando el taller y validando expiración/revocación.
+ *   4. Al registrarse o entrar con Google, la cuenta se vincula mediante
+ *      `claim_technician_invitation(token)`, marcando la invitación como usada (un solo uso).
  */
 
-/** 10 minutos en milisegundos. El token vence rápido para minimizar exposición. */
-export const INVITE_EXPIRY_MS = 10 * 60 * 1000;
+/** 24 horas en milisegundos. */
+export const INVITE_EXPIRY_MS = 24 * 60 * 60 * 1000;
 
 export interface InviteToken {
-  /** UUID truncado a 16 caracteres (sin guiones, uppercase). */
+  /** Token criptográfico (hex o alfanumérico). */
   token: string;
-  /** ID del usuario admin (dueño del taller) que generó la invitación. */
+  /** ID del usuario admin o taller que generó la invitación. */
   workshopId: string;
-  /** Nombre del taller para mostrar en el banner de invitación (UX amigable). */
+  /** Nombre del taller para mostrar en el banner de invitación. */
   workshopName: string;
   /** Timestamp de expiración (epoch millis). */
   expiresAt: number;
-  /** Timestamp de creación (epoch millis), para auditoría. */
+  /** Timestamp de creación (epoch millis). */
   createdAt: number;
+  /** Correo específico al que se restringió la invitación (opcional). */
+  email?: string | null;
 }
 
 /**
  * Resultado de la validación de un token de invitación.
- * `valid: true` incluye el workshopId para asociar al nuevo técnico.
  */
 export type InviteValidation =
-  | { valid: true; workshopId: string; workshopName: string }
-  | { valid: false; reason: 'expired' | 'malformed' | 'invalid' };
+  | { valid: true; workshopId: string; workshopName: string; email?: string | null }
+  | { valid: false; reason: 'expired' | 'malformed' | 'invalid' | 'revoked' | 'already_used' };
 
 /**
- * Genera un token de invitación criptográficamente aleatorio.
- *
- * @param workshopId  ID del usuario admin (dueño del taller).
- * @param workshopName Nombre del taller (para UX en el banner de invitación).
+ * Genera un token de invitación aleatorio (útil para fallback y tests locales).
  */
 export function generateInviteToken(
   workshopId: string,
-  workshopName: string
+  workshopName: string,
+  email?: string | null
 ): InviteToken {
   const uuid =
     typeof globalThis.crypto?.randomUUID === 'function'
@@ -58,48 +54,60 @@ export function generateInviteToken(
     token: raw,
     workshopId,
     workshopName,
+    email: email ?? null,
     expiresAt: now + INVITE_EXPIRY_MS,
     createdAt: now,
   };
 }
 
 /**
- * Codifica un `InviteToken` para incrustarlo en una URL.
- * Usa `encodeURIComponent(JSON.stringify(...))` → compatible con React Native
- * y web sin depender de `btoa` (que no existe en RN).
+ * Codifica un `InviteToken` para incrustarlo en una URL (compatibilidad legacy).
  */
 export function encodeInviteToken(token: InviteToken): string {
   return encodeURIComponent(JSON.stringify(token));
 }
 
 /**
- * Decodifica un token desde el raw recibido por URL.
- * Devuelve `null` si el string no es un JSON válido de `InviteToken`.
+ * Decodifica un token desde el parámetro recibido por URL.
+ * Soporta tanto objetos JSON codificados (legacy) como tokens directos.
  */
 export function decodeInviteToken(encoded: string): InviteToken | null {
+  if (!encoded || typeof encoded !== 'string') return null;
   try {
-    // En web, `useLocalSearchParams` entrega el valor ya decodificado por
-    // URLSearchParams; en nativo, expo-linking también lo decodifica. En ese
-    // caso `decodeURIComponent` es un no-op y solo lanza si el valor crudo
-    // contiene '%' (p. ej. un taller llamado "Taller 100% Mejor") → usamos el
-    // valor crudo. Así soportamos tanto codificación simple como doble.
     let raw: string;
     try {
       raw = decodeURIComponent(encoded);
     } catch {
       raw = encoded;
     }
-    const parsed: unknown = JSON.parse(raw);
-    const t = parsed as Partial<InviteToken>;
-    if (
-      typeof t.token === 'string' &&
-      typeof t.workshopId === 'string' &&
-      typeof t.workshopName === 'string' &&
-      typeof t.expiresAt === 'number' &&
-      typeof t.createdAt === 'number'
-    ) {
-      return t as InviteToken;
+
+    // Si es un JSON serializado
+    if (raw.trim().startsWith('{')) {
+      const parsed: unknown = JSON.parse(raw);
+      const t = parsed as Partial<InviteToken>;
+      if (
+        typeof t.token === 'string' &&
+        typeof t.workshopId === 'string' &&
+        typeof t.workshopName === 'string' &&
+        typeof t.expiresAt === 'number' &&
+        typeof t.createdAt === 'number'
+      ) {
+        return t as InviteToken;
+      }
+      return null;
     }
+
+    // Si es un token hexadecimal directo o alfanumérico limpio
+    if (/^[A-Za-z0-9_-]{16,64}$/.test(raw.trim())) {
+      return {
+        token: raw.trim(),
+        workshopId: '',
+        workshopName: '',
+        expiresAt: Date.now() + INVITE_EXPIRY_MS,
+        createdAt: Date.now(),
+      };
+    }
+
     return null;
   } catch {
     return null;
@@ -107,8 +115,7 @@ export function decodeInviteToken(encoded: string): InviteToken | null {
 }
 
 /**
- * Valida un `InviteToken`: comprueba que no haya expirado y que los campos
- * obligatorios existan.  Si expiró, devuelve `reason: 'expired'`.
+ * Valida un `InviteToken` localmente.
  */
 export function validateInviteToken(token: InviteToken): InviteValidation {
   if (Date.now() > token.expiresAt) {
@@ -118,32 +125,85 @@ export function validateInviteToken(token: InviteToken): InviteValidation {
     valid: true,
     workshopId: token.workshopId,
     workshopName: token.workshopName,
+    email: token.email,
   };
 }
 
 /**
- * Convierte un `InviteToken` en la URL completa que se le entrega al técnico.
- * - Web: `window.location.origin` + ruta `/signup` (localhost en dev, dominio
- *   desplegado en producción). El rewrite de vercel.json sirve el SPA.
- * - Nativo: deep link del scheme de la app (`miappvibe://signup?invite=...`).
+ * Convierte un `InviteToken` o string de token en la URL completa que se le entrega al técnico.
  */
-export function buildInviteUrl(token: InviteToken): string {
-  const encoded = encodeInviteToken(token);
+export function buildInviteUrl(tokenOrObj: InviteToken | string): string {
+  const tokenParam =
+    typeof tokenOrObj === 'string'
+      ? tokenOrObj
+      : tokenOrObj.token.length >= 32
+      ? tokenOrObj.token
+      : encodeInviteToken(tokenOrObj);
+
   if (typeof window !== 'undefined' && window.location?.origin) {
-    return `${window.location.origin}/signup?invite=${encoded}`;
+    return `${window.location.origin}/signup?invite=${tokenParam}`;
   }
-  return `miappvibe://signup?invite=${encoded}`;
+  return `miappvibe://signup?invite=${tokenParam}`;
 }
 
+const PENDING_INVITE_TOKEN_KEY = 'trm_pending_invite_token_str';
 const PENDING_INVITE_STORAGE_KEY = 'trm_pending_invite_token';
 
 /**
- * Guarda temporalmente el token de invitación en el almacenamiento del cliente
- * (sessionStorage / localStorage en web) para sobrevivir a redirecciones de OAuth
- * o confirmaciones de correo.
+ * Guarda el token de invitación seguro en el almacenamiento del cliente.
+ */
+export function savePendingInviteToken(token: string): void {
+  try {
+    if (typeof window !== 'undefined' && token) {
+      window.sessionStorage?.setItem(PENDING_INVITE_TOKEN_KEY, token);
+      window.localStorage?.setItem(PENDING_INVITE_TOKEN_KEY, token);
+    }
+  } catch {
+    // Ignorar fallos de storage
+  }
+}
+
+/**
+ * Obtiene el token de invitación pendiente.
+ */
+export function getPendingInviteToken(): string | null {
+  try {
+    if (typeof window !== 'undefined') {
+      const token =
+        window.sessionStorage?.getItem(PENDING_INVITE_TOKEN_KEY) ??
+        window.localStorage?.getItem(PENDING_INVITE_TOKEN_KEY);
+      if (token && typeof token === 'string') {
+        return token.trim();
+      }
+    }
+  } catch {
+    // Ignorar
+  }
+  return null;
+}
+
+/**
+ * Limpia el token de invitación pendiente del cliente.
+ */
+export function clearPendingInviteToken(): void {
+  try {
+    if (typeof window !== 'undefined') {
+      window.sessionStorage?.removeItem(PENDING_INVITE_TOKEN_KEY);
+      window.localStorage?.removeItem(PENDING_INVITE_TOKEN_KEY);
+    }
+  } catch {
+    // Ignorar
+  }
+}
+
+/**
+ * Compatibilidad con guardado de objeto InviteToken.
  */
 export function savePendingInvite(token: InviteToken): void {
   try {
+    if (token.token) {
+      savePendingInviteToken(token.token);
+    }
     const serialized = JSON.stringify(token);
     if (typeof window !== 'undefined') {
       window.sessionStorage?.setItem(PENDING_INVITE_STORAGE_KEY, serialized);
@@ -154,10 +214,6 @@ export function savePendingInvite(token: InviteToken): void {
   }
 }
 
-/**
- * Recupera y valida el token de invitación pendiente guardado en el cliente.
- * Si el token es inválido o expiró, lo descarta y retorna null.
- */
 export function getPendingInvite(): InviteToken | null {
   try {
     if (typeof window !== 'undefined') {
@@ -178,7 +234,6 @@ export function getPendingInvite(): InviteToken | null {
         if (validation.valid) {
           return t as InviteToken;
         }
-        // Expirado o inválido: limpiar
         clearPendingInvite();
       }
     }
@@ -188,16 +243,14 @@ export function getPendingInvite(): InviteToken | null {
   return null;
 }
 
-/**
- * Limpia el token de invitación pendiente del almacenamiento del cliente.
- */
 export function clearPendingInvite(): void {
+  clearPendingInviteToken();
   try {
     if (typeof window !== 'undefined') {
       window.sessionStorage?.removeItem(PENDING_INVITE_STORAGE_KEY);
       window.localStorage?.removeItem(PENDING_INVITE_STORAGE_KEY);
     }
   } catch {
-    // Silenciosamente ignorar fallos de storage
+    // Ignorar
   }
-}
+}

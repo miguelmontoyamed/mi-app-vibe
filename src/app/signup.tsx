@@ -1,6 +1,6 @@
-import { useState, useMemo } from 'react';
+import { Link, useRouter, useLocalSearchParams } from 'expo-router';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Platform, StyleSheet, View } from 'react-native';
-import { Link, useLocalSearchParams, useRouter } from 'expo-router';
 
 import { Button } from '@/components/ui/button';
 import { FormInput } from '@/components/ui/form-input';
@@ -8,15 +8,23 @@ import { Screen } from '@/components/ui/screen';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Brand, Shape, Spacing } from '@/constants/theme';
+import { useTheme } from '@/context/theme-context';
 import { useAuth } from '@/context/auth-context';
-import { useTheme } from '@/hooks/use-theme';
-import { isGoogleConfigured, useGoogleSignIn } from '@/lib/google-auth';
-import { supabaseSignInWithGoogleRedirect } from '@/lib/supabase-auth';
-import { decodeInviteToken, validateInviteToken, savePendingInvite } from '@/utils/auth-links';
+import {
+  decodeInviteToken,
+  savePendingInvite,
+  savePendingInviteToken,
+  validateInviteToken,
+} from '@/utils/auth-links';
+import {
+  isGoogleConfigured,
+  useGoogleSignIn,
+  supabaseSignInWithGoogleRedirect,
+} from '@/utils/google-auth';
 
 const notify = (title: string, message: string) => {
   if (Platform.OS === 'web') {
-    window.alert(message);
+    window.alert(`${title}: ${message}`);
   } else {
     Alert.alert(title, message);
   }
@@ -28,44 +36,121 @@ export default function SignUpScreen() {
   const router = useRouter();
   const theme = useTheme();
   const params = useLocalSearchParams<{ invite?: string }>();
-  const { registerOwner, registerInvitedTechnician, signInWithGoogle, resendRegistration } = useAuth();
+  const {
+    registerOwner,
+    registerInvitedTechnician,
+    signInWithGoogle,
+    resendRegistration,
+    getInvitationDetails,
+  } = useAuth();
   const {
     prompt: promptGoogle,
     inProgress: googleInProgress,
     error: googleError,
   } = useGoogleSignIn();
 
-  // ── Invitación de técnico (token en URL ?invite=...) ──
-  const inviteData = useMemo(() => {
-    const raw = params.invite;
-    if (!raw || typeof raw !== 'string') return null;
-    const decoded = decodeInviteToken(raw);
-    if (!decoded) return null;
-    const validation = validateInviteToken(decoded);
-    if (!validation.valid) return { expired: true as const, tokenObj: decoded };
-    return {
-      expired: false as const,
-      workshopName: validation.workshopName,
-      workshopId: validation.workshopId,
-      tokenObj: decoded,
-    };
-  }, [params.invite]);
+  // ── Estado de verificación segura de invitación ──
+  const [inviteStatus, setInviteStatus] = useState<{
+    loading: boolean;
+    valid: boolean;
+    workshopName: string;
+    workshopId: string;
+    requiredEmail: string | null;
+    expired: boolean;
+    errorMessage: string | null;
+    token: string;
+  } | null>(null);
 
   const isInviteFlow = params.invite != null && typeof params.invite === 'string';
+
+  useEffect(() => {
+    const raw = params.invite;
+    if (!raw || typeof raw !== 'string') {
+      setInviteStatus(null);
+      return;
+    }
+
+    let cancelled = false;
+    setInviteStatus({
+      loading: true,
+      valid: false,
+      workshopName: '',
+      workshopId: '',
+      requiredEmail: null,
+      expired: false,
+      errorMessage: null,
+      token: raw,
+    });
+
+    (async () => {
+      const details = await getInvitationDetails(raw);
+      if (cancelled) return;
+
+      if (details.ok) {
+        setInviteStatus({
+          loading: false,
+          valid: true,
+          workshopName: details.workshopName || 'Taller',
+          workshopId: details.workshopId || '',
+          requiredEmail: details.email || null,
+          expired: false,
+          errorMessage: null,
+          token: raw,
+        });
+        if (details.email) {
+          setEmail(details.email);
+        }
+      } else {
+        setInviteStatus({
+          loading: false,
+          valid: false,
+          workshopName: '',
+          workshopId: '',
+          requiredEmail: null,
+          expired: !!details.expired,
+          errorMessage: details.message || 'Invitación no válida',
+          token: raw,
+        });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [params.invite, getInvitationDetails]);
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
   // Etapa de confirmación del correo (enlace enviado por Supabase).
-  const [pendingVerification, setPendingVerification] = useState<string | null>(null); // email a confirmar
+  const [pendingVerification, setPendingVerification] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async () => {
-    if (inviteData?.expired) {
+    if (inviteStatus?.expired) {
       notify(
         'Invitación expirada',
-        'El enlace de invitación ha vencido (vigencia de 10 minutos). Solicita un nuevo enlace al dueño del taller.'
+        'El enlace de invitación ha vencido (vigencia de 24 horas). Solicita un nuevo enlace al dueño del taller.'
+      );
+      return;
+    }
+
+    if (inviteStatus && !inviteStatus.valid && !inviteStatus.loading) {
+      notify(
+        'Invitación inválida',
+        inviteStatus.errorMessage || 'El enlace de invitación no es válido o ya fue utilizado.'
+      );
+      return;
+    }
+
+    if (
+      inviteStatus?.requiredEmail &&
+      email.trim().toLowerCase() !== inviteStatus.requiredEmail.toLowerCase()
+    ) {
+      notify(
+        'Correo no coincide',
+        `Esta invitación fue emitida exclusivamente para ${inviteStatus.requiredEmail}. Debes registrarte con esa cuenta.`
       );
       return;
     }
@@ -86,14 +171,15 @@ export default function SignUpScreen() {
     try {
       // Flujo de técnico invitado: crea la cuenta real (Supabase) con
       // role='technician' asociada al taller del admin que generó el enlace.
-      if (inviteData && !inviteData.expired) {
-        savePendingInvite(inviteData.tokenObj);
+      if (inviteStatus && inviteStatus.valid) {
+        savePendingInviteToken(inviteStatus.token);
         const result = await registerInvitedTechnician(
           name.trim(),
           email.trim().toLowerCase(),
           password,
-          inviteData.workshopId,
-          inviteData.workshopName
+          inviteStatus.workshopId,
+          inviteStatus.workshopName,
+          inviteStatus.token
         );
         if (result.pendingVerification) {
           setPendingVerification(email.trim().toLowerCase());
@@ -106,7 +192,7 @@ export default function SignUpScreen() {
         if (result.ok) {
           notify(
             '¡Bienvenido al equipo!',
-            `Tu cuenta de técnico fue creada y asociada al taller "${inviteData.workshopName}". Inicia sesión para empezar.`
+            `Tu cuenta de técnico fue creada y asociada al taller "${inviteStatus.workshopName}". Inicia sesión para empezar.`
           );
           router.replace('/login');
         } else {
@@ -123,7 +209,7 @@ export default function SignUpScreen() {
       if (isInviteFlow) {
         notify(
           'Enlace de invitación inválido',
-          'El enlace de invitación no es válido. Pide al dueño del taller que te comparta un nuevo enlace.'
+          'El enlace de invitación no es válido o expiró. Pide al dueño del taller que te comparta un nuevo enlace.'
         );
         return;
       }
@@ -174,21 +260,18 @@ export default function SignUpScreen() {
   };
 
   const handleGoogle = async () => {
-    if (inviteData?.expired) {
+    if (inviteStatus?.expired) {
       notify(
         'Invitación expirada',
-        'El enlace de invitación ha vencido (vigencia de 10 minutos). Solicita un nuevo enlace al dueño del taller.'
+        'El enlace de invitación ha vencido (vigencia de 24 horas). Solicita un nuevo enlace al dueño del taller.'
       );
       return;
     }
 
-    if (inviteData && !inviteData.expired) {
-      savePendingInvite(inviteData.tokenObj);
+    if (inviteStatus && inviteStatus.valid) {
+      savePendingInviteToken(inviteStatus.token);
     }
 
-    // 🛑 FLUJO ESTRICTO PARA WEB: SIN POPUPS, SIN WEBBROWSER.
-    // Supabase navega la pestaña principal completa (window.location.assign)
-    // y el return inmediato evita que se ejecute CUALQUIER otra lógica.
     if (Platform.OS === 'web') {
       const result = await supabaseSignInWithGoogleRedirect();
       if (!result.ok) {
@@ -196,7 +279,7 @@ export default function SignUpScreen() {
       }
       return;
     }
-    // Nativo: puente expo-auth-session (in-app browser) + id_token.
+
     if (!isGoogleConfigured) {
       notify(
         'Google no configurado',
@@ -206,7 +289,7 @@ export default function SignUpScreen() {
     }
     const auth = await promptGoogle();
     if (!auth) {
-      return; // cancelado o error: el usuario no cambió de pantalla
+      return;
     }
     const user = await signInWithGoogle(auth);
     if (user) {
@@ -214,7 +297,6 @@ export default function SignUpScreen() {
     }
   };
 
-  // Etapa de confirmación: el usuario debe abrir el enlace del correo.
   if (pendingVerification) {
     return (
       <Screen contentContainerStyle={styles.screen}>
@@ -247,46 +329,66 @@ export default function SignUpScreen() {
     );
   }
 
-  const isFormDisabled = submitting || !!inviteData?.expired;
+  const isFormDisabled =
+    submitting ||
+    inviteStatus?.loading ||
+    (inviteStatus != null && !inviteStatus.valid);
 
   return (
     <Screen contentContainerStyle={styles.screen}>
       <ThemedView style={[styles.card, { borderColor: theme.border }]}>
-        {/* Encabezado contextual: taller propio o invitación de técnico */}
-        {inviteData?.expired ? (
+        {/* Encabezado contextual: invitación o taller propio */}
+        {inviteStatus?.loading ? (
+          <ThemedView style={styles.inviteBanner}>
+            <ThemedText type="small" style={styles.inviteBannerText}>
+              Verificando validez de la invitación...
+            </ThemedText>
+          </ThemedView>
+        ) : inviteStatus?.expired ? (
           <ThemedView style={styles.inviteBannerExpired}>
             <ThemedText type="smallBold" style={styles.inviteBannerText}>
               Esta invitación ha expirado.
             </ThemedText>
             <ThemedText type="small" style={styles.inviteBannerText}>
-              El enlace tenía una vigencia de 10 minutos. Solicita un nuevo enlace al dueño del taller.
+              El enlace tenía una vigencia de 24 horas. Solicita un nuevo enlace al administrador.
             </ThemedText>
           </ThemedView>
-        ) : inviteData ? (
+        ) : inviteStatus && !inviteStatus.valid ? (
+          <ThemedView style={styles.inviteBannerExpired}>
+            <ThemedText type="smallBold" style={styles.inviteBannerText}>
+              Invitación no válida
+            </ThemedText>
+            <ThemedText type="small" style={styles.inviteBannerText}>
+              {inviteStatus.errorMessage || 'El enlace de invitación no es válido o ya fue utilizado.'}
+            </ThemedText>
+          </ThemedView>
+        ) : inviteStatus?.valid ? (
           <ThemedView style={styles.inviteBanner}>
             <ThemedText type="smallBold" style={styles.inviteBannerText}>
               Has sido invitado a unirte como técnico
             </ThemedText>
             <ThemedText type="small" style={styles.inviteBannerText}>
-              Taller: {inviteData.workshopName}
+              Taller: {inviteStatus.workshopName}
+              {inviteStatus.requiredEmail ? ` • Correo: ${inviteStatus.requiredEmail}` : ''}
             </ThemedText>
           </ThemedView>
         ) : null}
+
         <ThemedText type="subtitle" style={styles.brand}>
-          {inviteData && !inviteData.expired ? 'Únete al equipo' : 'Crea tu taller'}
+          {inviteStatus?.valid ? 'Únete al equipo' : 'Crea tu taller'}
         </ThemedText>
         <ThemedText type="small" themeColor="textSecondary" style={styles.subtitle}>
-          {inviteData && !inviteData.expired
-            ? `Regístrate para empezar a trabajar con el taller "${inviteData.workshopName}".`
-            : inviteData?.expired
+          {inviteStatus?.valid
+            ? `Regístrate para empezar a trabajar con el taller "${inviteStatus.workshopName}".`
+            : inviteStatus?.expired
               ? 'Pide al administrador que te genere una nueva invitación para unirte a su taller.'
-              : 'Registra tu taller para administrar equipos y agregar técnicos. Te pediremos confirmar tu correo con el enlace que te enviamos.'}
+              : 'Registra tu taller para administrar equipos y agregar técnicos. Te pediremos confirmar tu correo.'}
         </ThemedText>
 
         <FormInput
-          label={inviteData && !inviteData.expired ? 'Nombre completo' : 'Nombre del taller'}
+          label={inviteStatus?.valid ? 'Nombre completo' : 'Nombre del taller'}
           required
-          placeholder={inviteData && !inviteData.expired ? 'Ej: Juan Pérez' : 'Ej: TechRepair Master'}
+          placeholder={inviteStatus?.valid ? 'Ej: Juan Pérez' : 'Ej: TechRepair Master'}
           value={name}
           onChangeText={setName}
           maxLength={80}
@@ -301,7 +403,7 @@ export default function SignUpScreen() {
           value={email}
           onChangeText={setEmail}
           maxLength={100}
-          editable={!isFormDisabled}
+          editable={!isFormDisabled && !inviteStatus?.requiredEmail}
         />
         <FormInput
           label="Contraseña"
@@ -315,13 +417,15 @@ export default function SignUpScreen() {
 
         <Button
           label={
-            inviteData?.expired
-              ? 'Invitación expirada'
-              : submitting
-                ? 'Creando cuenta…'
-                : inviteData
-                  ? 'Unirme como técnico'
-                  : 'Crear cuenta'
+            inviteStatus?.loading
+              ? 'Verificando invitación…'
+              : inviteStatus?.expired
+                ? 'Invitación expirada'
+                : submitting
+                  ? 'Creando cuenta…'
+                  : inviteStatus?.valid
+                    ? 'Unirme como técnico'
+                    : 'Crear cuenta'
           }
           onPress={handleSubmit}
           style={styles.primary}

@@ -46,6 +46,25 @@ create table if not exists public.profiles (
 );
 
 -- ------------------------------------------------------------------
+-- 2.1) Invitaciones de Técnicos al Taller (workshop_invitations)
+-- ------------------------------------------------------------------
+create table if not exists public.workshop_invitations (
+  id uuid primary key default gen_random_uuid(),
+  workshop_id uuid not null references public.workshops(id) on delete cascade,
+  invited_by uuid not null references public.profiles(id) on delete cascade,
+  email text,
+  token text unique not null,
+  role text not null default 'technician' check (role in ('technician')),
+  status text not null default 'pending' check (status in ('pending', 'accepted', 'revoked', 'expired')),
+  expires_at timestamptz not null,
+  claimed_by uuid references public.profiles(id) on delete set null,
+  claimed_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+
+
+-- ------------------------------------------------------------------
 -- 3) Clientes finales (los que se registran/agregan al taller)
 -- ------------------------------------------------------------------
 create table if not exists public.clients (
@@ -504,11 +523,14 @@ grant execute on function public.get_technician_monthly_performance(text)
   to authenticated, service_role;
 
 -- ============================================================
--- RPC: claim_workshop_invitation
--- Permite a un usuario autenticado (nuevo o registrado vía Google/OAuth)
--- vincularse al taller al que fue invitado como técnico.
+-- RPCs: Pipeline Seguro de Invitaciones de Técnicos
 -- ============================================================
-create or replace function public.claim_workshop_invitation(p_workshop_id uuid)
+
+-- 1) create_technician_invitation
+create or replace function public.create_technician_invitation(
+  p_email text default null,
+  p_hours int default 24
+)
 returns jsonb
 language plpgsql
 security definer
@@ -516,6 +538,143 @@ set search_path = public
 as $$
 declare
   uid uuid := auth.uid();
+  w_id uuid;
+  tech_count int;
+  new_token text;
+  inv_id uuid;
+  clean_email text;
+  valid_hours int;
+  exp_timestamp timestamptz;
+begin
+  if uid is null then
+    return jsonb_build_object('ok', false, 'message', 'No autenticado');
+  end if;
+
+  if public.current_user_role() <> 'admin' then
+    return jsonb_build_object('ok', false, 'message', 'Solo el administrador del taller puede generar invitaciones');
+  end if;
+
+  w_id := public.current_workshop_id();
+  if w_id is null then
+    return jsonb_build_object('ok', false, 'message', 'Taller no encontrado para este usuario');
+  end if;
+
+  select count(*) into tech_count
+    from public.profiles
+   where workshop_id = w_id
+     and role = 'technician'
+     and is_active = true;
+
+  if tech_count >= 5 then
+    return jsonb_build_object('ok', false, 'message', 'El taller ya alcanzó el límite de 5 técnicos permitidos');
+  end if;
+
+  clean_email := lower(trim(coalesce(p_email, '')));
+  if clean_email = '' then
+    clean_email := null;
+  end if;
+
+  valid_hours := coalesce(p_hours, 24);
+  if valid_hours < 1 or valid_hours > 168 then
+    valid_hours := 24;
+  end if;
+  exp_timestamp := now() + (valid_hours || ' hours')::interval;
+
+  new_token := encode(gen_random_bytes(32), 'hex');
+
+  insert into public.workshop_invitations (
+    workshop_id,
+    invited_by,
+    email,
+    token,
+    role,
+    status,
+    expires_at
+  )
+  values (
+    w_id,
+    uid,
+    clean_email,
+    new_token,
+    'technician',
+    'pending',
+    exp_timestamp
+  )
+  returning id into inv_id;
+
+  return jsonb_build_object(
+    'ok', true,
+    'id', inv_id,
+    'token', new_token,
+    'email', clean_email,
+    'expires_at', exp_timestamp,
+    'workshop_id', w_id
+  );
+end;
+$$;
+
+revoke execute on function public.create_technician_invitation(text, int) from public, anon;
+grant execute on function public.create_technician_invitation(text, int) to authenticated, service_role;
+
+-- 2) get_invitation_info
+create or replace function public.get_invitation_info(p_token text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  inv record;
+begin
+  if p_token is null or length(trim(p_token)) = 0 then
+    return jsonb_build_object('ok', false, 'reason', 'invalid', 'message', 'Token de invitación no proporcionado');
+  end if;
+
+  select i.*, w.name as workshop_name
+    into inv
+    from public.workshop_invitations i
+    join public.workshops w on w.id = i.workshop_id
+   where i.token = trim(p_token);
+
+  if inv.id is null then
+    return jsonb_build_object('ok', false, 'reason', 'not_found', 'message', 'Invitación no encontrada o enlace inválido');
+  end if;
+
+  if inv.status = 'revoked' then
+    return jsonb_build_object('ok', false, 'reason', 'revoked', 'message', 'Esta invitación fue revocada por el administrador del taller');
+  end if;
+
+  if inv.status = 'accepted' then
+    return jsonb_build_object('ok', false, 'reason', 'already_used', 'message', 'Esta invitación ya fue utilizada');
+  end if;
+
+  if inv.expires_at < now() or inv.status = 'expired' then
+    return jsonb_build_object('ok', false, 'reason', 'expired', 'message', 'El enlace de invitación ha vencido');
+  end if;
+
+  return jsonb_build_object(
+    'ok', true,
+    'workshop_id', inv.workshop_id,
+    'workshop_name', inv.workshop_name,
+    'email', inv.email,
+    'expires_at', inv.expires_at
+  );
+end;
+$$;
+
+grant execute on function public.get_invitation_info(text) to anon, authenticated, service_role;
+
+-- 3) claim_technician_invitation
+create or replace function public.claim_technician_invitation(p_token text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  uid uuid := auth.uid();
+  u_email text;
+  inv record;
   target_workshop public.workshops%rowtype;
   cur_profile public.profiles%rowtype;
   tech_count int;
@@ -525,23 +684,52 @@ begin
     return jsonb_build_object('ok', false, 'message', 'No autenticado');
   end if;
 
-  if p_workshop_id is null then
-    return jsonb_build_object('ok', false, 'message', 'Workshop ID inválido');
+  if p_token is null or length(trim(p_token)) = 0 then
+    return jsonb_build_object('ok', false, 'message', 'Token de invitación requerido');
   end if;
 
-  -- 1) Verificar que el taller objetivo exista
+  select email into u_email from auth.users where id = uid;
+
+  select * into inv
+    from public.workshop_invitations
+   where token = trim(p_token)
+     for update;
+
+  if inv.id is null then
+    return jsonb_build_object('ok', false, 'message', 'Invitación no encontrada o enlace inválido');
+  end if;
+
+  if inv.status = 'revoked' then
+    return jsonb_build_object('ok', false, 'message', 'La invitación fue revocada por el administrador');
+  end if;
+
+  if inv.status = 'accepted' then
+    return jsonb_build_object('ok', false, 'message', 'Esta invitación ya fue utilizada previamente');
+  end if;
+
+  if inv.expires_at < now() or inv.status = 'expired' then
+    update public.workshop_invitations set status = 'expired' where id = inv.id;
+    return jsonb_build_object('ok', false, 'message', 'El enlace de invitación ha expirado');
+  end if;
+
+  if inv.email is not null and lower(trim(inv.email)) <> lower(trim(coalesce(u_email, ''))) then
+    return jsonb_build_object(
+      'ok', false,
+      'message', 'Esta invitación es exclusiva para la cuenta de correo ' || inv.email
+    );
+  end if;
+
   select * into target_workshop
     from public.workshops
-   where id = p_workshop_id;
-   
+   where id = inv.workshop_id;
+
   if target_workshop.id is null then
-    return jsonb_build_object('ok', false, 'message', 'El taller especificado no existe');
+    return jsonb_build_object('ok', false, 'message', 'El taller especificado ya no existe');
   end if;
 
-  -- 2) Verificar límite de 5 técnicos en el taller destino
   select count(*) into tech_count
     from public.profiles
-   where workshop_id = p_workshop_id
+   where workshop_id = inv.workshop_id
      and role = 'technician'
      and is_active = true
      and id <> uid;
@@ -550,50 +738,115 @@ begin
     return jsonb_build_object('ok', false, 'message', 'El taller ya alcanzó el límite de 5 técnicos');
   end if;
 
-  -- 3) Consultar el perfil actual del usuario
   select * into cur_profile
     from public.profiles
    where id = uid;
 
   if cur_profile.id is not null then
-    -- Si ya está asociado a este taller como técnico, nada que hacer
-    if cur_profile.workshop_id = p_workshop_id and cur_profile.role = 'technician' then
-      return jsonb_build_object('ok', true, 'workshop_id', p_workshop_id, 'workshop_name', target_workshop.name);
-    end if;
-
     auto_created_workshop_id := cur_profile.workshop_id;
 
-    -- Actualizar perfil al nuevo taller con rol 'technician'
     update public.profiles
-       set workshop_id = p_workshop_id,
+       set workshop_id = inv.workshop_id,
            role = 'technician',
            joined_at = coalesce(joined_at, now())
      where id = uid;
 
-    -- Si el taller anterior fue auto-creado y no tiene reparaciones ni otros perfiles, limpiarlo
-    if auto_created_workshop_id is not null and auto_created_workshop_id <> p_workshop_id then
+    if auto_created_workshop_id is not null and auto_created_workshop_id <> inv.workshop_id then
       if not exists (select 1 from public.repairs where workshop_id = auto_created_workshop_id)
          and not exists (select 1 from public.profiles where workshop_id = auto_created_workshop_id and id <> uid) then
         delete from public.workshops where id = auto_created_workshop_id;
       end if;
     end if;
   else
-    -- Perfil no existía: crearlo directamente
     insert into public.profiles (id, workshop_id, full_name, role, is_active, joined_at)
     values (
       uid,
-      p_workshop_id,
+      inv.workshop_id,
       coalesce((select coalesce(nullif(raw_user_meta_data->>'full_name', ''), nullif(raw_user_meta_data->>'name', ''), email, 'Técnico') from auth.users where id = uid), 'Técnico'),
       'technician',
       true,
       now()
     )
     on conflict (id) do update
-       set workshop_id = p_workshop_id,
+       set workshop_id = inv.workshop_id,
            role = 'technician';
   end if;
 
-  return jsonb_build_object('ok', true, 'workshop_id', p_workshop_id, 'workshop_name', target_workshop.name);
+  update public.workshop_invitations
+     set status = 'accepted',
+         claimed_by = uid,
+         claimed_at = now()
+   where id = inv.id;
+
+  return jsonb_build_object(
+    'ok', true,
+    'workshop_id', inv.workshop_id,
+    'workshop_name', target_workshop.name
+  );
+end;
+$$;
+
+revoke execute on function public.claim_technician_invitation(text) from public, anon;
+grant execute on function public.claim_technician_invitation(text) to authenticated, service_role;
+
+-- 4) revoke_technician_invitation
+create or replace function public.revoke_technician_invitation(p_invitation_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  uid uuid := auth.uid();
+  w_id uuid;
+  target_inv record;
+begin
+  if uid is null then
+    return jsonb_build_object('ok', false, 'message', 'No autenticado');
+  end if;
+
+  if public.current_user_role() <> 'admin' then
+    return jsonb_build_object('ok', false, 'message', 'Solo el administrador del taller puede revocar invitaciones');
+  end if;
+
+  w_id := public.current_workshop_id();
+
+  select * into target_inv
+    from public.workshop_invitations
+   where id = p_invitation_id
+     and workshop_id = w_id;
+
+  if target_inv.id is null then
+    return jsonb_build_object('ok', false, 'message', 'Invitación no encontrada');
+  end if;
+
+  if target_inv.status = 'accepted' then
+    return jsonb_build_object('ok', false, 'message', 'No se puede revocar una invitación que ya fue aceptada');
+  end if;
+
+  update public.workshop_invitations
+     set status = 'revoked'
+   where id = p_invitation_id;
+
+  return jsonb_build_object('ok', true, 'message', 'Invitación revocada con éxito');
+end;
+$$;
+
+revoke execute on function public.revoke_technician_invitation(uuid) from public, anon;
+grant execute on function public.revoke_technician_invitation(uuid) to authenticated, service_role;
+
+-- 5) claim_workshop_invitation (OBSOLETO / SEGURO)
+create or replace function public.claim_workshop_invitation(p_workshop_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  return jsonb_build_object(
+    'ok', false,
+    'message', 'Método deshabilitado por motivos de seguridad. Debe usarse un enlace de invitación seguro con token.'
+  );
 end;
 $$;
 
@@ -712,16 +965,63 @@ create trigger trg_workshop_profiles_updated_at
   before update on public.workshop_profiles
   for each row execute function public.touch_updated_at();
 
+-- Trigger de blindaje de perfiles: impide que un técnico auto-modifique comisión, rol o taller
+create or replace function public.check_profile_updates()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  caller_role text := public.current_user_role();
+begin
+  if caller_role is distinct from 'admin' then
+    if new.role is distinct from old.role then
+      raise exception 'No tienes permisos para modificar tu rol de usuario';
+    end if;
+    if new.workshop_id is distinct from old.workshop_id then
+      raise exception 'No tienes permisos para cambiar de taller';
+    end if;
+    if new.commission_rate is distinct from old.commission_rate then
+      raise exception 'No tienes permisos para modificar la comisión. Solo el administrador puede asignarla';
+    end if;
+    if new.is_active is distinct from old.is_active then
+      raise exception 'No tienes permisos para modificar el estado de activación';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_check_profile_updates on public.profiles;
+create trigger trg_check_profile_updates
+  before update on public.profiles
+  for each row execute function public.check_profile_updates();
+
 -- ============================================================
 -- SEGURIDAD (Row Level Security)
 -- ============================================================
-alter table public.workshops         enable row level security;
-alter table public.profiles          enable row level security;
-alter table public.clients           enable row level security;
-alter table public.repairs           enable row level security;
-alter table public.inventory         enable row level security;
-alter table public.workshop_profiles enable row level security;
-alter table public.monthly_closures  enable row level security;
+alter table public.workshops            enable row level security;
+alter table public.profiles             enable row level security;
+alter table public.workshop_invitations enable row level security;
+alter table public.clients              enable row level security;
+alter table public.repairs              enable row level security;
+alter table public.inventory            enable row level security;
+alter table public.workshop_profiles    enable row level security;
+alter table public.monthly_closures     enable row level security;
+
+-- ---- Workshop Invitations: solo admin ----
+drop policy if exists "invitations_admin_all" on public.workshop_invitations;
+create policy "invitations_admin_all" on public.workshop_invitations
+  for all
+  using (
+    workshop_id = public.current_workshop_id()
+    and public.current_user_role() = 'admin'
+  )
+  with check (
+    workshop_id = public.current_workshop_id()
+    and public.current_user_role() = 'admin'
+  );
 
 -- ---- Workshops: solo dueño/admin del taller ----
 drop policy if exists "workshops_owner_all" on public.workshops;
@@ -789,17 +1089,62 @@ create policy "repairs_admin_delete" on public.repairs
     and public.current_user_role() = 'admin'
   );
 
+-- ---- Inventory: miembros leen y descuentan stock; solo admin inserta/elimina ----
 drop policy if exists "inventory_workshop_all" on public.inventory;
-create policy "inventory_workshop_all" on public.inventory
-  for all using (workshop_id = current_workshop_id())
+drop policy if exists "inventory_workshop_select" on public.inventory;
+drop policy if exists "inventory_admin_insert" on public.inventory;
+drop policy if exists "inventory_workshop_update" on public.inventory;
+drop policy if exists "inventory_admin_delete" on public.inventory;
+
+create policy "inventory_workshop_select" on public.inventory
+  for select using (workshop_id = current_workshop_id());
+
+create policy "inventory_admin_insert" on public.inventory
+  for insert with check (
+    workshop_id = current_workshop_id()
+    and public.current_user_role() = 'admin'
+  );
+
+create policy "inventory_workshop_update" on public.inventory
+  for update using (workshop_id = current_workshop_id())
   with check (workshop_id = current_workshop_id());
 
--- ---- Workshop profiles (membrete): acceso por taller ----
+create policy "inventory_admin_delete" on public.inventory
+  for delete using (
+    workshop_id = current_workshop_id()
+    and public.current_user_role() = 'admin'
+  );
+
+-- ---- Workshop profiles (membrete): solo lectura para técnicos, escritura admin ----
 drop policy if exists "workshop_profiles_workshop_all" on public.workshop_profiles;
-create policy "workshop_profiles_workshop_all" on public.workshop_profiles
-  for all
-  using (workshop_id = current_workshop_id())
-  with check (workshop_id = current_workshop_id());
+drop policy if exists "workshop_profiles_workshop_select" on public.workshop_profiles;
+drop policy if exists "workshop_profiles_admin_insert" on public.workshop_profiles;
+drop policy if exists "workshop_profiles_admin_update" on public.workshop_profiles;
+drop policy if exists "workshop_profiles_admin_delete" on public.workshop_profiles;
+
+create policy "workshop_profiles_workshop_select" on public.workshop_profiles
+  for select using (workshop_id = current_workshop_id());
+
+create policy "workshop_profiles_admin_insert" on public.workshop_profiles
+  for insert with check (
+    workshop_id = current_workshop_id()
+    and public.current_user_role() = 'admin'
+  );
+
+create policy "workshop_profiles_admin_update" on public.workshop_profiles
+  for update using (
+    workshop_id = current_workshop_id()
+    and public.current_user_role() = 'admin'
+  ) with check (
+    workshop_id = current_workshop_id()
+    and public.current_user_role() = 'admin'
+  );
+
+create policy "workshop_profiles_admin_delete" on public.workshop_profiles
+  for delete using (
+    workshop_id = current_workshop_id()
+    and public.current_user_role() = 'admin'
+  );
 
 -- ---- Monthly closures: SOLO LECTURA por taller (la escritura es vía RPC
 --      ensure_month_closure(), SECURITY DEFINER) ----
@@ -812,6 +1157,8 @@ create policy "monthly_closures_workshop_read" on public.monthly_closures
 -- ============================================================
 create index if not exists idx_profiles_workshop   on public.profiles (workshop_id);
 create index if not exists idx_profiles_role       on public.profiles (workshop_id, role);
+create index if not exists idx_workshop_invitations_token on public.workshop_invitations(token);
+create index if not exists idx_workshop_invitations_workshop_status on public.workshop_invitations(workshop_id, status);
 create index if not exists idx_repairs_workshop    on public.repairs (workshop_id);
 create index if not exists idx_repairs_status      on public.repairs (status);
 create index if not exists idx_repairs_workshop_status on public.repairs (workshop_id, status);
