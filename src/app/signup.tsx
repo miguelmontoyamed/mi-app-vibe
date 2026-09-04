@@ -8,7 +8,7 @@ import { Screen } from '@/components/ui/screen';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Brand, Shape, Spacing } from '@/constants/theme';
-import { useTheme } from '@/context/theme-context';
+import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/context/auth-context';
 import {
   decodeInviteToken,
@@ -16,11 +16,8 @@ import {
   savePendingInviteToken,
   validateInviteToken,
 } from '@/utils/auth-links';
-import {
-  isGoogleConfigured,
-  useGoogleSignIn,
-  supabaseSignInWithGoogleRedirect,
-} from '@/utils/google-auth';
+import { isGoogleConfigured, useGoogleSignIn } from '@/lib/google-auth';
+import { supabaseSignInWithGoogleRedirect } from '@/lib/supabase-auth';
 
 const notify = (title: string, message: string) => {
   if (Platform.OS === 'web') {

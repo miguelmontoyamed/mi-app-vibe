@@ -30,7 +30,7 @@ import {
   type InviteToken,
   type InviteValidation,
 } from '@/utils/auth-links';
-import type { GoogleAuthResult } from '@/utils/google-auth';
+import type { GoogleAuthResult } from '@/lib/google-auth';
 import {
   getSupabaseEnvError,
   isSupabaseConfigured,

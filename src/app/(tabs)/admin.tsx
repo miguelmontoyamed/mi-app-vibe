@@ -531,13 +531,13 @@ export default function AdminScreen() {
                     </Pressable>
                     <Pressable
                       style={({ pressed }) => [
-                        styles.deleteTechButton,
+                        styles.deleteButton,
                         pressed && styles.pressed,
                         revokingId === inv.id && { opacity: 0.5 },
                       ]}
                       disabled={revokingId === inv.id}
                       onPress={() => handleRevokeInvite(inv.id)}>
-                      <ThemedText style={styles.deleteTechText}>
+                      <ThemedText style={styles.deleteButtonText}>
                         {revokingId === inv.id ? '...' : 'Revocar'}
                       </ThemedText>
                     </Pressable>
