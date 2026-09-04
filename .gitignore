@@ -62,3 +62,8 @@ supabase/.temp/
 # Playwright artifacts (QA e2e)
 test-results/
 playwright-report/
+
+# Database backups
+backups/
+*.sql.gz
+*.json.gz

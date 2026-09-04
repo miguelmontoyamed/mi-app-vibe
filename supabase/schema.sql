@@ -534,7 +534,7 @@ create or replace function public.create_technician_invitation(
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   uid uuid := auth.uid();
@@ -580,7 +580,7 @@ begin
   end if;
   exp_timestamp := now() + (valid_hours || ' hours')::interval;
 
-  new_token := encode(gen_random_bytes(32), 'hex');
+  new_token := encode(extensions.gen_random_bytes(32), 'hex');
 
   insert into public.workshop_invitations (
     workshop_id,
@@ -870,59 +870,64 @@ create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
 security definer set search_path = public
-as $$
+as $
 declare
   w_id uuid;
-  req_workshop uuid;
   meta jsonb := coalesce(new.raw_user_meta_data, '{}'::jsonb);
-  new_role text;
+  provided_token text := nullif(trim(meta->>'invite_token'), '');
+  inv record;
 begin
-  -- 1) workshop_id opcional del metadata (solo si parece uuid válido;
-  --    un cast directo a uuid lanzaría excepción con valores basura).
-  begin
-    req_workshop := (meta->>'workshop_id')::uuid;
-  exception when others then
-    req_workshop := null;
-  end;
+  -- 1) Si viene con invite_token, validar rigurosamente contra workshop_invitations
+  if provided_token is not null then
+    select * into inv
+      from public.workshop_invitations
+     where token = provided_token
+       and status = 'pending'
+       and expires_at > now()
+       for update;
 
-  -- 2) Resolver el taller real:
-  --    - El frontend envía como workshop_id el id del admin invitador
-  --      (auth.users.id); el taller real se obtiene desde SU fila en profiles.
-  --    - Fallback: si ya llegara un workshop_id de workshops, se usa directo.
-  --    - Si no hay taller (registro de dueño): se crea uno nuevo.
-  if req_workshop is not null then
-    select p.workshop_id into w_id
-      from public.profiles p
-     where p.id = req_workshop
-     limit 1;
-    if w_id is null then
-      select id into w_id
-        from public.workshops
-       where id = req_workshop
-       limit 1;
+    if inv.id is not null then
+      if inv.email is null or lower(trim(inv.email)) = lower(trim(coalesce(new.email, ''))) then
+        w_id := inv.workshop_id;
+
+        -- Primero crear perfil como técnico del taller invitado (satisface FK claimed_by)
+        insert into public.profiles (id, workshop_id, full_name, role, commission_rate, is_active, specialty, joined_at)
+        values (
+          new.id,
+          w_id,
+          coalesce(nullif(meta->>'full_name', ''), new.email, 'Técnico'),
+          'technician',
+          0,
+          true,
+          nullif(meta->>'specialty', ''),
+          now()
+        );
+
+        -- Consumir la invitación
+        update public.workshop_invitations
+           set status = 'accepted',
+               claimed_by = new.id,
+               claimed_at = now()
+         where id = inv.id;
+
+        return new;
+      end if;
     end if;
   end if;
 
-  if w_id is null then
-    insert into public.workshops (name)
-    values (coalesce(nullif(meta->>'workshop_name', ''), 'Mi Taller'))
-    returning id into w_id;
-  end if;
+  -- 2) Si NO viene con token válido: SIEMPRE crear un nuevo taller propio para el usuario.
+  -- NUNCA permitir unirse a un workshop_id de terceros sin invitación validada.
+  insert into public.workshops (name)
+  values (coalesce(nullif(meta->>'workshop_name', ''), 'Mi Taller'))
+  returning id into w_id;
 
-  -- 3) Rol validado contra el CHECK de profiles ('admin' | 'technician').
-  new_role := coalesce(nullif(meta->>'role', ''), 'admin');
-  if new_role not in ('admin', 'technician') then
-    new_role := 'admin';
-  end if;
-
-  -- 4) Perfil con COALESCE total: nunca falla por datos incompletos o null.
   insert into public.profiles (id, workshop_id, full_name, role, commission_rate, is_active, specialty, joined_at)
   values (
     new.id,
     w_id,
     coalesce(nullif(meta->>'full_name', ''), new.email, 'Usuario'),
-    new_role,
-    coalesce(nullif(meta->>'commission_rate', '')::numeric, 0),
+    'admin',
+    0,
     true,
     nullif(meta->>'specialty', ''),
     now()
@@ -930,12 +935,10 @@ begin
 
   return new;
 exception
-  -- Red de seguridad: un fallo aquí NUNCA debe bloquear la creación de la
-  -- cuenta en auth.users (evita el error "Database error saving new user").
   when others then
     return new;
 end;
-$$;
+$;
 
 drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
