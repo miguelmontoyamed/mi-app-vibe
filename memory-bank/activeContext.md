@@ -191,6 +191,11 @@
 - **Reglas de Cancelación (`repair-logic.ts`):** Nueva constante `CANCELLABLE_STATUSES = ['Pendiente', 'En Proceso']`; `canCancel` usa esta constante -> 'Listo', 'Entregado', 'Cancelado' = NO cancelables; `isValidCancellation` valida motivo con `trim().length > 0`; tests 106/106 PASS (`canCancel('Listo') = false`)
 - **Migración faltante aplicada en vivo (2026-08-24):** Creada la migración `20260824220000_repairs_cancel_reason_status.sql` (agregando `motivo_cancelacion` y permitiendo el estado 'Cancelado / No Reparado' en el check constraint `repairs_status_check`). Aplicada directamente en producción usando la cadena de conexión de la base de datos vía script.
 
+- **Despliegue Producción Completo (Supabase + Vercel) (2026-09-04):**
+  - Base de Datos Supabase: Migración SQL aplicada y verificada en producción.
+  - Vercel Frontend: Commit 60dc254 desplegado y activo en mi-app-vibe-ten.vercel.app (bundle verificado con workshop_invitations).
+  - Git Credentials: osxkeychain configurado permanentemente para git push/pull sin prompts.
+
 ## Foco Operativo Inmediato (Sprint Actual)
 - **Corrección y Purificación de Inventario Físico (Septiembre 2026):** Resolver ambigüedad de nombres (agregar tipo: Pantalla, Visor, Táctil, Batería) y eliminar repuestos con stock 0 en la BD de producción.
 - **Verificación de Candados de Rol Técnico (Mostrador):** Confirmar en vivo con los usuarios que el técnico no pueda editar inventario, se auto-asigne al recibir órdenes y consulte su historial de producción sin fricción.
