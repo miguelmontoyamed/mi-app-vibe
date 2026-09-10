@@ -15,6 +15,7 @@
 | 2026-09-10 | 💻 Código | Fix botón WhatsApp pill Beta (columna a ancho completo) + auditoría 58 botones sin más recortes |
 | 2026-09-10 | 💻 Código | Módulo Comanda de taller: plantilla térmica 58/80mm, modal en recepción (3 acciones) y reimpresión en trabajos + detalle |
 | 2026-09-10 | 💻 Código | Blindaje térmico 1:1 (54/76mm, folio punteado, negro puro) + iframe oculto web sin bloqueadores |
+| 2026-09-10 | 🌀 Gravedad | Auditoría adversaria QA y stress testing: 7 bugs documentados en AUDITORIA_CALIDAD_COMANDAS.md y pendientes para mañana |
 
 ## Completado (✓)
 - **Offboarding Definitivo de Técnicos (2026-09-10, DESPLEGADO 9e462f2):**
@@ -156,15 +157,23 @@
 - **Importación de Inventario Septiembre (2026-08-26):** Catálogo de repuestos actualizado para la cuenta de `jaiderpr@gmail.com` mediante script depurado. Se filtraron automáticamente los ítems sin stock (0 o nulo) y se aseguró el reemplazo completo del inventario anterior. Scripts temporales limpiados.
 
 ## En Desarrollo / Próximo (🔄)
-- **Ejecución en Producción de Recarga de Inventario:** Aplicar `importar_inventario.sql` (180 INSERTs con DELETE atómico) en Supabase SQL Editor o ejecutar `scripts/reload-pime-inventory.mjs` con `SUPABASE_SERVICE_ROLE_KEY` para materializar la purga ERROR-01/02 en BD real.
-- **Validación Final en Mostrador:** Confirmar con usuarios que el flujo completo (recepción → auto-asignación → producción técnico → inventario read-only) opera sin fricción.
+- **Sprint de Estabilidad de Comandas y UI (Sesión Mañana):**
+  - Fix Tarea 1: `escapeHtml` en `comanda-template.ts` con guardas nulas/indefinidas para evitar `TypeError: replace`.
+  - Fix Tarea 2: `imei` y `unlockCode` con `String(...)` antes de `.trim()` en `comanda-template.ts`.
+  - Fix Tarea 3: `onafterprint` en `comanda-printer.web.ts` para evitar aborto de impresión por timeout de 2s y páginas en blanco en Safari.
+  - Fix Tarea 4: `encodeURIComponent` y `Linking.openURL` en `beta-bits.tsx`.
+  - Fix Tarea 5: Desacoplar scrim en modal de `receive.tsx` (evitar cierre accidental por propagación) y fallback si `result.repair` es nulo.
+  - Fix Tarea 6: Estandarizar timezone 'America/Bogota' en fecha de reimpresión.
+  - Pruebas: Incorporar tests adversarios a `comanda-printer.test.ts` y validar en mostrador físico.
+- **Validación Final en Mostrador:** Confirmar con usuarios que el flujo completo (recepción → auto-asignación → producción técnico → inventario read-only → impresión comanda) opera sin fricción.
 
 ## Pendiente por Verificar / Resolver (◻)
-- **NINGUNO** — Todos los errores (ERROR-01 a ERROR-05) resueltos y certificados (2026-08-27).
+- **7 Hallazgos de Auditoría Adversaria (2026-09-10):** Documentados en [AUDITORIA_CALIDAD_COMANDAS.md](../AUDITORIA_CALIDAD_COMANDAS.md) y [PENDING_FIXES.md](../PENDING_FIXES.md) para resolver en la próxima sesión.
 
 ## Historial Reciente
 | Fecha | Cambio |
 |-------|--------|
+| 2026-09-10 | **Auditoría Adversaria QA & Detección de Errores (Gravedad):** Suite de stress testing sobre commits recientes (comandas térmicas, beta-bits, offboarding). Detección de 7 fallas (TypeError en escapeHtml, crash por imei numérico, carrera de 2s en iframe web, propagación de modal). Generado y desplegado informe AUDITORIA_CALIDAD_COMANDAS.md con pendientes para la sesión de mañana. |
 | 2026-09-09 | **Despliegue Producción 100% (Vercel + Supabase) - Blindaje Técnicos:** 1) Frontend desplegado en Vercel (commit 57164a8) con bloqueo de técnicos inactivos en hidratación y login. 2) Migración SQL aplicada en vivo en Supabase (phmhlbodkoicjctlamah) vía Management API: RPC `claim_technician_invitation` reactiva `is_active = true` y bypass de seguridad verificado con `pg_proc`. |
 | 2026-09-08 | **Cron Keep-Alive Supabase (anti-pausa Free):** `scripts/keep-alive.mjs` (fetch nativo, ping `auth/health` + `rest/workshops?limit=1`, lee `.env.local` en local / secrets en CI) + `.github/workflows/keep-supabase-alive.yml` (cron `0 8 */3 * *`, `workflow_dispatch`, Node 20). Verificado local: 200/200 OK. Pendiente: crear secrets `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` en GitHub y probar Run workflow. |
 | 2026-09-04 | **Hardening Invitaciones Técnicos & RBAC + Despliegue Total:** Tabla workshop_invitations con tokens criptográficos hex-64, expiración 24h, RPCs seguras, trigger trg_check_profile_updates, bloqueo RLS comisiones/taller/inventario. Desplegado 100% en Supabase y Vercel (mi-app-vibe-ten.vercel.app). |

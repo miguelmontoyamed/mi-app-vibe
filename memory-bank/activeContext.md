@@ -4,11 +4,18 @@
 > Actualizar al finalizar cada tarea (ver `progress.md`).
 
 ## Agente Activo
-- **Agente:** 💻 **Código** (OpenCode).
-- **Tarea actual:** Blindaje térmico 1:1 de comanda implementado y verificado — en deploy.
-- **Compañero:** 🌀 **Gravedad** (Google Antigravity) — no sobrescribir su trabajo.
+- **Agente:** 🌀 **Gravedad** (Google Antigravity) — Auditoría QA completada.
+- **Próximo agente en turno:** 💻 **Código** (OpenCode) / 🌀 **Gravedad** para resolver pendientes mañana.
+- **Tarea actual:** Auditoría de calidad y robustez finalizada; reporte generado en `AUDITORIA_CALIDAD_COMANDAS.md`, actualizado `PENDING_FIXES.md` y desplegado para la sesión de mañana.
+- **Compañero:** 💻 **Código** (OpenCode) — no sobrescribir su trabajo, sincronizarse vía `memory-bank/`.
 
 ## Estado Actual (Consolidado — verificado contra el código)
+- **Auditoría de Calidad y Pruebas Adversarias (2026-09-10):**
+  - **Ejecutado por:** 🌀 **Gravedad** (Google Antigravity).
+  - **Alcance evaluado:** Commits `57164a8` a `c355d8a` (impresión térmica de comandas, flujos de offboarding, badges beta, modales de recepción).
+  - **Pruebas de estrés y adversarias:** Identificados 7 bugs (TypeError en `escapeHtml` ante nulos, crash por `.trim()` en IMEIs numéricos, carrera de 2s en iframe de impresión web, propagación de eventos en modal de recepción, etc.).
+  - **Documentación oficial:** Todo documentado en detalle en [`AUDITORIA_CALIDAD_COMANDAS.md`](./AUDITORIA_CALIDAD_COMANDAS.md) y agregado a [`PENDING_FIXES.md`](./PENDING_FIXES.md).
+  - **Plan para mañana:** Resolver las tareas pendientes en orden de prioridad (#1 a #7) comenzando por robustecer `comanda-template.ts` y el driver de impresión web.
 - **Blindaje Criptográfico de Invitaciones y RBAC/RLS Reforzado (2026-09-04):**
   - **Tabla persistente de invitaciones:** Creada `public.workshop_invitations` con tokens criptográficos únicos (64 hex), vigencia de 24 horas y seguimiento de estado (`pending`, `accepted`, `revoked`, `expired`).
   - **RPCs Seguras:** `create_technician_invitation`, `get_invitation_info`, `claim_technician_invitation`, `revoke_technician_invitation`. Deshabilitada la antigua RPC vulnerable `claim_workshop_invitation(uuid)`.

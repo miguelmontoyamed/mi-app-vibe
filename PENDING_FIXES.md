@@ -71,3 +71,19 @@ Se detectó **un bug funcional real**: la sesión **no sobrevivía a una recarga
 | 5 | Licencia 90 días | Verificado OK |
 
 **Post-auditoría (2026-08-08):** migración a **auth real de Supabase** desplegada (commit `07bfc34`): registro con email + verificación OTP de 6 dígitos y Google OAuth en producción, con `EXPO_PUBLIC_SUPABASE_URL`/`ANON_KEY` configuradas en Vercel. Storage del navegador limpio; base de datos Supabase vacía y lista para registros reales.
+---
+
+## 📋 Auditoría de Calidad y Robustez — Comandas Térmicas y Flujos Recientes (2026-09-10)
+
+**Auditor:** 🌀 **Gravedad** (Google Antigravity)  
+**Detalle completo:** Ver [`AUDITORIA_CALIDAD_COMANDAS.md`](./AUDITORIA_CALIDAD_COMANDAS.md)
+
+### Hallazgos Pendientes de Corrección:
+
+1. **[CRÍTICA] `escapeHtml` en `comanda-template.ts`:** Crash por `TypeError` ante valores `null` o `undefined` en campos de orden (`replace` sobre undefined).
+2. **[ALTA] `imei?.trim()` y `unlockCode?.trim()` en `comanda-template.ts`:** Crash por `TypeError: not a function` si el input o lector de barras entrega número.
+3. **[ALTA] `comanda-printer.web.ts`:** `setTimeout` de 2s remueve el iframe prematuramente interrumpiendo el diálogo de impresión en POS lentos, e impresión en blanco en Safari.
+4. **[MEDIA] `beta-bits.tsx`:** Carácter `ó` sin URI encode en `BETA_WHATSAPP_URL` y acceso directo a `window.open` (fragilidad SSR).
+5. **[MEDIA] `receive.tsx`:** Modal post-guardado vulnerable a cierre accidental por propagación de clics en Web, y falta de navegación fallback si `result.repair` es nulo.
+6. **[BAJA] `job/[id].tsx` / `jobs.tsx`:** Timestamp de reimpresión toma reloj cliente no sincronizado; fijar `timeZone: 'America/Bogota'`.
+7. **[BAJA] `auth-context.tsx`:** Verificación autoritativa de perfil inactivo debe aplicar política de fallo cerrado ante errores de red.
