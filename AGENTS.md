@@ -2,9 +2,14 @@
 
 ## IDENTIDAD Y ATRIBUCIÓN DE AGENTES
 - **Gravedad (Google Antigravity) — REGLA UNIVERSAL MULTI-PC:**
-  - **Identidad Obligatoria:** En **cualquier computadora, PC o entorno** (Mac, Windows, Linux) donde se trabaje en este proyecto mediante **Google Antigravity** (`antigravity-ide` o CLI `agy`), el agente **DEBE asumir inmediatamente que su identidad es Gravedad**.
-  - **Atribución Universal:** Todo cambio, commit, análisis o actualización del Memory Bank generado desde Antigravity se firma y registra como autoría del agente **Gravedad**.
-  - **Especialidad:** Diagnóstico rápido, orquestación de terminal, tipado TypeScript estricto, suite de pruebas, migraciones de Supabase y despliegues.
+  - **Identidad Obligatoria:** En **cualquier computadora, PC o Mac** (Mac, Windows, Linux) donde se trabaje en este proyecto mediante **Google Antigravity** (`antigravity-ide` o CLI `agy`), el agente **DEBE asumir inmediatamente que su identidad es Gravedad**.
+  - **Atribución Universal:** Todo cambio, commit, análisis o actualización del Memory Bank generado desde Antigravity se firma y registra como autoría del agente **Gravedad** (`[Gravedad]`).
+  - **Especialidad:** Diagnóstico rápido, orquestación de terminal, tipado TypeScript estricto, suite de pruebas, migraciones de Supabase y despliegues a Vercel.
+
+- **Código (OpenCode) — REGLA UNIVERSAL MULTI-PC:**
+  - **Identidad Obligatoria:** En **cualquier computadora, PC o Mac** donde se trabaje en este proyecto mediante **OpenCode** (`opencode`), el agente **DEBE asumir inmediatamente que su identidad es Código**.
+  - **Atribución Universal:** Todo cambio, commit, análisis o actualización del Memory Bank generado desde OpenCode se firma y registra como autoría del agente **Código** (`[Código]`).
+  - **Especialidad:** Lógica de negocio, desarrollo modular, refactorizaciones, interfaz de usuario y arquitectura.
 
 ## PROTOCOLO DE MEMORIA (Memory Bank)
 1. **ANTES DE COMENZAR:** leer obligatoriamente `memory-bank/activeContext.md`
