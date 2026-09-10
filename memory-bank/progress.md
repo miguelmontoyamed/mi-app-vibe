@@ -3,6 +3,17 @@
 > Registro de avance del proyecto. Actualizar al finalizar cada tarea.
 
 ## Completado (✓)
+- **Offboarding Definitivo de Técnicos (2026-09-10, pendiente deploy):**
+  - Nueva RPC `offboard_technician(p_profile_id)` (`20260910000000_offboard_technician.sql` + espejo en `schema.sql`): el admin elimina la cuenta en `auth.users` (libera el email, cascada el perfil), congelando antes `technician_name` en `repairs`, reasignando sus invitaciones al admin y registrando su contacto en `clients` (dedupe por email, columna nueva `notes`).
+  - `current_workshop_id()` endurecido: NULL si el perfil falta o `is_active=false` (cierra acceso con JWTs vigentes).
+  - Cliente: `offboardTechnician()` en `auth-context.tsx` (tipado estricto, sin `any`) + flujo dual en `admin.tsx`: modal de elección (desactivar temporal vs desvincular definitivo) y dos `ConfirmDialog` con consecuencias explícitas.
+  - Gates: `tsc` 0 errores, `npm test` 145/145 PASS, `verify-invitation-pipeline.mjs` extendido PASS.
+  - Pendiente: aplicar migración en Supabase prod (token Management API devolvió 403 → vía SQL Editor o cadena de conexión), matriz RLS T12–T15 (falta anon key), commit + push (sin orden explícita).
+- **Bloqueo de Técnicos Desactivados + Reactivación por Invitación (2026-09-09, commiteado 57164a8):**
+  - Guard autoritativo de `is_active` en hidratación, `onAuthStateChange`, login por contraseña y Google OAuth (`auth-context.tsx`): cierra la sesión y muestra alerta si el perfil está inactivo.
+  - `login.tsx` captura `reason: 'inactive'` y muestra el mensaje en pantalla.
+  - Migración `20260909210000_reactivate_technician_on_invitation_claim.sql`: `claim_technician_invitation` restaura `is_active = true` (fix de recontratación) + espejo en `schema.sql`.
+  - Verificado: `tsc` 0 errores, `npm test` 145/145 PASS, verify-script PASS.
 - **Blindaje Criptográfico de Invitaciones y RBAC/RLS Reforzado (2026-09-04):**
   - Implementación de `workshop_invitations` en PostgreSQL con tokens seguros de 64 caracteres hex y expiración de 24 horas.
   - RPCs `create_technician_invitation`, `get_invitation_info`, `claim_technician_invitation`, `revoke_technician_invitation`.

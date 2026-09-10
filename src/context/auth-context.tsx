@@ -52,6 +52,24 @@ export type LoginResult =
   | { ok: true; user: User }
   | { ok: false; reason: 'invalid' | 'unconfirmed' | 'inactive' | 'unknown'; message?: string };
 
+/** Resultado de la desvinculación definitiva de un técnico (RPC). */
+export interface OffboardResult {
+  ok: boolean;
+  repairsPreserved?: number;
+  invitesReassigned?: number;
+  clientCreated?: boolean;
+  message?: string;
+}
+
+/** Payload crudo de la RPC `offboard_technician` (snake_case de Postgres). */
+interface OffboardRpcData {
+  ok: boolean;
+  repairs_preserved?: number;
+  invites_reassigned?: number;
+  client_created?: boolean;
+  message?: string;
+}
+
 export interface InviteLink {
   /** Token criptográfico. */
   token: string;
@@ -128,6 +146,9 @@ export interface AuthContextType {
   /** Elimina (soft delete) un técnico. Devuelve false si no existe o es el
    *  usuario actual. */
   deleteTechnician: (id: string) => Promise<boolean>;
+  /** Desvincula definitivamente a un técnico: libera su email, conserva su
+   *  historial, lo registra como cliente y revoca su acceso. Solo el dueño. */
+  offboardTechnician: (id: string) => Promise<OffboardResult>;
   /** Actualiza el % de comisión de un técnico (fracción, 0.30 = 30%). Solo el
    *  dueño. Devuelve false si no es admin o es el propio usuario. */
   updateTechnicianCommission: (id: string, commissionRate: number) => Promise<boolean>;
@@ -595,6 +616,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return true;
   };
 
+  const offboardTechnician = async (id: string): Promise<OffboardResult> => {
+    if (!currentUser || currentUser.role !== 'admin') {
+      return { ok: false, message: 'Solo el administrador del taller puede desvincular técnicos.' };
+    }
+    if (currentUser.id === id) {
+      return { ok: false, message: 'No puedes desvincularte a ti mismo.' };
+    }
+    if (!users.some((u) => u.id === id && u.role === 'technician')) {
+      return { ok: false, message: 'Técnico no encontrado en este taller.' };
+    }
+    try {
+      const { data, error } = await supabase.rpc('offboard_technician', {
+        p_profile_id: id,
+      });
+      if (error) {
+        console.error('Error offboarding technician:', error);
+        return { ok: false, message: 'No se pudo desvincular al técnico. Intenta de nuevo.' };
+      }
+      const payload = data as OffboardRpcData | null;
+      if (payload?.ok) {
+        const wid = workshopId ?? (await resolveWorkshopId());
+        if (typeof wid === 'string') {
+          setWorkshopId(wid);
+          await refreshUsers(wid);
+          await fetchPendingInvitations(wid);
+        }
+        return {
+          ok: true,
+          repairsPreserved: payload.repairs_preserved ?? 0,
+          invitesReassigned: payload.invites_reassigned ?? 0,
+          clientCreated: payload.client_created ?? false,
+        };
+      }
+      return { ok: false, message: payload?.message ?? 'No se pudo desvincular al técnico.' };
+    } catch (err) {
+      console.error('Error offboarding technician:', err);
+      return { ok: false, message: 'No se pudo desvincular al técnico. Intenta de nuevo.' };
+    }
+  };
+
   const updateTechnicianCommission = async (
     id: string,
     commissionRate: number
@@ -861,6 +922,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         resendRegistration,
         createTechnician,
         deleteTechnician,
+        offboardTechnician,
         updateTechnicianCommission,
         registerInvitedTechnician,
         generateInviteLink,

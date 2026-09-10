@@ -73,6 +73,7 @@ create table if not exists public.clients (
   name text not null,
   phone text,
   email text,
+  notes text,
   created_at timestamptz not null default now()
 );
 
@@ -253,6 +254,7 @@ alter table public.profiles add column if not exists is_active boolean default t
 alter table public.profiles add column if not exists specialty text;
 alter table public.profiles add column if not exists joined_at timestamptz default now();
 alter table public.profiles add column if not exists notes text;
+alter table public.clients add column if not exists notes text;
 
 -- CHECKs con los literales exactos de src/utils/repair-logic.ts (idempotente).
 alter table public.repairs drop constraint if exists repairs_status_check;
@@ -270,7 +272,8 @@ alter table public.workshop_profiles add column if not exists updated_at timesta
 -- ============================================================
 -- HELPERS RLS (SECURITY DEFINER: evita recursión infinita de políticas)
 -- ============================================================
--- Id del taller del usuario autenticado.
+-- Id del taller del usuario autenticado. NULL si no hay perfil o está
+-- inactivo: con JWT aún vigente tras una desvinculación, todo queda denegado.
 create or replace function public.current_workshop_id()
 returns uuid
 language sql
@@ -278,7 +281,10 @@ stable
 security definer
 set search_path = public
 as $$
-  select workshop_id from public.profiles where id = auth.uid()
+  select workshop_id
+    from public.profiles
+   where id = auth.uid()
+     and is_active is not false
 $$;
 
 -- Rol del usuario autenticado (used en WITH CHECK de perfiles).
@@ -840,7 +846,109 @@ $$;
 revoke execute on function public.revoke_technician_invitation(uuid) from public, anon;
 grant execute on function public.revoke_technician_invitation(uuid) to authenticated, service_role;
 
--- 5) claim_workshop_invitation (OBSOLETO / SEGURO)
+-- 5) offboard_technician (desvinculación definitiva del técnico)
+create or replace function public.offboard_technician(p_profile_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  uid uuid := auth.uid();
+  w_id uuid;
+  target public.profiles%rowtype;
+  target_email text;
+  frozen_count int := 0;
+  reassigned_count int := 0;
+  client_created bool := false;
+  client_existed bool := false;
+begin
+  if uid is null then
+    return jsonb_build_object('ok', false, 'message', 'No autenticado');
+  end if;
+
+  if public.current_user_role() <> 'admin' then
+    return jsonb_build_object('ok', false, 'message', 'Solo el administrador del taller puede desvincular técnicos');
+  end if;
+
+  w_id := public.current_workshop_id();
+  if w_id is null then
+    return jsonb_build_object('ok', false, 'message', 'Taller no encontrado para este usuario');
+  end if;
+
+  if p_profile_id is null then
+    return jsonb_build_object('ok', false, 'message', 'Técnico no especificado');
+  end if;
+
+  if p_profile_id = uid then
+    return jsonb_build_object('ok', false, 'message', 'No puedes desvincularte a ti mismo');
+  end if;
+
+  select * into target
+    from public.profiles
+   where id = p_profile_id;
+
+  if target.id is null then
+    return jsonb_build_object('ok', false, 'message', 'Técnico no encontrado');
+  end if;
+
+  if target.workshop_id is distinct from w_id then
+    return jsonb_build_object('ok', false, 'message', 'Ese técnico no pertenece a tu taller');
+  end if;
+
+  if target.role <> 'technician' then
+    return jsonb_build_object('ok', false, 'message', 'Solo se puede desvincular a técnicos');
+  end if;
+
+  select email into target_email from auth.users where id = target.id;
+
+  update public.repairs
+     set technician_name = coalesce(technician_name, target.full_name, 'Técnico')
+   where technician_id = target.id::text
+     and workshop_id = w_id;
+  get diagnostics frozen_count = row_count;
+
+  update public.workshop_invitations
+     set invited_by = uid
+   where invited_by = target.id;
+  get diagnostics reassigned_count = row_count;
+
+  if target_email is not null and length(trim(target_email)) > 0 then
+    if exists (
+      select 1 from public.clients
+       where workshop_id = w_id
+         and lower(email) = lower(trim(target_email))
+    ) then
+      client_existed := true;
+    else
+      insert into public.clients (workshop_id, name, email, notes)
+      values (
+        w_id,
+        coalesce(nullif(trim(target.full_name), ''), 'Ex-técnico'),
+        lower(trim(target_email)),
+        'Ex-técnico desvinculado el ' || now()::date
+      );
+      client_created := true;
+    end if;
+  end if;
+
+  delete from auth.users where id = target.id;
+
+  return jsonb_build_object(
+    'ok', true,
+    'repairs_preserved', frozen_count,
+    'invites_reassigned', reassigned_count,
+    'client_created', client_created,
+    'client_existed', client_existed,
+    'email_freed', coalesce(target_email, '')
+  );
+end;
+$$;
+
+revoke execute on function public.offboard_technician(uuid) from public, anon;
+grant execute on function public.offboard_technician(uuid) to authenticated, service_role;
+
+-- 6) claim_workshop_invitation (OBSOLETO / SEGURO)
 create or replace function public.claim_workshop_invitation(p_workshop_id uuid)
 returns jsonb
 language plpgsql

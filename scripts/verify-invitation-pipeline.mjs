@@ -23,6 +23,7 @@ console.log('🧪 Iniciando verificación del pipeline de seguridad de invitacio
 const filesToCheck = [
   'supabase/migrations/20260904000000_harden_invitations_and_rbac.sql',
   'supabase/migrations/20260909210000_reactivate_technician_on_invitation_claim.sql',
+  'supabase/migrations/20260910000000_offboard_technician.sql',
   'supabase/schema.sql',
   'src/utils/auth-links.ts',
   'src/utils/auth-links.test.ts',
@@ -51,11 +52,19 @@ const reactivateMigration = fs.readFileSync('supabase/migrations/20260909210000_
 assert.ok(reactivateMigration.includes('is_active = true'), 'Falta is_active = true en migración de reactivación');
 console.log('✔ Migración de reactivación 20260909210000 validada correctamente.');
 
+const offboardMigration = fs.readFileSync('supabase/migrations/20260910000000_offboard_technician.sql', 'utf8');
+assert.ok(offboardMigration.includes('offboard_technician'), 'Falta RPC offboard_technician en migración de offboarding');
+assert.ok(offboardMigration.includes('delete from auth.users'), 'Falta borrado en auth.users en migración de offboarding');
+assert.ok(offboardMigration.includes('is_active is not false'), 'Falta endurecimiento de current_workshop_id en migración de offboarding');
+console.log('✔ Migración de offboarding 20260910000000 validada correctamente.');
+
 // 3. Verificación de contenido en schema.sql
 const schemaContent = fs.readFileSync('supabase/schema.sql', 'utf8');
 assert.ok(schemaContent.includes('public.workshop_invitations'), 'Falta tabla workshop_invitations en schema.sql');
 assert.ok(schemaContent.includes('create_technician_invitation'), 'Falta RPC create_technician_invitation en schema.sql');
 assert.ok(schemaContent.includes('check_profile_updates'), 'Falta trigger check_profile_updates en schema.sql');
+assert.ok(schemaContent.includes('offboard_technician'), 'Falta RPC offboard_technician en schema.sql');
+assert.ok(schemaContent.includes('is_active is not false'), 'Falta endurecimiento de current_workshop_id en schema.sql');
 console.log('✔ schema.sql está perfectamente sincronizado con las políticas y funciones.');
 
 // 4. Verificación de utilidades de tokens y URLs

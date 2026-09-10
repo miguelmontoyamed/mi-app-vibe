@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Linking,
+  Modal,
   Platform,
   Pressable,
   StyleSheet,
@@ -53,6 +54,7 @@ export default function AdminScreen() {
     createTechnicianInvite,
     revokeInvitation,
     deleteTechnician,
+    offboardTechnician,
     updateTechnicianCommission,
   } = useAuth();
   const [inviteEmail, setInviteEmail] = useState('');
@@ -85,6 +87,11 @@ export default function AdminScreen() {
   /** Confirmación MD3: marca el técnico a eliminar (reemplaza confirm nativo). */
   const [techPendingDelete, setTechPendingDelete] = useState<(typeof users)[number] | null>(null);
   const [techDeleting, setTechDeleting] = useState(false);
+  /** Paso previo: elegir entre desactivación temporal y desvinculación definitiva. */
+  const [techPendingChoice, setTechPendingChoice] = useState<(typeof users)[number] | null>(null);
+  /** Desvinculación definitiva (RPC offboard_technician, irreversible). */
+  const [techPendingOffboard, setTechPendingOffboard] = useState<(typeof users)[number] | null>(null);
+  const [techOffboarding, setTechOffboarding] = useState(false);
 
   // ── Panel de Liquidación y Rendimiento Mensual por Técnico ──
   /** Periodo elegido explícitamente por el usuario ('YYYY-MM'); null hasta que elige. */
@@ -312,7 +319,7 @@ export default function AdminScreen() {
   };
 
   const handleDeleteTechnician = (tech: (typeof users)[number]) => {
-    setTechPendingDelete(tech);
+    setTechPendingChoice(tech);
   };
 
   const confirmDeleteTechnician = async () => {
@@ -323,7 +330,22 @@ export default function AdminScreen() {
     const deleted = await deleteTechnician(techPendingDelete.id);
     setTechDeleting(false);
     setTechPendingDelete(null);
-    notify(deleted ? 'Técnico eliminado.' : 'No se puede eliminar este técnico.');
+    notify(deleted ? 'Técnico desactivado. Podrás reactivarlo con una invitación.' : 'No se puede desactivar este técnico.');
+  };
+
+  const confirmOffboardTechnician = async () => {
+    if (!techPendingOffboard) {
+      return;
+    }
+    setTechOffboarding(true);
+    const result = await offboardTechnician(techPendingOffboard.id);
+    setTechOffboarding(false);
+    setTechPendingOffboard(null);
+    notify(
+      result.ok
+        ? `Técnico desvinculado. Historial conservado (${result.repairsPreserved ?? 0} órdenes). Email liberado.`
+        : (result.message ?? 'No se puede desvincular este técnico.'),
+    );
   };
 
   /** Abre WhatsApp para registrar el pago de la suscripción (renovación). */
@@ -1071,23 +1093,101 @@ export default function AdminScreen() {
         </View>
       </ThemedView>
 
-      {/* Confirmación MD3 de eliminación de técnico */}
+      {/* Paso previo: elegir desactivación temporal o desvinculación definitiva */}
+      <Modal
+        visible={techPendingChoice !== null}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setTechPendingChoice(null)}>
+        <Pressable
+          testID="offboard-choice-scrim"
+          accessibilityRole="button"
+          accessibilityLabel="Cerrar diálogo"
+          onPress={() => setTechPendingChoice(null)}
+          style={styles.choiceScrim}>
+          <Pressable
+            onPress={() => {}}
+            style={[
+              styles.choiceCard,
+              { backgroundColor: theme.surfaceContainerHigh, borderColor: theme.border },
+            ]}>
+            <ThemedText type="subtitle" style={styles.choiceTitle}>
+              Gestionar a {techPendingChoice?.name}
+            </ThemedText>
+            <ThemedText type="small" themeColor="textSecondary" style={styles.choiceMessage}>
+              Desactivar temporalmente: deja de ver el taller pero conserva su cuenta (reactivable con invitación).{'\n'}Desvincular definitivamente: libera su email, conserva su historial y lo registra como cliente. Irreversible.
+            </ThemedText>
+            <Pressable
+              testID="choice-deactivate-button"
+              accessibilityRole="button"
+              accessibilityLabel="Desactivar temporalmente"
+              style={({ pressed }) => [styles.choiceButton, styles.choiceSecondary, pressed && styles.pressed]}
+              onPress={() => {
+                setTechPendingDelete(techPendingChoice);
+                setTechPendingChoice(null);
+              }}>
+              <ThemedText style={styles.choiceSecondaryText}>Desactivar temporalmente</ThemedText>
+            </Pressable>
+            <Pressable
+              testID="choice-offboard-button"
+              accessibilityRole="button"
+              accessibilityLabel="Desvincular definitivamente"
+              style={({ pressed }) => [styles.choiceButton, styles.choiceDanger, pressed && styles.pressed]}
+              onPress={() => {
+                setTechPendingOffboard(techPendingChoice);
+                setTechPendingChoice(null);
+              }}>
+              <ThemedText style={styles.choiceDangerText}>Desvincular definitivamente</ThemedText>
+            </Pressable>
+            <Pressable
+              testID="choice-cancel-button"
+              accessibilityRole="button"
+              accessibilityLabel="Cancelar"
+              style={({ pressed }) => [styles.choiceButton, pressed && styles.pressed]}
+              onPress={() => setTechPendingChoice(null)}>
+              <ThemedText themeColor="textSecondary">Cancelar</ThemedText>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Confirmación MD3 de desactivación temporal de técnico */}
       <ConfirmDialog
         visible={techPendingDelete !== null}
-        title="Eliminar técnico"
+        title="Desactivar técnico"
         message={
           techPendingDelete
-            ? `¿Eliminar a ${techPendingDelete.name} del taller? Su historial de órdenes se conserva.`
+            ? `¿Desactivar a ${techPendingDelete.name}? Dejará de ver el taller pero su cuenta se conserva y podrás reactivarla con una invitación.`
             : ''
         }
-        confirmLabel="Eliminar"
+        confirmLabel="Desactivar"
         cancelLabel="Cancelar"
-        variant="danger"
+        variant="primary"
         loading={techDeleting}
         onConfirm={() => {
           void confirmDeleteTechnician();
         }}
         onCancel={() => setTechPendingDelete(null)}
+      />
+
+      {/* Confirmación MD3 de desvinculación definitiva de técnico */}
+      <ConfirmDialog
+        visible={techPendingOffboard !== null}
+        title="Desvinculación definitiva"
+        message={
+          techPendingOffboard
+            ? `¿Desvincular a ${techPendingOffboard.name} para siempre? Se libera su email, se conserva su historial de órdenes y se registra como cliente. Esta acción no se puede deshacer.`
+            : ''
+        }
+        confirmLabel="Desvincular"
+        cancelLabel="Cancelar"
+        variant="danger"
+        loading={techOffboarding}
+        onConfirm={() => {
+          void confirmOffboardTechnician();
+        }}
+        onCancel={() => setTechPendingOffboard(null)}
       />
     </Screen>
   );
@@ -1414,5 +1514,49 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: Spacing.three,
     borderRadius: Shape.sm,
+  },
+  choiceScrim: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing.four,
+  },
+  choiceCard: {
+    width: '100%',
+    maxWidth: 340,
+    borderRadius: Shape.lg,
+    borderWidth: 1,
+    padding: Spacing.four,
+    gap: Spacing.two,
+    alignItems: 'stretch',
+  },
+  choiceTitle: {
+    textAlign: 'center',
+  },
+  choiceMessage: {
+    textAlign: 'center',
+  },
+  choiceButton: {
+    minHeight: TouchTarget.min,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: Shape.full,
+    paddingHorizontal: Spacing.three,
+  },
+  choiceSecondary: {
+    borderWidth: 1,
+    borderColor: Brand.primary,
+  },
+  choiceSecondaryText: {
+    color: Brand.primary,
+    fontWeight: '600',
+  },
+  choiceDanger: {
+    backgroundColor: Brand.danger,
+  },
+  choiceDangerText: {
+    color: '#ffffff',
+    fontWeight: '600',
   },
 });
