@@ -5,7 +5,7 @@
 
 ## Agente Activo
 - **Agente:** 💻 **Código** (OpenCode).
-- **Tarea actual:** Fix responsive iPhone 12 PM en login/signup (flexGrow + wrap BETA) — en deploy y verificación visual.
+- **Tarea actual:** Fix responsive iPhone 12 PM completado y verificado en vivo (commit b92df18).
 - **Compañero:** 🌀 **Gravedad** (Google Antigravity) — no sobrescribir su trabajo.
 
 ## Estado Actual (Consolidado — verificado contra el código)
