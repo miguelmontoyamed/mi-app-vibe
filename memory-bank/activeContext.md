@@ -197,6 +197,8 @@
   - Git Credentials: osxkeychain configurado permanentemente para git push/pull sin prompts.
 
 ## Foco Operativo Inmediato (Sprint Actual)
+- **Blindaje de Técnicos Inactivos y Recontratación (2026-09-09):** Resuelto el acceso residual de técnicos desactivados (`is_active = false`) expulsando la sesión en cliente y bloqueando logins. Resuelto el bug de recontratación en `claim_technician_invitation` reactivando `is_active = true`.
+- **Keep-Alive Supabase (2026-09-08):** Cron GitHub Actions cada 3 días (`keep-supabase-alive.yml` + `scripts/keep-alive.mjs`) para evitar pausa Free por inactividad. Falta crear secrets en GitHub y probar Run workflow.
 - **Corrección y Purificación de Inventario Físico (Septiembre 2026):** Resolver ambigüedad de nombres (agregar tipo: Pantalla, Visor, Táctil, Batería) y eliminar repuestos con stock 0 en la BD de producción.
 - **Verificación de Candados de Rol Técnico (Mostrador):** Confirmar en vivo con los usuarios que el técnico no pueda editar inventario, se auto-asigne al recibir órdenes y consulte su historial de producción sin fricción.
 - **Ratificación Arquitectónica:** Se documentó y blindó la regla de negocio de Persistencia Continua de Inventario. El inventario físico sobrevive mes a mes; los cierres mensuales son estrictamente snapshots financieros de órdenes.

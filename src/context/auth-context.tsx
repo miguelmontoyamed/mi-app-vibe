@@ -50,7 +50,7 @@ export interface User {
 /** Resultado del login: usuario autenticado o motivo del rechazo. */
 export type LoginResult =
   | { ok: true; user: User }
-  | { ok: false; reason: 'invalid' | 'unconfirmed' | 'unknown' };
+  | { ok: false; reason: 'invalid' | 'unconfirmed' | 'inactive' | 'unknown'; message?: string };
 
 export interface InviteLink {
   /** Token criptográfico. */
@@ -212,18 +212,39 @@ function profileToUser(p: SupabaseUserProfile, authoritativeRole?: 'admin' | 'te
   };
 }
 
+interface AuthoritativeProfile {
+  role: 'admin' | 'technician';
+  isActive: boolean;
+}
+
 /**
- * Consulta el rol autoritativo directo de `public.profiles` para el usuario
- * actual (bypasseando el metadata de sesión desactualizado tras OAuth/RPC).
+ * Consulta el perfil autoritativo directo de `public.profiles` para el usuario
+ * actual (bypasseando el metadata de sesión desactualizado tras OAuth/RPC),
+ * validando tanto el rol como si la cuenta sigue activa (`is_active`).
  */
-async function fetchAuthoritativeRole(userId: string): Promise<'admin' | 'technician' | null> {
+async function fetchAuthoritativeProfile(userId: string): Promise<AuthoritativeProfile | null> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('role')
+    .select('role, is_active')
     .eq('id', userId)
     .single();
   if (error || !data?.role) return null;
-  return data.role === 'admin' ? 'admin' : 'technician';
+  return {
+    role: data.role === 'admin' ? 'admin' : 'technician',
+    isActive: data.is_active !== false,
+  };
+}
+
+async function fetchAuthoritativeRole(userId: string): Promise<'admin' | 'technician' | null> {
+  const prof = await fetchAuthoritativeProfile(userId);
+  return prof?.role ?? null;
+}
+
+function notifyDeactivatedAccount() {
+  Alert.alert(
+    'Cuenta desactivada',
+    'Tu cuenta ha sido desactivada por el administrador del taller. Contacta al dueño del taller si crees que se trata de un error.'
+  );
 }
 
 /**
@@ -358,8 +379,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const profile = await supabaseRestoreSession();
         if (!cancelled && profile) {
           await checkAndClaimPendingInvite();
-          const role = await fetchAuthoritativeRole(profile.id);
-          const usr = profileToUser(profile, role ?? undefined);
+          const authProf = await fetchAuthoritativeProfile(profile.id);
+          if (authProf && !authProf.isActive) {
+            await supabaseSignOut();
+            if (!cancelled) {
+              setCurrentUser(null);
+              notifyDeactivatedAccount();
+            }
+            return;
+          }
+          const usr = profileToUser(profile, authProf?.role ?? undefined);
           setCurrentUser(usr);
         }
         const wid = await resolveWorkshopId();
@@ -401,7 +430,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         (async () => {
           try {
             await checkAndClaimPendingInvite();
-            const role = await fetchAuthoritativeRole(profile.id);
+            const authProf = await fetchAuthoritativeProfile(profile.id);
+            if (authProf && !authProf.isActive) {
+              await supabaseSignOut();
+              setCurrentUser(null);
+              notifyDeactivatedAccount();
+              return;
+            }
+            const role = authProf?.role;
             setCurrentUser(profileToUser(profile, role ?? undefined));
             const wid = await resolveWorkshopId();
             if (typeof wid === 'string') {
@@ -428,7 +464,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const result = await supabaseSignInWithPassword(needle, password);
     if (result.ok) {
       await checkAndClaimPendingInvite();
-      const role = await fetchAuthoritativeRole(result.user.id);
+      const authProf = await fetchAuthoritativeProfile(result.user.id);
+      if (authProf && !authProf.isActive) {
+        await supabaseSignOut();
+        setCurrentUser(null);
+        return {
+          ok: false,
+          reason: 'inactive',
+          message: 'Tu cuenta ha sido desactivada por el administrador del taller.',
+        };
+      }
+      const role = authProf?.role;
       const user = profileToUser(result.user, role ?? undefined);
       setCurrentUser(user);
       const wid = await resolveWorkshopId();
@@ -450,7 +496,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const result = await supabaseSignInWithGoogleIdToken(idToken);
       if (result.ok) {
         await checkAndClaimPendingInvite();
-        const role = await fetchAuthoritativeRole(result.user.id);
+        const authProf = await fetchAuthoritativeProfile(result.user.id);
+        if (authProf && !authProf.isActive) {
+          await supabaseSignOut();
+          setCurrentUser(null);
+          notifyDeactivatedAccount();
+          return null;
+        }
+        const role = authProf?.role;
         const user = profileToUser(result.user, role ?? undefined);
         setCurrentUser(user);
         const wid = await resolveWorkshopId();

@@ -738,6 +738,9 @@ begin
     return jsonb_build_object('ok', false, 'message', 'El taller ya alcanzó el límite de 5 técnicos');
   end if;
 
+  -- Habilitar bypass de seguridad para reclamación legítima de invitación en esta transacción
+  perform set_config('app.claiming_invitation', 'true', true);
+
   select * into cur_profile
     from public.profiles
    where id = uid;
@@ -748,6 +751,7 @@ begin
     update public.profiles
        set workshop_id = inv.workshop_id,
            role = 'technician',
+           is_active = true,
            joined_at = coalesce(joined_at, now())
      where id = uid;
 
@@ -769,7 +773,8 @@ begin
     )
     on conflict (id) do update
        set workshop_id = inv.workshop_id,
-           role = 'technician';
+           role = 'technician',
+           is_active = true;
   end if;
 
   update public.workshop_invitations

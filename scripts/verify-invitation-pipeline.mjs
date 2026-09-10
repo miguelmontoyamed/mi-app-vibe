@@ -22,6 +22,7 @@ console.log('🧪 Iniciando verificación del pipeline de seguridad de invitacio
 // 1. Verificación de archivos clave
 const filesToCheck = [
   'supabase/migrations/20260904000000_harden_invitations_and_rbac.sql',
+  'supabase/migrations/20260909210000_reactivate_technician_on_invitation_claim.sql',
   'supabase/schema.sql',
   'src/utils/auth-links.ts',
   'src/utils/auth-links.test.ts',
@@ -45,6 +46,10 @@ assert.ok(migrationContent.includes('revoke_technician_invitation'), 'Falta RPC 
 assert.ok(migrationContent.includes('get_invitation_info'), 'Falta RPC get_invitation_info');
 assert.ok(migrationContent.includes('check_profile_updates'), 'Falta trigger check_profile_updates');
 console.log('✔ Migración contiene todas las tablas, RPCs y triggers de blindaje requeridos.');
+
+const reactivateMigration = fs.readFileSync('supabase/migrations/20260909210000_reactivate_technician_on_invitation_claim.sql', 'utf8');
+assert.ok(reactivateMigration.includes('is_active = true'), 'Falta is_active = true en migración de reactivación');
+console.log('✔ Migración de reactivación 20260909210000 validada correctamente.');
 
 // 3. Verificación de contenido en schema.sql
 const schemaContent = fs.readFileSync('supabase/schema.sql', 'utf8');

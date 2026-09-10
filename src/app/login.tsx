@@ -52,6 +52,8 @@ export default function LoginScreen() {
         router.replace('/');
       } else if (result.reason === 'unconfirmed') {
         setPendingVerification(email.trim().toLowerCase());
+      } else if (result.reason === 'inactive') {
+        setLoginError(result.message || 'Tu cuenta ha sido desactivada por el administrador del taller.');
       } else {
         setLoginError('Correo o contraseña incorrectos.');
       }
