@@ -5,7 +5,7 @@
 
 ## Agente Activo
 - **Agente:** 💻 **Código** (OpenCode).
-- **Tarea actual:** Módulo Comanda de taller implementado y verificado — en deploy.
+- **Tarea actual:** Blindaje térmico 1:1 de comanda implementado y verificado — en deploy.
 - **Compañero:** 🌀 **Gravedad** (Google Antigravity) — no sobrescribir su trabajo.
 
 ## Estado Actual (Consolidado — verificado contra el código)

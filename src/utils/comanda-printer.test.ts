@@ -48,10 +48,23 @@ describe('comanda-template', () => {
     assert.ok(html.includes('Pantalla &amp; táctil'));
   });
 
-  it('usa 80mm por defecto y 58mm cuando se pide', () => {
-    assert.ok(buildComandaHtml(baseData).includes('size: 80mm'));
-    assert.ok(buildComandaHtml(baseData, '58mm').includes('size: 58mm'));
-    assert.ok(!buildComandaHtml(baseData, '58mm').includes('size: 80mm'));
+  it('usa @page sin márgenes y área imprimible 1:1 por ancho', () => {
+    const html80 = buildComandaHtml(baseData);
+    assert.ok(html80.includes('size: auto'));
+    assert.ok(html80.includes('margin: 0mm'));
+    assert.ok(html80.includes('max-width: 76mm'));
+    const html58 = buildComandaHtml(baseData, '58mm');
+    assert.ok(html58.includes('max-width: 54mm'));
+    assert.ok(!html58.includes('max-width: 76mm'));
+    assert.ok(html80.includes('print-color-adjust: exact'));
+  });
+
+  it('destaca el folio con borde punteado y la seguridad en alto contraste', () => {
+    const html = buildComandaHtml(baseData);
+    assert.ok(html.includes('class="folio"'));
+    assert.ok(html.includes('font-size: 17px'));
+    assert.ok(html.includes('border-top: 1px dashed #000000'));
+    assert.ok(html.includes('class="pin"'));
   });
 
   it('muestra Reimpreso solo cuando viene reprintedAt', () => {
