@@ -16,6 +16,8 @@ import { filterInventoryParts } from '@/utils/inventory-parts';
 import { Brand, Shape, Spacing, statusStyle } from '@/constants/theme';
 import { useAuth, type User } from '@/context/auth-context';
 import { useRepair, type InventoryPart } from '@/context/repair-context';
+import { useWorkshop } from '@/context/workshop-context';
+import { printComanda } from '@/utils/comanda-printer';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useTheme } from '@/hooks/use-theme';
 import { formatCOP } from '@/utils/format';
@@ -59,6 +61,37 @@ export default function JobDetailScreen() {
   const [deletingOrder, setDeletingOrder] = useState(false);
 
   const repair = repairs.find((r) => r.id === id);
+  const { profile } = useWorkshop();
+
+  const handlePrintComanda = async () => {
+    if (!repair) {
+      return;
+    }
+    const result = await printComanda(
+      {
+        brand: profile?.name || 'TechRepair Master',
+        orderId: repair.id,
+        date: repair.date,
+        reprintedAt: new Date().toLocaleString('es-CO'),
+        clientName: repair.clientName,
+        clientPhone: repair.phone,
+        device: repair.device,
+        imei: repair.imei,
+        unlockCode: repair.unlockCode,
+        issue: repair.issue,
+        technicianName: repair.technicianName || 'General',
+        receivedBy: currentUser?.name ?? repair.technicianName ?? '-',
+      },
+      '80mm',
+    );
+    if (result === 'blocked') {
+      Alert.alert('Impresión', 'Permite las ventanas emergentes para imprimir la comanda.');
+    } else if (result === 'error') {
+      Alert.alert('Impresión', 'No se pudo abrir la impresión. Intenta de nuevo.');
+    } else if (result === 'unavailable') {
+      Alert.alert('Impresión', 'Impresión no disponible en este dispositivo.');
+    }
+  };
 
   // RBAC (defensa en profundidad): un técnico solo puede ver las órdenes
   // asignadas a su nombre/ID, incluso navegando por URL directa.
@@ -272,6 +305,12 @@ export default function JobDetailScreen() {
           onPress={() =>
             router.push({ pathname: '/receipt/[id]', params: { id: repair.id } })
           }
+          style={styles.actionBtn}
+        />
+        <Button
+          label="🏷️ Comanda"
+          variant="secondary"
+          onPress={() => void handlePrintComanda()}
           style={styles.actionBtn}
         />
       </View>

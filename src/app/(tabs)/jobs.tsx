@@ -18,7 +18,10 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Brand, BREAKPOINTS, KpiAccent, Shape, Spacing, TouchTarget } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
-import { RepairStatus, useRepair } from '@/context/repair-context';
+import { RepairStatus, useRepair, type RepairItem } from '@/context/repair-context';
+import { useWorkshop } from '@/context/workshop-context';
+import { printComanda } from '@/utils/comanda-printer';
+import type { ComandaData } from '@/utils/comanda-printer-types';
 import { useTheme } from '@/hooks/use-theme';
 import { formatCOP, parseCOPInput } from '@/utils/format';
 import { PAYMENT_METHODS, type PaymentMethod, visibleRepairs } from '@/utils/repair-logic';
@@ -46,6 +49,7 @@ export default function JobsScreen() {
   const isTablet = width >= BREAKPOINTS.mobile;
   const router = useRouter();
   const { currentUser } = useAuth();
+  const { profile } = useWorkshop();
   const { repairs, updateRepairStatus, recordRepairPayment } = useRepair();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -112,8 +116,32 @@ export default function JobsScreen() {
     }
   };
 
-  const handleSubmitPayment = async (id: string, budget: number, advance: number) => {
-    const remaining = Math.max(0, budget - advance);
+  const handlePrintComanda = async (item: RepairItem) => {
+    const data: ComandaData = {
+      brand: profile?.name || 'TechRepair Master',
+      orderId: item.id,
+      date: item.date,
+      reprintedAt: new Date().toLocaleString('es-CO'),
+      clientName: item.clientName,
+      clientPhone: item.phone,
+      device: item.device,
+      imei: item.imei,
+      unlockCode: item.unlockCode,
+      issue: item.issue,
+      technicianName: item.technicianName || 'General',
+      receivedBy: currentUser?.name ?? item.technicianName ?? '-',
+    };
+    const result = await printComanda(data, '80mm');
+    if (result === 'blocked') {
+      Alert.alert('Impresión', 'Permite las ventanas emergentes para imprimir la comanda.');
+    } else if (result === 'error') {
+      Alert.alert('Impresión', 'No se pudo abrir la impresión. Intenta de nuevo.');
+    } else if (result === 'unavailable') {
+      Alert.alert('Impresión', 'Impresión no disponible en este dispositivo.');
+    }
+  };
+
+  const handleSubmitPayment = async (id: string, budget: number, advance: number) => {    const remaining = Math.max(0, budget - advance);
     const value = paymentInput.trim() ? (parseCOPInput(paymentInput) ?? 0) : remaining;
     if (value <= 0) {
       Alert.alert('Pago', 'El saldo pendiente es $ 0. No hay nada que cobrar.');
@@ -266,6 +294,12 @@ export default function JobsScreen() {
                   onPress={() =>
                     router.push({ pathname: '/receipt/[id]', params: { id: item.id } })
                   }
+                  style={styles.rowButton}
+                />
+                <Button
+                  label="🏷️ Comanda"
+                  variant="secondary"
+                  onPress={() => void handlePrintComanda(item)}
                   style={styles.rowButton}
                 />
                 {(item.advancePayment ?? 0) < item.budget && (

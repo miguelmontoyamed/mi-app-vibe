@@ -82,8 +82,8 @@ interface RepairContextType {
   fetchRepairs: () => Promise<{ ok: boolean; error?: string }>;
   /** Carga el inventario del taller desde Supabase (nube). Devuelve { ok, error } con el motivo técnico. */
   fetchInventory: () => Promise<{ ok: boolean; error?: string }>;
-  /** Crea la orden en Supabase y devuelve { ok, error }. NO finge éxito si la DB rechaza el INSERT. */
-  addRepair: (repair: Omit<RepairItem, 'id' | 'status' | 'date'>) => Promise<{ ok: boolean; error?: string }>;
+  /** Crea la orden en Supabase y devuelve { ok, error, repair? }. NO finge éxito si la DB rechaza el INSERT. */
+  addRepair: (repair: Omit<RepairItem, 'id' | 'status' | 'date'>) => Promise<{ ok: boolean; error?: string; repair?: RepairItem }>;
   updateRepairStatus: (id: string, status: RepairStatus) => Promise<void>;
   /** Edita campos de una reparación (no el estado ni el motivo de cancelación). */
   updateRepair: (
@@ -456,7 +456,7 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
    */
   const addRepair = async (
     newRep: Omit<RepairItem, 'id' | 'status' | 'date'>
-  ): Promise<{ ok: boolean; error?: string }> => {
+  ): Promise<{ ok: boolean; error?: string; repair?: RepairItem }> => {
     if (!isSupabaseConfigured) {
       const msg = getSupabaseEnvError() ?? 'Supabase no está configurado.';
       console.error('[repair-context] addRepair bloqueado: ' + msg);
@@ -525,7 +525,7 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
           await updateInventoryStock(retryItem.inventoryPartId, -retryItem.inventoryPartQty);
         }
         setRepairs((prev) => [retryItem, ...prev]);
-        return { ok: true };
+        return { ok: true, repair: retryItem };
       }
       console.error(formatDbError('addRepair (insert)', error));
       return { ok: false, error: `No se pudo guardar la reparación: ${error.message}` };
@@ -540,7 +540,7 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
       await updateInventoryStock(item.inventoryPartId, -item.inventoryPartQty);
     }
     setRepairs((prev) => [item, ...prev]);
-    return { ok: true };
+    return { ok: true, repair: item };
   };
 
   const updateRepairStatus = async (id: string, status: RepairStatus): Promise<void> => {

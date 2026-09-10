@@ -13,6 +13,7 @@
 | 2026-09-10 | 💻 Código | Identidad BETA + Programa Beta Testers: badge Liquid Glass, tarjeta con WhatsApp y pill en dashboard |
 | 2026-09-10 | 💻 Código | Fix responsive iPhone (flexGrow + wrap BETA): login/signup centrados y desplazables en toda resolución |
 | 2026-09-10 | 💻 Código | Fix botón WhatsApp pill Beta (columna a ancho completo) + auditoría 58 botones sin más recortes |
+| 2026-09-10 | 💻 Código | Módulo Comanda de taller: plantilla térmica 58/80mm, modal en recepción (3 acciones) y reimpresión en trabajos + detalle |
 
 ## Completado (✓)
 - **Offboarding Definitivo de Técnicos (2026-09-10, DESPLEGADO 9e462f2):**

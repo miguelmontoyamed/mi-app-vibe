@@ -1,7 +1,7 @@
 import { useRouter } from 'expo-router';
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Alert, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Alert, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/ui/button';
 import { DeviceSecurityInput } from '@/components/ui/device-security-input';
@@ -10,9 +10,13 @@ import { PartAutocompleteInput } from '@/components/ui/part-autocomplete-input';
 import { Screen } from '@/components/ui/screen';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Brand, Spacing } from '@/constants/theme';
+import { Brand, Shape, Spacing } from '@/constants/theme';
 import { useAuth, type User } from '@/context/auth-context';
 import { useRepair } from '@/context/repair-context';
+import { useWorkshop } from '@/context/workshop-context';
+import { useTheme } from '@/hooks/use-theme';
+import { printComanda } from '@/utils/comanda-printer';
+import type { ComandaData } from '@/utils/comanda-printer-types';
 import { formatCOP } from '@/utils/format';
 import { matchInventoryPart, searchInventoryParts } from '@/utils/part-search';
 
@@ -53,8 +57,10 @@ function notify(message: string) {
 
 export default function ReceiveScreen() {
   const router = useRouter();
+  const theme = useTheme();
   const { addRepair, inventory } = useRepair();
   const { currentUser, users } = useAuth();
+  const { profile } = useWorkshop();
 
   const [clientName, setClientName] = useState('');
   const [phone, setPhone] = useState('');
@@ -74,6 +80,9 @@ export default function ReceiveScreen() {
   /** Cantidad del repuesto seleccionado del inventario */
   const [partQty, setPartQty] = useState(1);
   const [assignedMember, setAssignedMember] = useState<User | null>(null);
+  /** Comanda lista para imprimir tras guardar (abre el modal post-guardado). */
+  const [savedComanda, setSavedComanda] = useState<ComandaData | null>(null);
+  const [printing, setPrinting] = useState(false);
 
   // Repuestos con stock > 0 para sugerencias
   const availableParts = useMemo(
@@ -224,6 +233,23 @@ export default function ReceiveScreen() {
 
     notify(`¡Equipo recibido y asignado a ${resolvedAssignee.name}!`);
 
+    if (result.repair) {
+      const saved = result.repair;
+      setSavedComanda({
+        brand: profile?.name || 'TechRepair Master',
+        orderId: saved.id,
+        date: saved.date,
+        clientName: saved.clientName,
+        clientPhone: saved.phone,
+        device: saved.device,
+        imei: saved.imei,
+        unlockCode: saved.unlockCode,
+        issue: saved.issue,
+        technicianName: saved.technicianName || 'General',
+        receivedBy: currentUser?.name ?? resolvedAssignee.name,
+      });
+    }
+
     setClientName('');
     setPhone('');
     setDevice('');
@@ -238,7 +264,38 @@ export default function ReceiveScreen() {
     setSelectedPartId(null);
     setPartQty(1);
     setAssignedMember(null);
+    // Sin push automático: el modal post-guardado ofrece imprimir, ver recibo o seguir.
+  };
 
+  const handlePrintComanda = async () => {
+    if (!savedComanda || printing) {
+      return;
+    }
+    setPrinting(true);
+    try {
+      const result = await printComanda(savedComanda, '80mm');
+      if (result === 'blocked') {
+        notify('Permite las ventanas emergentes para imprimir la comanda.');
+      } else if (result === 'unavailable') {
+        notify('Impresión no disponible en este dispositivo.');
+      } else if (result === 'error') {
+        notify('No se pudo abrir la impresión. Intenta de nuevo.');
+      }
+    } finally {
+      setPrinting(false);
+    }
+  };
+
+  const goReceipt = () => {
+    const orderId = savedComanda?.orderId;
+    setSavedComanda(null);
+    if (orderId) {
+      router.push({ pathname: '/receipt/[id]', params: { id: orderId } });
+    }
+  };
+
+  const goJobs = () => {
+    setSavedComanda(null);
     router.push('/jobs');
   };
 
@@ -436,6 +493,61 @@ export default function ReceiveScreen() {
 
         <Button label="Registrar Recepción y Asignar" onPress={handleSave} style={styles.submitButton} />
       </ThemedView>
+
+      {/* Modal post-guardado: imprimir comanda, ver recibo o seguir (admin y técnico). */}
+      <Modal
+        visible={savedComanda !== null}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={goJobs}>
+        <Pressable
+          testID="comanda-modal-scrim"
+          accessibilityRole="button"
+          accessibilityLabel="Cerrar diálogo"
+          onPress={goJobs}
+          style={styles.modalScrim}>
+          <Pressable
+            onPress={() => {}}
+            style={[
+              styles.modalCard,
+              { backgroundColor: theme.surfaceContainerHigh, borderColor: theme.border },
+            ]}>
+            <ThemedText type="subtitle" style={styles.modalTitle}>
+              ¡Equipo recibido!
+            </ThemedText>
+            <ThemedText type="small" themeColor="textSecondary" style={styles.modalMessage}>
+              Orden {savedComanda?.orderId} guardada y asignada a {savedComanda?.technicianName}.
+            </ThemedText>
+            <Button
+              label={printing ? 'Abriendo impresión…' : '🏷️ Imprimir Comanda (Pegar al equipo)'}
+              variant="primary"
+              onPress={() => void handlePrintComanda()}
+              disabled={printing}
+              testID="print-comanda-button"
+            />
+            <Button
+              label="🧾 Ver Recibo del Cliente"
+              variant="secondary"
+              onPress={goReceipt}
+              testID="goto-receipt-button"
+            />
+            <Button
+              label="➕ Nueva Recepción"
+              variant="success"
+              onPress={() => setSavedComanda(null)}
+              testID="new-reception-button"
+            />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Ir a Trabajos"
+              onPress={goJobs}
+              style={styles.modalLink}>
+              <ThemedText type="linkPrimary">Ir a Trabajos →</ThemedText>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </Screen>
   );
 }
@@ -550,5 +662,31 @@ const styles = StyleSheet.create({
   },
   submitButton: {
     marginTop: Spacing.two,
+  },
+  modalScrim: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing.four,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 340,
+    borderRadius: Shape.lg,
+    borderWidth: 1,
+    padding: Spacing.four,
+    gap: Spacing.two,
+    alignItems: 'stretch',
+  },
+  modalTitle: {
+    textAlign: 'center',
+  },
+  modalMessage: {
+    textAlign: 'center',
+  },
+  modalLink: {
+    alignItems: 'center',
+    paddingVertical: Spacing.one,
   },
 });
