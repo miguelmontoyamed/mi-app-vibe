@@ -9,6 +9,10 @@
 3. **TIPADO ESTRICTO:** cero uso de `any` en TypeScript.
 4. **AL FINALIZAR TAREA:** actualizar `memory-bank/activeContext.md` y
    `memory-bank/progress.md` reflejando el nuevo estado antes de hacer commit.
+5. **DIRECTIVA PERMANENTE:** El Director de este proyecto no programa. Toda
+   modificación técnica, gestión de dependencias, scripts de Git, validaciones
+   TypeScript (`npx tsc --noEmit`) y despliegues son responsabilidad 100% del
+   agente de IA. Presupuesto operativo: $0 USD estricto.
 
 ## 1. Contexto y Stack
 - **Proyecto:** TechRepair Master (`mi-app-vibe`)

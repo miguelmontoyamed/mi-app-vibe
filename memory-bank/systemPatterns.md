@@ -63,3 +63,23 @@ perfil del usuario autenticado.
 - Identidad por `workshop_id` en cada fila; las queries del cliente siempre
   pasan por el taller resuelto (`resolveWorkshopId()`).
 - Órdenes con folio generado por `generateOrderId()` (reintenta colisiones).
+
+## Reglas Sagradas e Inviolables del Sistema
+> Blindaje permanente (2026-09-10). Prevalecen sobre cualquier patrón, plan o
+> decisión técnica. Ver detalle en `projectbrief.md`.
+
+1. **Costo $0 USD absoluto:** prohibidas APIs, servicios, extensiones, bases de
+   datos o dependencias de pago. OpenCode solo con modelos `:free`; backend
+   solo Supabase Free Tier (PostgreSQL, Auth, RLS, Storage); hosting solo
+   Vercel Hobby. Toda propuesta que implique costo se rechaza por defecto y se
+   ofrece alternativa gratuita.
+2. **Vibecoding puro:** el trabajo fluye por prompts modulares e iterativos
+   ejecutados por agentes de IA, que analizan contexto, planifican, codifican,
+   prueban y validan antes de entregar. Nada llega al Director sin evidencia
+   de verificación (`tsc`, tests, scripts de verificación).
+3. **Director no programa (conocimiento 0):** el usuario es Director del Taller
+   y Dueño del Producto. Jamás se le pide editar código, resolver merges,
+   configurar dependencias ni depurar archivos. El agente entrega soluciones
+   autónomas y auto-contenidas (aplicadas o listas para ejecutar con un solo
+   paso del Director) y explica qué y por qué en lenguaje de negocio, sin
+   tecnicismos innecesarios.
