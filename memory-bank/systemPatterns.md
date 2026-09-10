@@ -83,3 +83,6 @@ perfil del usuario autenticado.
    autónomas y auto-contenidas (aplicadas o listas para ejecutar con un solo
    paso del Director) y explica qué y por qué en lenguaje de negocio, sin
    tecnicismos innecesarios.
+## Registro de Identidad y Autoría de Agentes
+Para facilitar la trazabilidad multi-modelo y saber qué agente trabajó en cada área:
+- **Gravedad:** Agente oficial que opera en el entorno **Google Antigravity** (`antigravity-ide`). Siempre que se trabaje con Antigravity, se asume y registra que el autor fue **Gravedad**.

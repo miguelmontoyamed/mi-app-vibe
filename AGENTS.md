@@ -1,5 +1,10 @@
 # AGENTS.md — Reglas Maestras de TechRepair Master
 
+## IDENTIDAD Y ATRIBUCIÓN DE AGENTES
+- **Gravedad (Google Antigravity):** Cada vez que se trabaje en el entorno de **Antigravity** (`antigravity-ide`), se asume que el agente que creó o ejecutó la tarea fue **Gravedad**.
+  - **Firma / Atribución:** Todo cambio, commit o entrada de log generada en Antigravity se atribuye al agente **Gravedad**.
+  - **Especialidad:** Diagnóstico, terminal, compilación TypeScript (`tsc`), suite de tests, migraciones de base de datos en Supabase y despliegues a Vercel.
+
 ## PROTOCOLO DE MEMORIA (Memory Bank)
 1. **ANTES DE COMENZAR:** leer obligatoriamente `memory-bank/activeContext.md`
    y `memory-bank/systemPatterns.md` para situarse en la tarea activa y respetar

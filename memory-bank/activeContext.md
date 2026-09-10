@@ -202,6 +202,9 @@
   - Cliente: `offboardTechnician()` en `auth-context.tsx` + flujo dual en `admin.tsx`. `tsc` 0 errores, `npm test` 145/145 PASS, verify-script extendido PASS.
   - Restante no bloqueante: falta `EXPO_PUBLIC_SUPABASE_ANON_KEY` (matriz RLS T12–T15 y build local `expo export`).
 
+## Agente Activo en esta Sesión
+- **Gravedad:** Agente de Google Antigravity (`antigravity-ide`) a cargo de las operaciones de terminal, testing, migraciones y despliegues.
+
 ## Foco Operativo Inmediato (Sprint Actual)
 - **Blindaje de Técnicos Inactivos y Recontratación (2026-09-09):** Resuelto el acceso residual de técnicos desactivados (`is_active = false`) expulsando la sesión en cliente y bloqueando logins. Resuelto el bug de recontratación en `claim_technician_invitation` reactivando `is_active = true`.
 - **Keep-Alive Supabase (2026-09-08):** Cron GitHub Actions cada 3 días (`keep-supabase-alive.yml` + `scripts/keep-alive.mjs`) para evitar pausa Free por inactividad. Falta crear secrets en GitHub y probar Run workflow.
