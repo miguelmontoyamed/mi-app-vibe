@@ -5,7 +5,7 @@
 
 ## Agente Activo
 - **Agente:** 💻 **Código** (OpenCode).
-- **Tarea actual:** Fix responsive iPhone 12 PM completado y verificado en vivo (commit b92df18).
+- **Tarea actual:** Fix botón WhatsApp pill Beta + auditoría de botones — en deploy y verificación.
 - **Compañero:** 🌀 **Gravedad** (Google Antigravity) — no sobrescribir su trabajo.
 
 ## Estado Actual (Consolidado — verificado contra el código)

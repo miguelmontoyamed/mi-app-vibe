@@ -88,11 +88,12 @@ export function BetaTesterCard() {
   );
 }
 
-/** Pill compacta no intrusiva para el dashboard (bajo el saludo). */
+/** Pill compacta no intrusiva para el dashboard (bajo el saludo). Columna:
+ *  el botón a ancho completo nunca se corta, en ninguna resolución. */
 export function BetaPill() {
   return (
     <GlassCard accent={Brand.warning} elevation={1} testID="beta-pill">
-      <View style={styles.pillRow}>
+      <View style={styles.pillColumn}>
         <ThemedText type="small" themeColor="textSecondary" style={styles.pillText}>
           💡 ¿Usando la Beta en tu mostrador? Cuéntanos tu experiencia por WhatsApp y
           amplía tu periodo de cortesía.
@@ -144,13 +145,10 @@ const styles = StyleSheet.create({
   cardText: {
     textAlign: 'center',
   },
-  pillRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  pillColumn: {
     gap: Spacing.two,
   },
   pillText: {
-    flex: 1,
     flexShrink: 1,
   },
 });
