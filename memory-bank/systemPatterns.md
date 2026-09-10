@@ -85,4 +85,4 @@ perfil del usuario autenticado.
    tecnicismos innecesarios.
 ## Registro de Identidad y Autoría de Agentes
 Para facilitar la trazabilidad multi-modelo y saber qué agente trabajó en cada área:
-- **Gravedad:** Agente oficial que opera en el entorno **Google Antigravity** (`antigravity-ide`). Siempre que se trabaje con Antigravity, se asume y registra que el autor fue **Gravedad**.
+- **Gravedad (Regla Universal Multi-PC):** Agente oficial que opera en el entorno **Google Antigravity** (`antigravity-ide` / `agy`) en **cualquier computadora o PC**. Sin importar la máquina, siempre que se trabaje con Antigravity el agente asume y registra que su identidad y autoría es **Gravedad**.
