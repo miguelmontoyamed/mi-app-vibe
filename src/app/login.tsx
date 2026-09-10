@@ -3,6 +3,7 @@ import { Alert, Platform, StyleSheet, View } from 'react-native';
 import { Link, useRouter } from 'expo-router';
 
 import { Button } from '@/components/ui/button';
+import { BetaBrandHeader, BetaTesterCard } from '@/components/ui/beta-bits';
 import { FormInput } from '@/components/ui/form-input';
 import { Screen } from '@/components/ui/screen';
 import { ThemedText } from '@/components/themed-text';
@@ -155,9 +156,7 @@ export default function LoginScreen() {
   return (
     <Screen contentContainerStyle={styles.screen}>
       <ThemedView style={[styles.card, { borderColor: theme.border }]}>
-        <ThemedText type="subtitle" style={styles.brand}>
-          TechRepair Master
-        </ThemedText>
+        <BetaBrandHeader title="TechRepair Master" titleStyle={styles.brand} />
         <ThemedText type="small" themeColor="textSecondary" style={styles.subtitle}>
           Inicia sesión para administrar tu taller
         </ThemedText>
@@ -223,6 +222,8 @@ export default function LoginScreen() {
         <Link href="/signup" asChild>
           <Button label="Crear cuenta" variant="success" />
         </Link>
+
+        <BetaTesterCard />
       </ThemedView>
     </Screen>
   );

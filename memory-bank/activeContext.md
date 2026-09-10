@@ -5,7 +5,7 @@
 
 ## Agente Activo
 - **Agente:** 💻 **Código** (OpenCode).
-- **Tarea actual:** Asumir identidad y blindar protocolo de firma/trazabilidad del equipo (Código + Gravedad).
+- **Tarea actual:** Identidad BETA + Programa Beta Testers en login/signup/dashboard (implementado, verificado, en deploy).
 - **Compañero:** 🌀 **Gravedad** (Google Antigravity) — no sobrescribir su trabajo.
 
 ## Estado Actual (Consolidado — verificado contra el código)

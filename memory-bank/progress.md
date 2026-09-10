@@ -10,6 +10,7 @@
 | 2026-09-10 | 🌀 Gravedad | Offboarding definitivo: RPC `offboard_technician` + UI dual en `admin.tsx` (desplegado) |
 | 2026-09-10 | 💻 Código | Verificación QA del ciclo de técnicos + plan de offboarding |
 | 2026-09-10 | 💻 Código | Blindaje de memoria: 3 invariantes sagradas + DIRECTIVA PERMANENTE en `AGENTS.md` |
+| 2026-09-10 | 💻 Código | Identidad BETA + Programa Beta Testers: badge Liquid Glass, tarjeta con WhatsApp y pill en dashboard |
 
 ## Completado (✓)
 - **Offboarding Definitivo de Técnicos (2026-09-10, DESPLEGADO 9e462f2):**

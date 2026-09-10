@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Platform, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/ui/button';
+import { BetaBrandHeader, BetaTesterCard } from '@/components/ui/beta-bits';
 import { FormInput } from '@/components/ui/form-input';
 import { Screen } from '@/components/ui/screen';
 import { ThemedText } from '@/components/themed-text';
@@ -334,6 +335,7 @@ export default function SignUpScreen() {
   return (
     <Screen contentContainerStyle={styles.screen}>
       <ThemedView style={[styles.card, { borderColor: theme.border }]}>
+        <BetaBrandHeader title="TechRepair Master" titleStyle={styles.brand} />
         {/* Encabezado contextual: invitación o taller propio */}
         {inviteStatus?.loading ? (
           <ThemedView style={styles.inviteBanner}>
@@ -457,6 +459,8 @@ export default function SignUpScreen() {
             <ThemedText type="linkPrimary">Inicia sesión</ThemedText>
           </Link>
         </View>
+
+        <BetaTesterCard />
       </ThemedView>
     </Screen>
   );

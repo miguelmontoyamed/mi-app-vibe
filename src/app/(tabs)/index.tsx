@@ -6,6 +6,7 @@ import { Linking, Platform, StyleSheet, useWindowDimensions, View } from 'react-
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
+import { BetaPill } from '@/components/ui/beta-bits';
 import { GlassCard } from '@/components/ui/glass-card';
 import { Screen } from '@/components/ui/screen';
 import { Brand, BREAKPOINTS, Elevation, KpiAccent, Shape, Spacing, statusStyle, tokens } from '@/constants/theme';
@@ -143,6 +144,9 @@ export default function DashboardScreen() {
           <Ionicons name="sparkles" size={22} color={Brand.primary} />
         </View>
       </View>
+
+      {/* Pill Beta Testers (no intrusiva, bajo el saludo). */}
+      <BetaPill />
 
       {/* Trial Expiring Banner — aviso de expiración de prueba (10 días). */}
       {showTrialWarning && (
