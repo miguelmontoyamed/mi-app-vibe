@@ -468,7 +468,9 @@ export default function SignUpScreen() {
 
 const styles = StyleSheet.create({
   screen: {
-    flex: 1,
+    // flexGrow (sin flex:1): centra cuando el contenido cabe y permite
+    // desplazar hasta arriba cuando lo supera (iPhone angosto).
+    flexGrow: 1,
     justifyContent: 'center',
   },
   card: {

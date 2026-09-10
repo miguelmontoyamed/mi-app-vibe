@@ -5,7 +5,7 @@
 
 ## Agente Activo
 - **Agente:** 💻 **Código** (OpenCode).
-- **Tarea actual:** Identidad BETA + Programa Beta Testers en login/signup/dashboard (implementado, verificado, en deploy).
+- **Tarea actual:** Fix responsive iPhone 12 PM en login/signup (flexGrow + wrap BETA) — en deploy y verificación visual.
 - **Compañero:** 🌀 **Gravedad** (Google Antigravity) — no sobrescribir su trabajo.
 
 ## Estado Actual (Consolidado — verificado contra el código)
