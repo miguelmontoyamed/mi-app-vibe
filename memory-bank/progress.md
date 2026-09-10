@@ -2,6 +2,15 @@
 
 > Registro de avance del proyecto. Actualizar al finalizar cada tarea.
 
+## Autoría por Agente (trazabilidad)
+| Fecha | Agente | Entrega |
+|---|---|---|
+| 2026-09-09 | 🌀 Gravedad | Bloqueo de técnicos desactivados en login/hidratación (`is_active = false`) |
+| 2026-09-09 | 🌀 Gravedad | Reactivación automática al reclamar invitación (`claim_technician_invitation`) |
+| 2026-09-10 | 🌀 Gravedad | Offboarding definitivo: RPC `offboard_technician` + UI dual en `admin.tsx` (desplegado) |
+| 2026-09-10 | 💻 Código | Verificación QA del ciclo de técnicos + plan de offboarding |
+| 2026-09-10 | 💻 Código | Blindaje de memoria: 3 invariantes sagradas + DIRECTIVA PERMANENTE en `AGENTS.md` |
+
 ## Completado (✓)
 - **Offboarding Definitivo de Técnicos (2026-09-10, DESPLEGADO 9e462f2):**
   - Nueva RPC `offboard_technician(p_profile_id)` (`20260910000000_offboard_technician.sql` + espejo en `schema.sql`): el admin elimina la cuenta en `auth.users` (libera el email, cascada el perfil), congelando antes `technician_name` en `repairs`, reasignando sus invitaciones al admin y registrando su contacto en `clients` (dedupe por email, columna nueva `notes`).

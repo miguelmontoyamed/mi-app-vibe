@@ -3,6 +3,11 @@
 > **Documento de estado actual.** Leer SIEMPRE antes de comenzar cualquier tarea.
 > Actualizar al finalizar cada tarea (ver `progress.md`).
 
+## Agente Activo
+- **Agente:** 💻 **Código** (OpenCode).
+- **Tarea actual:** Asumir identidad y blindar protocolo de firma/trazabilidad del equipo (Código + Gravedad).
+- **Compañero:** 🌀 **Gravedad** (Google Antigravity) — no sobrescribir su trabajo.
+
 ## Estado Actual (Consolidado — verificado contra el código)
 - **Blindaje Criptográfico de Invitaciones y RBAC/RLS Reforzado (2026-09-04):**
   - **Tabla persistente de invitaciones:** Creada `public.workshop_invitations` con tokens criptográficos únicos (64 hex), vigencia de 24 horas y seguimiento de estado (`pending`, `accepted`, `revoked`, `expired`).
