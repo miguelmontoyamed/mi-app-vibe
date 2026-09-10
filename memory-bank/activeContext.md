@@ -196,10 +196,11 @@
   - Vercel Frontend: Commit 60dc254 desplegado y activo en mi-app-vibe-ten.vercel.app (bundle verificado con workshop_invitations).
   - Git Credentials: osxkeychain configurado permanentemente para git push/pull sin prompts.
 
-- **Offboarding Definitivo de Técnicos (2026-09-10, implementado local, pendiente deploy):**
-  - Migración `20260910000000_offboard_technician.sql` (local, sin aplicar en prod): columna `notes` en `clients`, `current_workshop_id()` endurecido (NULL si inactivo/ausente) y RPC `offboard_technician` (borra `auth.users`, congela `technician_name`, reasigna invitaciones al admin, alta como cliente con dedupe). Espejo en `schema.sql`.
-  - Cliente: `offboardTechnician()` en `auth-context.tsx` + flujo dual en `admin.tsx` (modal de elección + dos `ConfirmDialog`). `tsc` 0 errores, `npm test` 145/145 PASS, verify-script extendido PASS.
-  - Bloqueos pendientes: token Management API con 403 en `/db/query` (aplicar vía SQL Editor o cadena de conexión), falta `EXPO_PUBLIC_SUPABASE_ANON_KEY` (matriz RLS T12–T15 y build local `expo export`), commit + push sin orden explícita.
+- **Offboarding Definitivo de Técnicos (2026-09-10, DESPLEGADO y verificado en vivo):**
+  - Migración `20260910000000_offboard_technician.sql` aplicada por el usuario vía SQL Editor: columna `notes` en `clients` (verificada con SELECT en vivo), `current_workshop_id()` endurecido y RPC `offboard_technician` operativa.
+  - Frontend desplegado en Vercel (commit 9e462f2, bundle verificado con texto "Desvincular definitivamente").
+  - Cliente: `offboardTechnician()` en `auth-context.tsx` + flujo dual en `admin.tsx`. `tsc` 0 errores, `npm test` 145/145 PASS, verify-script extendido PASS.
+  - Restante no bloqueante: falta `EXPO_PUBLIC_SUPABASE_ANON_KEY` (matriz RLS T12–T15 y build local `expo export`).
 
 ## Foco Operativo Inmediato (Sprint Actual)
 - **Blindaje de Técnicos Inactivos y Recontratación (2026-09-09):** Resuelto el acceso residual de técnicos desactivados (`is_active = false`) expulsando la sesión en cliente y bloqueando logins. Resuelto el bug de recontratación en `claim_technician_invitation` reactivando `is_active = true`.
