@@ -4,10 +4,9 @@
 > Actualizar al finalizar cada tarea (ver `progress.md`).
 
 ## Agente Activo
-- **Agente:** 🌀 **Gravedad** (Google Antigravity) — Auditoría QA completada.
-- **Próximo agente en turno:** 💻 **Código** (OpenCode) / 🌀 **Gravedad** para resolver pendientes mañana.
-- **Tarea actual:** Auditoría general publicada para Gravedad (AUDITORIA_GENERAL.md) — en espera de orden de reparación.
-- **Compañero:** 💻 **Código** (OpenCode) — no sobrescribir su trabajo, sincronizarse vía `memory-bank/`.
+- **Agente en turno:** 🌀 **Gravedad** (Google Antigravity) — Auditoría general desplegada y plan coordinado.
+- **Compañero:** 💻 **Código** (OpenCode) — plan sincronizado en `AUDITORIA_GENERAL.md`.
+- **Foco actual:** Auditoría General Adversaria desplegada a repositorio y producción. Matriz de reparación definida: Código asume T1-T6 (mostrador/concurrencia), Gravedad asume G1-G9 (RLS, PDF, contabilidad, paywall, layout).
 
 ## Estado Actual (Consolidado — verificado contra el código)
 - **Auditoría de Calidad y Pruebas Adversarias (2026-09-10):**

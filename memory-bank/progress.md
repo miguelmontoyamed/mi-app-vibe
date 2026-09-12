@@ -18,6 +18,7 @@
 | 2026-09-10 | 💻 Código | Sprint estabilidad comandas (auditoría Gravedad): escapeHtml robusto, imei/PIN numéricos, onafterprint web, WhatsApp codificado, scrim hermano, fallback modal, zona Bogota + 5 tests adversarios |
 | 2026-09-10 | 💻 Código | Auditoría general adversarial: puertas en verde + 9 hallazgos verificados (doble-guardado, stock, terminales, deriva BD) en AUDITORIA_GENERAL.md, pendiente plan de reparación |
 | 2026-09-10 | 🌀 Gravedad | Auditoría adversaria QA y stress testing: 7 bugs documentados en AUDITORIA_CALIDAD_COMANDAS.md y pendientes para mañana |
+| 2026-09-11 | 🌀 Gravedad | Despliegue de auditoría estructural general: 11 hallazgos críticos/altos integrados en AUDITORIA_GENERAL.md + matriz de reparación coordinada |
 
 ## Completado (✓)
 - **Offboarding Definitivo de Técnicos (2026-09-10, DESPLEGADO 9e462f2):**
