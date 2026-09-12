@@ -83,6 +83,7 @@ export default function ReceiveScreen() {
   /** Comanda lista para imprimir tras guardar (abre el modal post-guardado). */
   const [savedComanda, setSavedComanda] = useState<ComandaData | null>(null);
   const [printing, setPrinting] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Repuestos con stock > 0 para sugerencias
   const availableParts = useMemo(
@@ -163,6 +164,9 @@ export default function ReceiveScreen() {
     : (manualPartsCost.trim() ? (parseMoney(manualPartsCost) ?? 0) : 0);
 
   const handleSave = async () => {
+    if (isSaving) {
+      return;
+    }
     if (
       !clientName.trim() ||
       !phone.trim() ||
@@ -187,6 +191,8 @@ export default function ReceiveScreen() {
 
     const advanceNum = advancePayment.trim() ? (parseMoney(advancePayment) ?? 0) : 0;
 
+    setIsSaving(true);
+    try {
     const result = await addRepair({
       clientName: clientName.trim(),
       phone: phone.trim(),
@@ -270,6 +276,9 @@ export default function ReceiveScreen() {
       router.push('/jobs');
     }
     // Con modal: sin push automático (ofrece imprimir, ver recibo o seguir).
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handlePrintComanda = async () => {
@@ -496,7 +505,12 @@ export default function ReceiveScreen() {
           </View>
         )}
 
-        <Button label="Registrar Recepción y Asignar" onPress={handleSave} style={styles.submitButton} />
+        <Button
+          label={isSaving ? 'Guardando…' : 'Registrar Recepción y Asignar'}
+          onPress={handleSave}
+          style={styles.submitButton}
+          disabled={isSaving}
+        />
       </ThemedView>
 
       {/* Modal post-guardado: imprimir comanda, ver recibo o seguir (admin y técnico). */}

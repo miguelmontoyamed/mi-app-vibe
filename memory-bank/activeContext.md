@@ -6,7 +6,7 @@
 ## Agente Activo
 - **Agente en turno:** 🌀 **Gravedad** (Google Antigravity) — Auditoría general desplegada y plan coordinado.
 - **Compañero:** 💻 **Código** (OpenCode) — plan sincronizado en `AUDITORIA_GENERAL.md`.
-- **Foco actual:** Auditoría General Adversaria desplegada a repositorio y producción. Matriz de reparación definida: Código asume T1-T6 (mostrador/concurrencia), Gravedad asume G1-G9 (RLS, PDF, contabilidad, paywall, layout).
+- **Foco actual:** T1–T6 ejecutados por Código (anti doble-guardado, aborto stock, RPC decrement, terminales, nulos, RLS, folios, modal) — en deploy. Gravedad: G1–G9.
 
 ## Estado Actual (Consolidado — verificado contra el código)
 - **Auditoría de Calidad y Pruebas Adversarias (2026-09-10):**

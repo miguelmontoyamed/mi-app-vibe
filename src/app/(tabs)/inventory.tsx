@@ -52,8 +52,8 @@ export default function InventoryScreen() {
 
   const filteredInventory = inventory.filter(
     (item) =>
-      item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.category.toLowerCase().includes(searchQuery.toLowerCase())
+      (item.name ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (item.category ?? '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const handleAddPart = async () => {

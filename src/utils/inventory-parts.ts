@@ -66,7 +66,7 @@ export function filterInventoryParts<T extends InventoryItemLike>(
   if (!cleanQuery) return [...items];
   return items.filter(
     (item) =>
-      item.name.toLowerCase().includes(cleanQuery) ||
+      (item.name ?? '').toLowerCase().includes(cleanQuery) ||
       (item.category && item.category.toLowerCase().includes(cleanQuery))
   );
 }

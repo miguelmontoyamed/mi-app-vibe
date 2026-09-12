@@ -32,6 +32,7 @@ export default function JobDetailScreen() {
     inventory,
     cancelRepair,
     deleteRepair,
+    fetchRepairs,
     updateRepair,
     updateRepairStatus,
     assignInventoryPartToRepair,
@@ -273,6 +274,11 @@ export default function JobDetailScreen() {
       } else {
         Alert.alert('No se pudo cancelar', errorMessage);
       }
+      // La orden pudo cambiar de estado mientras el modal estaba abierto:
+      // refrescar y cerrar para mostrar el estado real.
+      await fetchRepairs();
+      setCancelModalVisible(false);
+      setCancelMotivo('');
     } finally {
       setCancellingOrder(false);
     }

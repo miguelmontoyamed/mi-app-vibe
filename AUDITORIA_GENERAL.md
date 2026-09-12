@@ -130,3 +130,13 @@ Cálculos de dinero (compra/venta/comisiones/pagos: todos con guardas `isNaN`/`i
 - [ ] G7: blindar `technicianName.localeCompare` y `customers.tsx` contra nulos.
 - [ ] G8: corregir desbordamiento de fin de mes en `device-logic.ts`.
 - [ ] G9: registrar `production.tsx` en `RootNavigator` de `_layout.tsx` y codificar URLs WhatsApp.
+
+---
+
+## 🤝 Decisión de reparto — 💻 Código (2026-09-10, tras `git pull` + verificación)
+
+- Acepto la matriz de Gravedad (5c32406): **cero solapamientos**. Sus G1–G9 tocan funciones/archivos distintos a mis T1–T6. No toco nada de su cola.
+- Auth fail-closed (PENDING_FIXES #7): sin asignar en la matriz → **no lo toco**; `auth-context.tsx` queda para Gravedad.
+- Coexistencia en `repair-context.tsx`: edito SOLO `addRepair`, `updateRepairStatus`, `updateInventoryStock`, `assignInventoryPartToRepair`. `cancelRepair` (G4) y `deleteRepair` (G5) intactos para Gravedad.
+- T3: creo la migración `decrement_inventory_stock` + espejo + cliente con fallback legacy (funciona aunque el Director aún no la aplique en Dashboard).
+- T6 resuelto estáticamente: `list_all_*` están blindadas por UUID de super-admin en el cuerpo (`super-admin-rpcs.sql`); solo deriva documental, sin cambio de código.

@@ -9,7 +9,9 @@ import {
   commissionForRepair,
   hasActiveRepairs,
   isAssignedToTechnician,
+  isTerminalStatus,
   isValidCancellation,
+  isValidStatusTransition,
   canCancel,
   profitForRepair,
   type RepairLike,
@@ -179,5 +181,32 @@ describe('hasActiveRepairs', () => {
   it('detecta trabajos activos de un técnico', () => {
     assert.equal(hasActiveRepairs(active, 't2', 'Luis'), true);
     assert.equal(hasActiveRepairs([active[1]], 't2', 'Luis'), false);
+  });
+});
+
+describe('isTerminalStatus / isValidStatusTransition', () => {
+  it('marca Entregado y Cancelado como terminales', () => {
+    assert.equal(isTerminalStatus('Entregado'), true);
+    assert.equal(isTerminalStatus('Cancelado / No Reparado'), true);
+    assert.equal(isTerminalStatus('Pendiente'), false);
+    assert.equal(isTerminalStatus('En Proceso'), false);
+    assert.equal(isTerminalStatus('Listo'), false);
+  });
+
+  it('bloquea cualquier transición desde estados terminales', () => {
+    assert.equal(isValidStatusTransition('Cancelado / No Reparado', 'Pendiente'), false);
+    assert.equal(isValidStatusTransition('Cancelado / No Reparado', 'Entregado'), false);
+    assert.equal(isValidStatusTransition('Entregado', 'En Proceso'), false);
+  });
+
+  it('permite avances en órdenes abiertas', () => {
+    assert.equal(isValidStatusTransition('Pendiente', 'En Proceso'), true);
+    assert.equal(isValidStatusTransition('En Proceso', 'Listo'), true);
+    assert.equal(isValidStatusTransition('Listo', 'Entregado'), true);
+  });
+
+  it('isAssignedToTechnician tolera nombre de técnico nulo sin lanzar', () => {
+    const repair = testRepair({ id: 'x', technicianName: 'Taller Central' });
+    assert.equal(isAssignedToTechnician(repair, 't1', null as unknown as string), false);
   });
 });

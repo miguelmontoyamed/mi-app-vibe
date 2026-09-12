@@ -92,7 +92,7 @@ export function isAssignedToTechnician(
   if (!repair.technicianName) {
     return false;
   }
-  const firstName = technicianName.trim().split(' ')[0].toLowerCase();
+  const firstName = (technicianName ?? '').trim().split(' ')[0].toLowerCase();
   if (!firstName) {
     return false;
   }
@@ -200,6 +200,29 @@ export function applyPayment(
 /** A job can only be cancelled from Pendiente or En Proceso (not Listo, Entregado, Cancelado). */
 export function canCancel(status: RepairStatus): boolean {
   return CANCELLABLE_STATUSES.includes(status);
+}
+
+/** Estados terminales: la orden está cerrada y no admite más transiciones. */
+export const TERMINAL_STATUSES: readonly RepairStatus[] = [
+  'Entregado',
+  'Cancelado / No Reparado',
+];
+
+/** True si la orden está cerrada (terminal): sus botones de estado se bloquean. */
+export function isTerminalStatus(status: RepairStatus): boolean {
+  return TERMINAL_STATUSES.includes(status);
+}
+
+/**
+ * Una transición de estado es válida salvo que la orden esté cerrada
+ * (terminal). Protege contra reactivaciones corruptas (p. ej. revivir una
+ * cancelada con presupuesto en 0) desde cualquier pantalla.
+ */
+export function isValidStatusTransition(from: RepairStatus, to: RepairStatus): boolean {
+  if (TERMINAL_STATUSES.includes(from)) {
+    return false;
+  }
+  return true;
 }
 
 /**

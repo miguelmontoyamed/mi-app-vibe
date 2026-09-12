@@ -13,6 +13,7 @@ import {
   applyPayment,
   canCancel,
   isValidCancellation,
+  isValidStatusTransition,
   type CancellationReason,
   type PaymentMethod,
   type RepairStatus,
@@ -501,51 +502,37 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
       item.inventoryPartName = part.name;
     }
 
-    const { data, error } = await supabase.from('repairs').insert(repairToRow(item, wid)).select('id');
-    if (error) {
-      if (String(error.code) === '23505') {
-        console.error(formatDbError('addRepair (insert, colisión 23505)', error));
-        const retryId = `${ORDER_PREFIX}-${Date.now().toString(36).slice(-4).toUpperCase()}`;
-        const retryItem: RepairItem = { ...item, id: retryId };
-        const { data: retryData, error: retryError } = await supabase
-          .from('repairs')
-          .insert(repairToRow(retryItem, wid))
-          .select('id');
-        if (retryError) {
-          console.error(formatDbError('addRepair (reintento por 23505)', retryError));
-          return { ok: false, error: `No se pudo guardar la reparación: ${retryError.message}` };
+    // Intentos acotados ante colisión de folio (23505): hasta 3 folios frescos.
+    let current: RepairItem = item;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const { error: insertError } = await supabase.from('repairs').insert(repairToRow(current, wid)).select('id');
+      if (!insertError) {
+        // Éxito confirmado por ausencia de error: el SELECT puede venir vacío
+        // por RLS sin que el INSERT haya fallado (no reportar falso negativo).
+        if (current.inventoryPartId && current.inventoryPartQty && current.inventoryPartQty > 0) {
+          await updateInventoryStock(current.inventoryPartId, -current.inventoryPartQty);
         }
-        if (!retryData || retryData.length !== 1) {
-          const msg = 'No se pudo confirmar la reparación en la base de datos (respuesta vacía tras INSERT).';
-          console.error('[repair-context] ' + msg);
-          return { ok: false, error: msg };
-        }
-        // Descontar stock del inventario si se usó un repuesto (reintento)
-        if (retryItem.inventoryPartId && retryItem.inventoryPartQty && retryItem.inventoryPartQty > 0) {
-          await updateInventoryStock(retryItem.inventoryPartId, -retryItem.inventoryPartQty);
-        }
-        setRepairs((prev) => [retryItem, ...prev]);
-        return { ok: true, repair: retryItem };
+        setRepairs((prev) => [current, ...prev]);
+        return { ok: true, repair: current };
       }
-      console.error(formatDbError('addRepair (insert)', error));
-      return { ok: false, error: `No se pudo guardar la reparación: ${error.message}` };
+      if (String(insertError.code) !== '23505' || attempt === 2) {
+        console.error(formatDbError('addRepair (insert)', insertError));
+        return { ok: false, error: `No se pudo guardar la reparación: ${insertError.message}` };
+      }
+      console.error(formatDbError('addRepair (insert, colisión 23505, reintento)', insertError));
+      current = { ...item, id: `${ORDER_PREFIX}-${Date.now().toString(36).slice(-4).toUpperCase()}-${attempt}` };
     }
-    if (!data || data.length !== 1) {
-      const msg = 'No se pudo confirmar la reparación en la base de datos (respuesta vacía tras INSERT).';
-      console.error('[repair-context] ' + msg);
-      return { ok: false, error: msg };
-    }
-    // Descontar stock del inventario si se usó un repuesto
-    if (item.inventoryPartId && item.inventoryPartQty && item.inventoryPartQty > 0) {
-      await updateInventoryStock(item.inventoryPartId, -item.inventoryPartQty);
-    }
-    setRepairs((prev) => [item, ...prev]);
-    return { ok: true, repair: item };
+    return { ok: false, error: 'No se pudo guardar la reparación: colisiones repetidas de folio.' };
   };
 
   const updateRepairStatus = async (id: string, status: RepairStatus): Promise<void> => {
     const blockReason = requireWorkshop();
     if (blockReason) { notifyError(blockReason); return; }
+    const current = repairs.find((r) => r.id === id);
+    if (current && !isValidStatusTransition(current.status, status)) {
+      notifyError(`No se puede cambiar una orden "${current.status}".`);
+      return;
+    }
     const { error } = await supabase.from('repairs').update(repairPatchToRow({ status })).eq('id', id);
     if (error) { console.error(formatDbError('updateRepairStatus (update)', error)); notifyError(`No se pudo actualizar el estado: ${error.message}`); return; }
     setRepairs((prev) => prev.map((r) => (r.id === id ? { ...r, status } : r)));
@@ -708,9 +695,22 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
   const updateInventoryStock = async (id: string, delta: number): Promise<void> => {
     const target = inventory.find((p) => p.id === id);
     if (!target) return;
-    const stock = Math.max(0, target.stock + delta);
     const blockReason = requireWorkshop();
     if (blockReason) { notifyError(blockReason); return; }
+    // Vía atómica (RPC): un solo UPDATE en Postgres, sin carrera entre mostradores.
+    const { data: rpcData, error: rpcError } = await supabase.rpc('decrement_inventory_stock', {
+      p_part_id: id,
+      p_delta: delta,
+    });
+    if (!rpcError && rpcData && typeof rpcData === 'object' && (rpcData as { ok?: boolean }).ok === true) {
+      const stock = (rpcData as { stock?: number }).stock;
+      if (typeof stock === 'number') {
+        setInventory((prev) => prev.map((p) => (p.id === id ? { ...p, stock } : p)));
+      }
+      return;
+    }
+    // Fallback legacy si la RPC aún no está aplicada en la BD.
+    const stock = Math.max(0, target.stock + delta);
     const { error } = await supabase.from('inventory').update({ stock }).eq('id', id);
     if (error) { console.error(formatDbError('updateInventoryStock (update)', error)); notifyError(`No se pudo actualizar el stock: ${error.message}`); return; }
     setInventory((prev) => prev.map((p) => (p.id === id ? { ...p, stock } : p)));
@@ -841,7 +841,8 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
       .eq('id', partId);
     if (invError) {
       console.error(formatDbError('assignInventoryPartToRepair (deduct inventory)', invError));
-      notifyError(`La orden se actualizó, pero hubo un error al descontar el stock local: ${invError.message}`);
+      notifyError(`No se pudo descontar el stock: ${invError.message}. La orden quedó sin repuesto asignado.`);
+      return false;
     }
 
     setInventory((prev) => prev.map((p) => (p.id === partId ? { ...p, stock: newPartStock } : p)));

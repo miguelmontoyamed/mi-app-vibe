@@ -24,7 +24,7 @@ import { printComanda } from '@/utils/comanda-printer';
 import type { ComandaData } from '@/utils/comanda-printer-types';
 import { useTheme } from '@/hooks/use-theme';
 import { formatCOP, parseCOPInput } from '@/utils/format';
-import { PAYMENT_METHODS, type PaymentMethod, visibleRepairs } from '@/utils/repair-logic';
+import { PAYMENT_METHODS, isTerminalStatus, type PaymentMethod, visibleRepairs } from '@/utils/repair-logic';
 
 const STATUS_FILTERS: (RepairStatus | 'Todos')[] = [
   'Todos',
@@ -102,10 +102,12 @@ export default function JobsScreen() {
     phone: string;
   }) => {
     const message = `Hola ${item.clientName}, le saludamos de TechRepair. Su equipo ${item.device} se encuentra actualmente en estado: *${item.status}*. Saludos cordiales, le estaremos informando.`;
-    const url = `https://api.whatsapp.com/send?phone=${item.phone.replace(
-      /\D/g,
-      ''
-    )}&text=${encodeURIComponent(message)}`;
+    const phoneDigits = (item.phone ?? '').replace(/\D/g, '');
+    if (!phoneDigits) {
+      Alert.alert('WhatsApp', 'Esta orden no tiene un teléfono válido para notificar.');
+      return;
+    }
+    const url = `https://api.whatsapp.com/send?phone=${phoneDigits}&text=${encodeURIComponent(message)}`;
     if (Platform.OS === 'web') {
       window.open(url, '_blank');
     } else {
@@ -383,18 +385,18 @@ export default function JobsScreen() {
                     (st) => (
                       <Pressable
                         key={st}
-                        disabled={item.status === st}
+                        disabled={item.status === st || isTerminalStatus(item.status)}
                         onPress={() => void updateRepairStatus(item.id, st)}
                         style={[
                           styles.actionBtn,
-                          item.status === st
+                          item.status === st || isTerminalStatus(item.status)
                             ? styles.actionBtnDisabled
                             : styles.actionBtnActive,
                         ]}>
                         <ThemedText
                           style={[
                             styles.actionBtnText,
-                            item.status === st && { opacity: 0.5 },
+                            (item.status === st || isTerminalStatus(item.status)) && { opacity: 0.5 },
                           ]}>
                           {st}
                         </ThemedText>

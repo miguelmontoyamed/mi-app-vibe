@@ -81,4 +81,19 @@ describe('filterInventoryParts', () => {
     assert.equal(result.length, 1);
     assert.equal(result[0].id, '2');
   });
+
+  it('adversario: repuesto legacy sin nombre ni categoría no tumba el filtro', () => {
+    const legacy = {
+      id: '9',
+      name: null,
+      category: undefined,
+      stock: 3,
+      price: 10000,
+    } as unknown as InventoryItemLike;
+    let result: InventoryItemLike[] = [];
+    assert.doesNotThrow(() => {
+      result = filterInventoryParts([...sampleParts, legacy], 'pantalla');
+    });
+    assert.ok(result.every((item) => item.id !== '9'));
+  });
 });
