@@ -21,13 +21,14 @@ import { shareReceiptPdf } from '@/utils/receipt-pdf';
 import type { ReceiptPdfData } from '@/utils/receipt-pdf-types';
 
 /** Escape básico para insertar valores del dominio dentro del HTML del PDF. */
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+function escapeHtml(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 export default function ReceiptScreen() {

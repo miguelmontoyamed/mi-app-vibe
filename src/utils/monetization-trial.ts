@@ -52,9 +52,13 @@ export function isWorkshopExpired(
   if (!row) return false;
   if (row.status === 'expired') return true;
 
-  if (row.subscription_ends_at) {
-    const subEnd = new Date(row.subscription_ends_at).getTime();
-    if (Number.isFinite(subEnd)) return currentTimestamp > subEnd;
+  // Un taller activo nunca debe bloquearse por trial vencido
+  if (row.status === 'active') {
+    if (row.subscription_ends_at) {
+      const subEnd = new Date(row.subscription_ends_at).getTime();
+      if (Number.isFinite(subEnd)) return currentTimestamp > subEnd;
+    }
+    return false;
   }
 
   if (row.trial_ends_at) {

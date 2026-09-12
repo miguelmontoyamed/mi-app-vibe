@@ -148,7 +148,7 @@ export function summarizePerformances(
     workshopNetProfit: totalRevenue - totalPartsCost - totalCommissions,
     technicians: [...performances].sort((a, b) =>
       a.netProduction === b.netProduction
-        ? a.technicianName.localeCompare(b.technicianName)
+        ? (a.technicianName ?? '').localeCompare(b.technicianName ?? '', 'es', { sensitivity: 'base' })
         : b.netProduction - a.netProduction
     ),
   };

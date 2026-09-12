@@ -46,6 +46,7 @@ function RootNavigator() {
         <Stack.Screen name="device-receipt/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="job/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="taller" options={{ headerShown: false }} />
+        <Stack.Screen name="production" options={{ headerShown: false }} />
         <Stack.Screen name="super-admin" options={{ headerShown: false }} />
       </Stack.Protected>
       <Stack.Protected guard={isAuthenticated}>

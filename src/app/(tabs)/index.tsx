@@ -22,7 +22,7 @@ import { formatPeriodLabel } from '@/utils/billing-performance';
 
 /** WhatsApp de renovación cuando el trial está por vencer (<=10 días). */
 const RENEW_WHATSAPP_URL =
-  'https://wa.me/573002011801?text=Hola,%20quiero%20renovar%20mi%20suscripción.';
+  `https://wa.me/573002011801?text=${encodeURIComponent('Hola, quiero renovar mi suscripción.')}`;
 
 type IconName = keyof typeof Ionicons.glyphMap;
 

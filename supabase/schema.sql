@@ -1155,6 +1155,7 @@ alter table public.workshop_invitations enable row level security;
 alter table public.clients              enable row level security;
 alter table public.repairs              enable row level security;
 alter table public.inventory            enable row level security;
+alter table public.devices              enable row level security;
 alter table public.workshop_profiles    enable row level security;
 alter table public.monthly_closures     enable row level security;
 
@@ -1262,6 +1263,12 @@ create policy "inventory_admin_delete" on public.inventory
     workshop_id = current_workshop_id()
     and public.current_user_role() = 'admin'
   );
+
+-- ---- Devices: acceso por taller (compra y venta de equipos) ----
+drop policy if exists "devices_workshop_all" on public.devices;
+create policy "devices_workshop_all" on public.devices
+  for all using (workshop_id = current_workshop_id())
+  with check (workshop_id = current_workshop_id());
 
 -- ---- Workshop profiles (membrete): solo lectura para técnicos, escritura admin ----
 drop policy if exists "workshop_profiles_workshop_all" on public.workshop_profiles;

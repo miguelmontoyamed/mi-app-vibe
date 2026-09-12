@@ -21,8 +21,9 @@ const CONTENT_W = PAGE_W - MARGIN * 2;
 const BOTTOM_LIMIT = 270;
 const LINE_H = 5.4;
 
-function winAnsi(value: string): string {
-  return value.replace(/[^\x20-\x7E\u00A0-\u00FF\u2010-\u2015\u2018-\u201D]/g, '');
+function winAnsi(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  return String(value).replace(/[^\x20-\x7E\u00A0-\u00FF\u2010-\u2015\u2018-\u201D]/g, "");
 }
 
 export function buildDeviceReceiptPdf(data: DeviceReceiptPdfData): Uint8Array<ArrayBuffer> {

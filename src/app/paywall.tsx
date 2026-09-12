@@ -21,7 +21,7 @@ export const BREB_KEY = '3002011801';
 
 /** Enlace de WhatsApp con mensaje pre-cargado para notificar el pago por Bre-B. */
 export const BREB_WHATSAPP_URL =
-  'https://wa.me/573002011801?text=Hola,%20mi%20taller%20está%20bloqueado.%20Ya%20tengo%20el%20comprobante%20de%20Bre-B%20para%20pagar%20el%20mes.';
+  `https://wa.me/573002011801?text=${encodeURIComponent('Hola, mi taller está bloqueado. Ya tengo el comprobante de Bre-B para pagar el mes.')}`;
 
 /**
  * URL del payment link de Wompi (pasarela elegida como opción futura).

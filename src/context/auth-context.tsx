@@ -401,7 +401,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!cancelled && profile) {
           await checkAndClaimPendingInvite();
           const authProf = await fetchAuthoritativeProfile(profile.id);
-          if (authProf && !authProf.isActive) {
+          if ((authProf && !authProf.isActive) || profile.is_active === false) {
             await supabaseSignOut();
             if (!cancelled) {
               setCurrentUser(null);

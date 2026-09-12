@@ -109,5 +109,14 @@ describe('monetization-trial utils', () => {
       };
       assert.equal(isWorkshopExpired(row, BASE_TIME), false);
     });
+
+    it('NO está expirado si el taller es active sin fecha fin de suscripción explícita aunque el trial esté vencido', () => {
+      const row: WorkshopSubscriptionRow = {
+        status: 'active',
+        trial_ends_at: new Date('2026-08-20T12:00:00.000Z').toISOString(), // trial vencido
+        subscription_ends_at: null, // suscripción vitalicia o abierta
+      };
+      assert.equal(isWorkshopExpired(row, BASE_TIME), false);
+    });
   });
 });

@@ -649,7 +649,8 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
     }
 
     // Reintegrar stock al inventario si la orden tenía pieza vinculada (SOLO DESPUÉS DE BORRAR)
-    if (target.inventoryPartId) {
+    // No reingresar si la orden ya fue entregada (el repuesto se instaló y salió del taller con el cliente).
+    if (target.inventoryPartId && target.status !== "Entregado") {
       const prevPart = inventory.find((p) => p.id === target.inventoryPartId);
       if (prevPart) {
         const qty = target.inventoryPartQty ?? 1;

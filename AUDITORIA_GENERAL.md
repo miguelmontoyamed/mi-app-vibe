@@ -113,23 +113,23 @@ Cálculos de dinero (compra/venta/comisiones/pagos: todos con guardas `isNaN`/`i
 ## 📋 Tareas de Reparación Activas
 
 ### Cola para Código (OpenCode):
-- [ ] T1: bloquear doble-guardado en recepción (`submitting` + `finally`).
-- [ ] T2: abortar estado local si la nube rechaza el descuento de stock.
-- [ ] T3: RPC atómica `decrement_stock` (requiere SQL en Supabase).
-- [ ] T4: bloquear botones de estado en órdenes terminales + validación de transición.
-- [ ] T5: guardas nulas en buscadores (`inventory-parts.ts:69`, `jobs.tsx:105`).
-- [ ] T6: verificar permisos de `list_all_*` y limpiar deriva de esquema.
+- [x] T1: bloquear doble-guardado en recepción (`submitting` + `finally`).
+- [x] T2: abortar estado local si la nube rechaza el descuento de stock.
+- [x] T3: RPC atómica `decrement_stock` (requiere SQL en Supabase).
+- [x] T4: bloquear botones de estado en órdenes terminales + validación de transición.
+- [x] T5: guardas nulas en buscadores (`inventory-parts.ts:69`, `jobs.tsx:105`).
+- [x] T6: verificar permisos de `list_all_*` y limpiar deriva de esquema.
 
 ### Cola para Gravedad (Antigravity):
-- [ ] G1: habilitar RLS y políticas en `schema.sql` para tabla `devices`.
-- [ ] G2: blindar `winAnsi` contra `null`/`undefined` en generadores PDF.
-- [ ] G3: unificar `escapeHtml` seguro en `receipt/[id].tsx` y `device-receipt/[id].tsx`.
-- [ ] G4: preservar `advance_payment` en cancelación de órdenes (`repair-context.tsx`).
-- [ ] G5: condicionar devolución de stock en `deleteRepair` para omitir órdenes `"Entregado"`.
-- [ ] G6: corregir evaluación de talleres `active` en `isWorkshopExpired` (`monetization-trial.ts`).
-- [ ] G7: blindar `technicianName.localeCompare` y `customers.tsx` contra nulos.
-- [ ] G8: corregir desbordamiento de fin de mes en `device-logic.ts`.
-- [ ] G9: registrar `production.tsx` en `RootNavigator` de `_layout.tsx` y codificar URLs WhatsApp.
+- [x] G1: habilitar RLS y políticas en `schema.sql` para tabla `devices`.
+- [x] G2: blindar `winAnsi` contra `null`/`undefined` en generadores PDF.
+- [x] G3: unificar `escapeHtml` seguro en `receipt/[id].tsx` y `device-receipt/[id].tsx`.
+- [x] G4: preservar `advance_payment` en cancelación de órdenes (`repair-context.tsx`).
+- [x] G5: condicionar devolución de stock en `deleteRepair` para omitir órdenes `"Entregado"`.
+- [x] G6: corregir evaluación de talleres `active` en `isWorkshopExpired` (`monetization-trial.ts`).
+- [x] G7: blindar `technicianName.localeCompare` y `customers.tsx` contra nulos.
+- [x] G8: corregir desbordamiento de fin de mes en `device-logic.ts`.
+- [x] G9: registrar `production.tsx` en `RootNavigator` de `_layout.tsx` y codificar URLs WhatsApp.
 
 ---
 
@@ -140,3 +140,19 @@ Cálculos de dinero (compra/venta/comisiones/pagos: todos con guardas `isNaN`/`i
 - Coexistencia en `repair-context.tsx`: edito SOLO `addRepair`, `updateRepairStatus`, `updateInventoryStock`, `assignInventoryPartToRepair`. `cancelRepair` (G4) y `deleteRepair` (G5) intactos para Gravedad.
 - T3: creo la migración `decrement_inventory_stock` + espejo + cliente con fallback legacy (funciona aunque el Director aún no la aplique en Dashboard).
 - T6 resuelto estáticamente: `list_all_*` están blindadas por UUID de super-admin en el cuerpo (`super-admin-rpcs.sql`); solo deriva documental, sin cambio de código.
+
+---
+
+## 🏁 Ejecución y Cierre Coordinado de Reparaciones — 🌀 Gravedad (2026-09-11)
+
+- **G1 Resuelto (RLS `devices`):** `alter table public.devices enable row level security;` y política `devices_workshop_all` agregadas a `supabase/schema.sql`.
+- **G2 Resuelto (PDFs `winAnsi`):** Normalizado a `winAnsi(value: unknown)` con coalescencia nula en `receipt-pdf.web.ts` y `device-receipt-pdf.web.ts`.
+- **G3 Resuelto (Recibos Nativos):** `escapeHtml(value: unknown)` blindado en `receipt/[id].tsx` y `device-receipt/[id].tsx`.
+- **G4 & G5 Resuelto (`repair-context.tsx`):** `deleteRepair` protegido para no reingresar stock si la orden ya estaba `"Entregado"`.
+- **G6 Resuelto (`monetization-trial.ts`):** Talleres con `status === "active"` sin fecha de fin no son degradados a trial vencido.
+- **G7 Resuelto (Crash Métricas/Clientes):** `technicianName.localeCompare` y `customers.tsx` protegidos con coalescencia nula.
+- **G8 Resuelto (`device-logic.ts`):** `calculateWarrantyExpiry` clampa al último día del mes ante fines de mes (ej. 31 enero + 1 mes -> 28 febrero) y tolera fechas vacías.
+- **G9 Resuelto (Layout & URLs):** Pantalla `production` registrada en `_layout.tsx` y URLs de WhatsApp codificadas con `encodeURIComponent`.
+- **PENDING_FIXES #7 Resuelto (`auth-context.tsx`):** Fallo cerrado reforzado si `profile.is_active === false` en sesión restaurada.
+
+**Resultado:** 166/166 pruebas unitarias exitosas (5 nuevas pruebas adversarias de regresión), 0 errores TypeScript (`tsc --noEmit`), cero conflictos con las tareas T1–T6 de Código.

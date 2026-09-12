@@ -13,6 +13,7 @@ export function calculateDeviceProfit(salePrice: number | undefined, purchasePri
 
 /** Calcula la fecha de expiración sumando meses a una fecha base (YYYY-MM-DD). */
 export function calculateWarrantyExpiry(baseDate: string, months: number): string {
+  if (!baseDate || typeof baseDate !== 'string') return '';
   if (!months || months <= 0) return baseDate;
   
   const [yearStr, monthStr, dayStr] = baseDate.split('-');
@@ -24,8 +25,14 @@ export function calculateWarrantyExpiry(baseDate: string, months: number): strin
     return baseDate;
   }
 
-  // Objeto fecha en UTC para evitar desfases de zona horaria
-  const date = new Date(Date.UTC(year, month - 1 + months, day));
+  // Clampeamos el día al último día del mes objetivo para evitar desbordamientos
+  // (ej. 31 de enero + 1 mes -> 28 de febrero en vez de 3 de marzo).
+  const targetYear = year + Math.floor((month - 1 + months) / 12);
+  const targetMonth = ((month - 1 + months) % 12 + 12) % 12;
+  const daysInTargetMonth = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate();
+  const clampedDay = Math.min(day, daysInTargetMonth);
+
+  const date = new Date(Date.UTC(targetYear, targetMonth, clampedDay));
   const y = date.getUTCFullYear();
   const m = String(date.getUTCMonth() + 1).padStart(2, '0');
   const d = String(date.getUTCDate()).padStart(2, '0');

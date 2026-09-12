@@ -118,4 +118,12 @@ describe('summarizePerformances', () => {
       ['Alto', 'Bajo']
     );
   });
+
+  it('soporta técnicos con nombre nulo o indefinido sin lanzar TypeError', () => {
+    const summary = summarizePerformances('2026-08', false, [
+      tech(undefined as unknown as string, 50000, 60000, 10000, 15000),
+      tech('Carlos', 50000, 60000, 10000, 15000),
+    ]);
+    assert.equal(summary.technicians.length, 2);
+  });
 });

@@ -39,6 +39,15 @@ describe('device-logic utils', () => {
       assert.equal(calculateWarrantyExpiry('2026-08-25', 0), '2026-08-25');
       assert.equal(calculateWarrantyExpiry('2026-08-25', -1), '2026-08-25');
     });
+
+    it('ajusta al último día del mes objetivo ante desbordamientos (ej. 31 enero + 1 mes)', () => {
+      assert.equal(calculateWarrantyExpiry('2026-01-31', 1), '2026-02-28');
+      assert.equal(calculateWarrantyExpiry('2024-01-31', 1), '2024-02-29'); // bisiesto
+    });
+
+    it('maneja fechas nulas o vacías sin lanzar excepción', () => {
+      assert.equal(calculateWarrantyExpiry(undefined as unknown as string, 3), '');
+    });
   });
 
   describe('isDeviceWarrantyActive', () => {

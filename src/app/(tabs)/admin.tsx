@@ -351,7 +351,7 @@ export default function AdminScreen() {
   /** Abre WhatsApp para registrar el pago de la suscripción (renovación). */
   const handlePayWhatsApp = () => {
     const url =
-      'https://wa.me/573002011801?text=Hola,%20quiero%20renovar%20mi%20suscripción.';
+      `https://wa.me/573002011801?text=${encodeURIComponent('Hola, quiero renovar mi suscripción.')}`;
     if (Platform.OS === 'web') {
       window.open(url, '_blank');
     } else {

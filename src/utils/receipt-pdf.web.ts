@@ -44,8 +44,9 @@ const STATUS_COLOR: Record<string, [number, number, number]> = {
  * soportan ese repertorio; emojis o puntuación exótica saldrían corruptos).
  * Conserva acentos latinos (á é í ó ú ñ ¿ ¡) y guiones tipográficos.
  */
-function winAnsi(value: string): string {
-  return value.replace(/[^\x20-\x7E\u00A0-\u00FF\u2010-\u2015\u2018-\u201D]/g, '');
+function winAnsi(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  return String(value).replace(/[^\x20-\x7E\u00A0-\u00FF\u2010-\u2015\u2018-\u201D]/g, "");
 }
 
 /**

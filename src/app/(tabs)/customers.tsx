@@ -42,7 +42,7 @@ export default function CustomersScreen() {
     const map = new Map<string, CustomerGroup>();
     // RBAC: el técnico solo ve clientes de sus órdenes asignadas; el admin todos.
     for (const r of visibleRepairs(repairs, currentUser)) {
-      const key = `${(r.phone ?? '').trim().toLowerCase()}|${r.clientName.trim().toLowerCase()}` || r.id;
+      const key = `${(r.phone ?? '').trim().toLowerCase()}|${(r.clientName ?? '').trim().toLowerCase()}` || r.id;
       const existing = map.get(key);
       if (existing) {
         existing.repairs.push(r);

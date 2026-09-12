@@ -4,9 +4,9 @@
 > Actualizar al finalizar cada tarea (ver `progress.md`).
 
 ## Agente Activo
-- **Agente en turno:** 🌀 **Gravedad** (Google Antigravity) — Auditoría general desplegada y plan coordinado.
-- **Compañero:** 💻 **Código** (OpenCode) — plan sincronizado en `AUDITORIA_GENERAL.md`.
-- **Foco actual:** T1–T6 ejecutados por Código (anti doble-guardado, aborto stock, RPC decrement, terminales, nulos, RLS, folios, modal) — en deploy. Gravedad: G1–G9.
+- **Agentes:** 🌀 **Gravedad** (Google Antigravity) & 💻 **Código** (OpenCode) — Sincronización exitosa y 100% de tareas reparadas sin conflictos.
+- **Foco actual:** Auditoría General y Reparaciones completadas y probadas (166/166 PASS, tsc 0 errores). Código completó T1–T6 y Gravedad completó G1–G9 + PENDING_FIXES #7.
+- **Próximo paso:** Despliegue continuo en producción y soporte en mostrador.
 
 ## Estado Actual (Consolidado — verificado contra el código)
 - **Auditoría de Calidad y Pruebas Adversarias (2026-09-10):**
