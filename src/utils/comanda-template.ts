@@ -7,9 +7,13 @@
 
 import type { ComandaData, ComandaWidth } from './comanda-printer-types.ts';
 
-/** Escapa texto para incrustarlo seguro en el HTML. */
-export function escapeHtml(value: string): string {
-  return value
+/** Escapa texto para incrustarlo seguro en el HTML. Tolera nulos,
+ *  indefinidos y números (lectoras de códigos, payloads legacy). */
+export function escapeHtml(value: unknown): string {
+  if (value === null || value === undefined) {
+    return '';
+  }
+  return String(value)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -25,11 +29,13 @@ export function escapeHtml(value: string): string {
  */
 export function buildComandaHtml(data: ComandaData, width: ComandaWidth = '80mm'): string {
   const printable = width === '58mm' ? 54 : 76;
-  const imeiRow = data.imei?.trim()
-    ? `<div class="row"><strong>IMEI / Serial:</strong><span>${escapeHtml(data.imei)}</span></div>`
+  const imeiStr = data.imei != null ? String(data.imei).trim() : '';
+  const securityStr = data.unlockCode != null ? String(data.unlockCode).trim() : '';
+  const imeiRow = imeiStr
+    ? `<div class="row"><strong>IMEI / Serial:</strong><span>${escapeHtml(imeiStr)}</span></div>`
     : '';
-  const securityRow = data.unlockCode?.trim()
-    ? `<div class="row"><strong>Seguridad:</strong><span class="pin">${escapeHtml(data.unlockCode)}</span></div>`
+  const securityRow = securityStr
+    ? `<div class="row"><strong>Seguridad:</strong><span class="pin">${escapeHtml(securityStr)}</span></div>`
     : '';
   const reprintRow = data.reprintedAt?.trim()
     ? `<div class="row"><strong>Reimpreso:</strong><span>${escapeHtml(data.reprintedAt)}</span></div>`

@@ -79,4 +79,52 @@ describe('comanda-template', () => {
     assert.ok(!html.includes('IMEI / Serial:'));
     assert.ok(!html.includes('Seguridad:'));
   });
+
+  it('adversario: escapeHtml tolera nulos, indefinidos y números sin lanzar', () => {
+    assert.strictEqual(escapeHtml(null), '');
+    assert.strictEqual(escapeHtml(undefined), '');
+    assert.strictEqual(escapeHtml(1234), '1234');
+    assert.strictEqual(escapeHtml(0), '0');
+  });
+
+  it('adversario: IMEI y PIN numéricos (lectora de códigos) se imprimen', () => {
+    const html = buildComandaHtml({
+      ...baseData,
+      imei: 350000000000001,
+      unlockCode: 1234,
+    });
+    assert.ok(html.includes('350000000000001'));
+    assert.ok(html.includes('1234'));
+    assert.ok(html.includes('class="pin"'));
+  });
+
+  it('adversario: orden legacy con campos nulos no tumba la plantilla', () => {
+    const legacy = {
+      ...baseData,
+      clientName: undefined,
+      clientPhone: null,
+      device: undefined,
+      issue: null,
+      technicianName: undefined,
+      receivedBy: null,
+    } as unknown as ComandaData;
+    let html = '';
+    assert.doesNotThrow(() => {
+      html = buildComandaHtml(legacy);
+    });
+    assert.ok(html.includes('TRM-0042'));
+    assert.ok(html.includes('--- COMANDA DE SERVICIO ---'));
+  });
+
+  it('adversario: web responde unavailable sin DOM (Node/SSR)', async () => {
+    const { printComanda } = await import('./comanda-printer.web.ts');
+    assert.strictEqual(await printComanda(baseData), 'unavailable');
+  });
+
+  it('adversario: pin numérico conserva alto contraste y el folio su borde', () => {
+    const html = buildComandaHtml({ ...baseData, unlockCode: 9876 });
+    assert.ok(html.includes('class="pin"'));
+    assert.ok(html.includes('9876'));
+    assert.ok(html.includes('border-top: 1px dashed #000000'));
+  });
 });

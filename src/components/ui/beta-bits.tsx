@@ -22,15 +22,13 @@ import { Brand, Shape, Spacing } from '@/constants/theme';
  */
 
 /** WhatsApp de Beta Testers con mensaje predeterminado de feedback/extensión. */
-export const BETA_WHATSAPP_URL =
-  'https://wa.me/573002011801?text=Hola,%20soy%20Beta%20Tester%20de%20TechRepair%20Master.%20Quiero%20compartir%20mi%20feedback%20y%20activar%20mi%20extensión%20de%20prueba.';
+const BETA_WA_TEXT =
+  'Hola, soy Beta Tester de TechRepair Master. Quiero compartir mi feedback y activar mi extensión de prueba.';
+
+export const BETA_WHATSAPP_URL = `https://wa.me/573002011801?text=${encodeURIComponent(BETA_WA_TEXT)}`;
 
 export function openBetaWhatsApp(): void {
-  if (Platform.OS === 'web') {
-    window.open(BETA_WHATSAPP_URL, '_blank');
-  } else {
-    void Linking.openURL(BETA_WHATSAPP_URL).catch(() => {});
-  }
+  void Linking.openURL(BETA_WHATSAPP_URL).catch(() => {});
 }
 
 /** Desenfoque solo-web (idioma del repo: cast estructural como en button.tsx). */

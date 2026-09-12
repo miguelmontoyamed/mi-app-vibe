@@ -26,10 +26,10 @@ export interface ComandaData {
   clientPhone: string;
   /** Dispositivo / equipo (marca, modelo y color en texto libre). */
   device: string;
-  /** IMEI o serial (opcional). */
-  imei?: string;
-  /** PIN / contraseña o indicación del patrón (opcional). */
-  unlockCode?: string;
+  /** IMEI o serial (texto; se acepta número de lectoras de códigos). */
+  imei?: string | number;
+  /** PIN / contraseña o indicación del patrón (texto o PIN numérico). */
+  unlockCode?: string | number;
   /** Falla reportada / observaciones de ingreso. */
   issue: string;
   /** Técnico asignado. */

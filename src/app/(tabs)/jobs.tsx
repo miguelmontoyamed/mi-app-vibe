@@ -121,7 +121,7 @@ export default function JobsScreen() {
       brand: profile?.name || 'TechRepair Master',
       orderId: item.id,
       date: item.date,
-      reprintedAt: new Date().toLocaleString('es-CO'),
+      reprintedAt: new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' }),
       clientName: item.clientName,
       clientPhone: item.phone,
       device: item.device,

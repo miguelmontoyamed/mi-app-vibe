@@ -48,9 +48,29 @@ export async function printComanda(
     frameDoc.open();
     frameDoc.write(buildComandaHtml(data, width));
     frameDoc.close();
-    frameWindow.focus();
-    frameWindow.print();
-    window.setTimeout(() => frame.remove(), 2000);
+    let cleaned = false;
+    const cleanup = () => {
+      if (!cleaned) {
+        cleaned = true;
+        frame.remove();
+      }
+    };
+    // Retirar el iframe solo cuando el diálogo se cierra o imprime (nunca por
+    // timeout corto: el operario puede tardar y la térmica recibir el spool).
+    frameWindow.onafterprint = cleanup;
+    const doPrint = () => {
+      frameWindow.focus();
+      frameWindow.print();
+    };
+    // Imprimir únicamente con el DOM del iframe ya renderizado (evita hojas
+    // en blanco en WebKit/Safari).
+    if (frameDoc.readyState === 'complete') {
+      doPrint();
+    } else {
+      frameWindow.addEventListener('load', () => doPrint(), { once: true });
+    }
+    // Rescate amplio por si el evento no dispara (pestaña cerrada, etc.).
+    window.setTimeout(cleanup, 60000);
     return 'printed';
   } catch (error) {
     console.error('Error imprimiendo la comanda:', error);

@@ -6,7 +6,7 @@
 ## Agente Activo
 - **Agente:** 🌀 **Gravedad** (Google Antigravity) — Auditoría QA completada.
 - **Próximo agente en turno:** 💻 **Código** (OpenCode) / 🌀 **Gravedad** para resolver pendientes mañana.
-- **Tarea actual:** Auditoría de calidad y robustez finalizada; reporte generado en `AUDITORIA_CALIDAD_COMANDAS.md`, actualizado `PENDING_FIXES.md` y desplegado para la sesión de mañana.
+- **Tarea actual:** Sprint estabilidad comandas (7 hallazgos Gravedad) implementado por Código y verificado — en deploy.
 - **Compañero:** 💻 **Código** (OpenCode) — no sobrescribir su trabajo, sincronizarse vía `memory-bank/`.
 
 ## Estado Actual (Consolidado — verificado contra el código)

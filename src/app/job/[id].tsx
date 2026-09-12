@@ -72,7 +72,7 @@ export default function JobDetailScreen() {
         brand: profile?.name || 'TechRepair Master',
         orderId: repair.id,
         date: repair.date,
-        reprintedAt: new Date().toLocaleString('es-CO'),
+        reprintedAt: new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' }),
         clientName: repair.clientName,
         clientPhone: repair.phone,
         device: repair.device,

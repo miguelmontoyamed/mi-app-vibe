@@ -231,8 +231,6 @@ export default function ReceiveScreen() {
       console.error('Error saving receipt data:', error);
     }
 
-    notify(`¡Equipo recibido y asignado a ${resolvedAssignee.name}!`);
-
     if (result.repair) {
       const saved = result.repair;
       setSavedComanda({
@@ -248,6 +246,8 @@ export default function ReceiveScreen() {
         technicianName: saved.technicianName || 'General',
         receivedBy: currentUser?.name ?? resolvedAssignee.name,
       });
+    } else {
+      notify(`¡Equipo recibido y asignado a ${resolvedAssignee.name}!`);
     }
 
     setClientName('');
@@ -264,7 +264,12 @@ export default function ReceiveScreen() {
     setSelectedPartId(null);
     setPartQty(1);
     setAssignedMember(null);
-    // Sin push automático: el modal post-guardado ofrece imprimir, ver recibo o seguir.
+
+    if (!result.repair) {
+      // Fallback: sin datos de orden no hay modal; volver a trabajos como antes.
+      router.push('/jobs');
+    }
+    // Con modal: sin push automático (ofrece imprimir, ver recibo o seguir).
   };
 
   const handlePrintComanda = async () => {
@@ -501,14 +506,15 @@ export default function ReceiveScreen() {
         animationType="fade"
         statusBarTranslucent
         onRequestClose={goJobs}>
-        <Pressable
-          testID="comanda-modal-scrim"
-          accessibilityRole="button"
-          accessibilityLabel="Cerrar diálogo"
-          onPress={goJobs}
-          style={styles.modalScrim}>
+        <View style={styles.modalWrap}>
           <Pressable
-            onPress={() => {}}
+            testID="comanda-modal-scrim"
+            accessibilityRole="button"
+            accessibilityLabel="Cerrar diálogo"
+            onPress={goJobs}
+            style={styles.modalScrimAbsolute}
+          />
+          <View
             style={[
               styles.modalCard,
               { backgroundColor: theme.surfaceContainerHigh, borderColor: theme.border },
@@ -545,8 +551,8 @@ export default function ReceiveScreen() {
               style={styles.modalLink}>
               <ThemedText type="linkPrimary">Ir a Trabajos →</ThemedText>
             </Pressable>
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
     </Screen>
   );
@@ -663,9 +669,16 @@ const styles = StyleSheet.create({
   submitButton: {
     marginTop: Spacing.two,
   },
-  modalScrim: {
-    flex: 1,
+  modalScrimAbsolute: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
     backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  modalWrap: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     padding: Spacing.four,
