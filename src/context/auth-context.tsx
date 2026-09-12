@@ -242,23 +242,48 @@ interface AuthoritativeProfile {
  * Consulta el perfil autoritativo directo de `public.profiles` para el usuario
  * actual (bypasseando el metadata de sesión desactualizado tras OAuth/RPC),
  * validando tanto el rol como si la cuenta sigue activa (`is_active`).
+ *
+ * Política de fallo cerrado: distingue "ausente" (PGRST116: usuario nuevo,
+ * se permite y el taller se auto-aprovisiona) de "error" (red, RLS o caída
+ * del servidor: se niega el acceso). Nunca se concede acceso con la
+ * verificación sin resolver.
  */
-async function fetchAuthoritativeProfile(userId: string): Promise<AuthoritativeProfile | null> {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('role, is_active')
-    .eq('id', userId)
-    .single();
-  if (error || !data?.role) return null;
+type AuthoritativeResult =
+  | { ok: true; profile: AuthoritativeProfile | null }
+  | { ok: false };
+
+async function fetchAuthoritativeProfile(userId: string): Promise<AuthoritativeResult> {
+  let data: { role: string | null; is_active: boolean | null } | null;
+  let error: { code?: string } | null;
+  try {
+    const res = await supabase
+      .from('profiles')
+      .select('role, is_active')
+      .eq('id', userId)
+      .single();
+    data = res.data;
+    error = res.error;
+  } catch {
+    return { ok: false };
+  }
+  if (error) {
+    if (error.code === 'PGRST116') return { ok: true, profile: null };
+    return { ok: false };
+  }
+  if (!data?.role) return { ok: true, profile: null };
   return {
-    role: data.role === 'admin' ? 'admin' : 'technician',
-    isActive: data.is_active !== false,
+    ok: true,
+    profile: {
+      role: data.role === 'admin' ? 'admin' : 'technician',
+      isActive: data.is_active !== false,
+    },
   };
 }
 
 async function fetchAuthoritativeRole(userId: string): Promise<'admin' | 'technician' | null> {
-  const prof = await fetchAuthoritativeProfile(userId);
-  return prof?.role ?? null;
+  const res = await fetchAuthoritativeProfile(userId);
+  if (!res.ok) return null;
+  return res.profile?.role ?? null;
 }
 
 function notifyDeactivatedAccount() {
@@ -400,7 +425,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const profile = await supabaseRestoreSession();
         if (!cancelled && profile) {
           await checkAndClaimPendingInvite();
-          const authProf = await fetchAuthoritativeProfile(profile.id);
+          const authRes = await fetchAuthoritativeProfile(profile.id);
+          if (!authRes.ok) {
+            await supabaseSignOut();
+            if (!cancelled) {
+              setCurrentUser(null);
+            }
+            return;
+          }
+          const authProf = authRes.profile;
           if ((authProf && !authProf.isActive) || profile.is_active === false) {
             await supabaseSignOut();
             if (!cancelled) {
@@ -451,7 +484,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         (async () => {
           try {
             await checkAndClaimPendingInvite();
-            const authProf = await fetchAuthoritativeProfile(profile.id);
+            const authRes = await fetchAuthoritativeProfile(profile.id);
+            if (!authRes.ok) {
+              await supabaseSignOut();
+              setCurrentUser(null);
+              return;
+            }
+            const authProf = authRes.profile;
             if (authProf && !authProf.isActive) {
               await supabaseSignOut();
               setCurrentUser(null);
@@ -485,7 +524,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const result = await supabaseSignInWithPassword(needle, password);
     if (result.ok) {
       await checkAndClaimPendingInvite();
-      const authProf = await fetchAuthoritativeProfile(result.user.id);
+      const authRes = await fetchAuthoritativeProfile(result.user.id);
+      if (!authRes.ok) {
+        await supabaseSignOut();
+        setCurrentUser(null);
+        return {
+          ok: false,
+          reason: 'unknown',
+          message: 'No se pudo verificar tu cuenta. Revisa tu conexión e intenta de nuevo.',
+        };
+      }
+      const authProf = authRes.profile;
       if (authProf && !authProf.isActive) {
         await supabaseSignOut();
         setCurrentUser(null);
@@ -517,7 +566,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const result = await supabaseSignInWithGoogleIdToken(idToken);
       if (result.ok) {
         await checkAndClaimPendingInvite();
-        const authProf = await fetchAuthoritativeProfile(result.user.id);
+        const authRes = await fetchAuthoritativeProfile(result.user.id);
+        if (!authRes.ok) {
+          await supabaseSignOut();
+          setCurrentUser(null);
+          return null;
+        }
+        const authProf = authRes.profile;
         if (authProf && !authProf.isActive) {
           await supabaseSignOut();
           setCurrentUser(null);

@@ -577,8 +577,6 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
         inventory_part_name: null,
         inventory_part_qty: 0,
         parts_cost: 0,
-        budget: 0,
-        advance_payment: 0,
       })
       .eq('id', id)
       .select();
@@ -617,8 +615,6 @@ export function RepairProvider({ children }: { children: React.ReactNode }) {
               inventoryPartName: undefined,
               inventoryPartQty: undefined,
               partsCost: 0,
-              budget: 0,
-              advancePayment: 0,
             }
           : r
       )

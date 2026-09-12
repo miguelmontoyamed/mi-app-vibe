@@ -79,7 +79,7 @@ describe('device-logic utils', () => {
   describe('generateDeviceInvoiceFolio', () => {
     it('genera un folio con prefijo VNT por defecto', () => {
       const folio = generateDeviceInvoiceFolio();
-      assert.match(folio, /^VNT-\d{4}$/);
+      assert.match(folio, /^VNT-[0-9A-Z]{6}$/);
     });
   });
 
@@ -162,6 +162,29 @@ describe('device-logic utils', () => {
       assert.equal(metrics.totalSold, 1);
       assert.equal(metrics.totalRevenueSold, 1300000);
       assert.equal(metrics.totalProfit, 400000); // 1.300.000 - 900.000
+    });
+  });
+
+  describe('generateDeviceInvoiceFolio', () => {
+    it('respeta el formato VNT-XXXXXX con prefijo personalizable', () => {
+      assert.match(generateDeviceInvoiceFolio(), /^VNT-[0-9A-Z]{6}$/);
+      assert.match(generateDeviceInvoiceFolio('PRB'), /^PRB-[0-9A-Z]{6}$/);
+    });
+
+    it('adversario: el componente temporal ordena y evita colisiones', () => {
+      const originalNow = Date.now;
+      try {
+        Date.now = () => 1757467200000;
+        const first = generateDeviceInvoiceFolio();
+        const second = generateDeviceInvoiceFolio();
+        assert.match(first, /^VNT-[0-9A-Z]{6}$/);
+        assert.match(second, /^VNT-[0-9A-Z]{6}$/);
+        Date.now = () => 1757467205000;
+        const later = generateDeviceInvoiceFolio();
+        assert.notEqual(later.slice(4), first.slice(4));
+      } finally {
+        Date.now = originalNow;
+      }
     });
   });
 });

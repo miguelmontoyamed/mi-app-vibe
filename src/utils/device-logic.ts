@@ -54,10 +54,15 @@ export function formatDeviceName(brand: string, model: string, storage?: string,
   return parts.filter(Boolean).join(' ');
 }
 
-/** Genera un folio único y limpio para la factura de venta (ej: VNT-7492). */
+/** Genera un folio único para la factura de venta (ej: VNT-K3J9P2).
+ * Base temporal en milisegundos + 2 dígitos aleatorios: ordenable por
+ * fecha y sin colisiones prácticas entre ventas del mismo taller. */
 export function generateDeviceInvoiceFolio(prefix = 'VNT'): string {
-  const random = Math.floor(1000 + Math.random() * 9000);
-  return `${prefix}-${random}`;
+  const time = Date.now().toString(36).toUpperCase().slice(-4);
+  const random = Math.floor(Math.random() * 100)
+    .toString()
+    .padStart(2, '0');
+  return `${prefix}-${time}${random}`;
 }
 
 /** Normaliza texto eliminando acentos y espacios para búsqueda fluida. */

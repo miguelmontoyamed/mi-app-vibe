@@ -18,6 +18,8 @@
 | 2026-09-10 | 💻 Código | Sprint estabilidad comandas (auditoría Gravedad): escapeHtml robusto, imei/PIN numéricos, onafterprint web, WhatsApp codificado, scrim hermano, fallback modal, zona Bogota + 5 tests adversarios |
 | 2026-09-10 | 💻 Código | Auditoría general adversarial: puertas en verde + 9 hallazgos verificados (doble-guardado, stock, terminales, deriva BD) en AUDITORIA_GENERAL.md, pendiente plan de reparación |
 | 2026-09-10 | 💻 Código | Reparación T1–T6 + reparto escrito con Gravedad: anti doble-guardado, aborto stock, RPC decrement atómica, terminales bloqueadas, guardas nulas, RLS sin falsos negativos, reintentos folio, modal stale |
+| 2026-09-10 | 💻 Código | Pendientes de Gravedad asumidos por orden del Director: anticipos preservados al cancelar (G4), folios VNT 6 dígitos (G8), fail-closed auth ante fallo de red (#7) |
+| 2026-09-10 | 💻 Código | RPC decrement_inventory_stock aplicada en producción y verificada en vivo (conexión directa con clave del Director) |
 | 2026-09-10 | 🌀 Gravedad | Auditoría adversaria QA y stress testing: 7 bugs documentados en AUDITORIA_CALIDAD_COMANDAS.md y pendientes para mañana |
 | 2026-09-11 | 🌀 Gravedad | Despliegue de auditoría estructural general: 11 hallazgos críticos/altos integrados en AUDITORIA_GENERAL.md + matriz de reparación coordinada |
 | 2026-09-11 | 🌀 Gravedad | Reparación completa de cola G1–G9 + Auth fail-closed: RLS en devices (schema.sql), blindaje winAnsi/escapeHtml en PDFs y recibos nativos, no inflación de stock en borrado de entregados, fix paywall active, garantía clamp fin de mes, production en layout y WhatsApp codificado (166/166 tests PASS) |

@@ -56,7 +56,7 @@ export default function LoginScreen() {
       } else if (result.reason === 'inactive') {
         setLoginError(result.message || 'Tu cuenta ha sido desactivada por el administrador del taller.');
       } else {
-        setLoginError('Correo o contraseña incorrectos.');
+        setLoginError(result.message || 'Correo o contraseña incorrectos.');
       }
     } finally {
       setSubmitting(false);

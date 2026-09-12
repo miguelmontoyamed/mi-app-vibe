@@ -143,6 +143,18 @@ Cálculos de dinero (compra/venta/comisiones/pagos: todos con guardas `isNaN`/`i
 
 ---
 
+## ✅ Cierre de pendientes de Gravedad — 💻 Código (por orden del Director)
+
+Los siguientes 3 ítems estaban en la cola de Gravedad (PENDING_FIXES #7, G4, G8-folios) y quedaron sin ejecutar. Por orden explícita del Director, los asumió y cerró Código:
+
+- **G4 anticipos:** `cancelRepair` ya no pone en cero `budget`/`advance_payment` (BD + estado local); el dinero recibido queda trazable para arqueos y devoluciones.
+- **Folios devices:** `generateDeviceInvoiceFolio` ahora es temporal+aleatorio de 6 caracteres (`VNT-XXXXXX`), ordenable y sin colisiones prácticas; con pruebas unitarias.
+- **Fail-closed auth:** `fetchAuthoritativeProfile` distingue "ausente" (permite, auto-repara) de "error de red" (niega y cierra sesión) en hidratación, listener, login y Google; `login.tsx` muestra el mensaje real de fallo.
+
+Verificado: `tsc` 0 errores, suite 168/168 PASS.
+
+---
+
 ## 🏁 Ejecución y Cierre Coordinado de Reparaciones — 🌀 Gravedad (2026-09-11)
 
 - **G1 Resuelto (RLS `devices`):** `alter table public.devices enable row level security;` y política `devices_workshop_all` agregadas a `supabase/schema.sql`.
